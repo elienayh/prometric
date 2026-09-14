@@ -19,12 +19,9 @@ export const Route = createFileRoute("/admin")({
 });
 
 function AdminLayout() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const isAdminRoot = pathname === "/admin" || pathname === "/admin/";
-
   return (
     <AdminShell>
-      {isAdminRoot ? <AdminDashboard /> : <Outlet />}
+      <Outlet />
     </AdminShell>
   );
 }

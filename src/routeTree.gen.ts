@@ -20,11 +20,13 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as AuthIndexRouteImport } from './routes/auth.index'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as PSlugRouteImport } from './routes/p.$slug'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthRegisterRouteImport } from './routes/auth.register'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AdminSupportRouteImport } from './routes/admin.support'
 import { Route as AdminMonitoringRouteImport } from './routes/admin.monitoring'
 import { Route as AdminLogsRouteImport } from './routes/admin.logs'
@@ -119,6 +121,11 @@ const AuthIndexRoute = AuthIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthRoute,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
 const PSlugRoute = PSlugRouteImport.update({
   id: '/p/$slug',
   path: '/p/$slug',
@@ -142,6 +149,11 @@ const AuthRegisterRoute = AuthRegisterRouteImport.update({
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
   getParentRoute: () => AuthRoute,
 } as any)
 const AdminSupportRoute = AdminSupportRouteImport.update({
@@ -382,11 +394,13 @@ export interface FileRoutesByFullPath {
   '/admin/logs': typeof AdminLogsRoute
   '/admin/monitoring': typeof AdminMonitoringRoute
   '/admin/support': typeof AdminSupportRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/register': typeof AuthRegisterRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
+  '/admin/': typeof AdminIndexRoute
   '/auth/': typeof AuthIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/classes/$id': typeof AuthenticatedClassesIdRouteWithChildren
@@ -409,7 +423,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRouteWithChildren
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -431,11 +444,13 @@ export interface FileRoutesByTo {
   '/admin/logs': typeof AdminLogsRoute
   '/admin/monitoring': typeof AdminMonitoringRoute
   '/admin/support': typeof AdminSupportRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/register': typeof AuthRegisterRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
+  '/admin': typeof AdminIndexRoute
   '/auth': typeof AuthIndexRoute
   '/blog': typeof BlogIndexRoute
   '/evaluations/import': typeof AuthenticatedEvaluationsImportRoute
@@ -487,11 +502,13 @@ export interface FileRoutesById {
   '/admin/logs': typeof AdminLogsRoute
   '/admin/monitoring': typeof AdminMonitoringRoute
   '/admin/support': typeof AdminSupportRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/register': typeof AuthRegisterRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/invite/$token': typeof InviteTokenRoute
   '/p/$slug': typeof PSlugRoute
+  '/admin/': typeof AdminIndexRoute
   '/auth/': typeof AuthIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/_authenticated/classes/$id': typeof AuthenticatedClassesIdRouteWithChildren
@@ -545,11 +562,13 @@ export interface FileRouteTypes {
     | '/admin/logs'
     | '/admin/monitoring'
     | '/admin/support'
+    | '/auth/callback'
     | '/auth/login'
     | '/auth/register'
     | '/blog/$slug'
     | '/invite/$token'
     | '/p/$slug'
+    | '/admin/'
     | '/auth/'
     | '/blog/'
     | '/classes/$id'
@@ -572,7 +591,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/login'
     | '/register'
     | '/reset-password'
@@ -594,11 +612,13 @@ export interface FileRouteTypes {
     | '/admin/logs'
     | '/admin/monitoring'
     | '/admin/support'
+    | '/auth/callback'
     | '/auth/login'
     | '/auth/register'
     | '/blog/$slug'
     | '/invite/$token'
     | '/p/$slug'
+    | '/admin'
     | '/auth'
     | '/blog'
     | '/evaluations/import'
@@ -649,11 +669,13 @@ export interface FileRouteTypes {
     | '/admin/logs'
     | '/admin/monitoring'
     | '/admin/support'
+    | '/auth/callback'
     | '/auth/login'
     | '/auth/register'
     | '/blog/$slug'
     | '/invite/$token'
     | '/p/$slug'
+    | '/admin/'
     | '/auth/'
     | '/blog/'
     | '/_authenticated/classes/$id'
@@ -770,6 +792,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthIndexRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/p/$slug': {
       id: '/p/$slug'
       path: '/p/$slug'
@@ -803,6 +832,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/auth/login'
       preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof AuthRoute
     }
     '/admin/support': {
@@ -1240,6 +1276,7 @@ interface AdminRouteChildren {
   AdminLogsRoute: typeof AdminLogsRoute
   AdminMonitoringRoute: typeof AdminMonitoringRoute
   AdminSupportRoute: typeof AdminSupportRoute
+  AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
@@ -1251,17 +1288,20 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminLogsRoute: AdminLogsRoute,
   AdminMonitoringRoute: AdminMonitoringRoute,
   AdminSupportRoute: AdminSupportRoute,
+  AdminIndexRoute: AdminIndexRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface AuthRouteChildren {
+  AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
   AuthIndexRoute: typeof AuthIndexRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
+  AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthRegisterRoute: AuthRegisterRoute,
   AuthIndexRoute: AuthIndexRoute,

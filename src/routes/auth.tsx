@@ -78,8 +78,26 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
       toast.success("Enviamos as instruções para o seu e-mail. Verifique sua caixa de entrada e spam.");
       setForgotOpen(false);
       setForgotEmail("");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar link");
+    } catch (err: any) {
+      console.error("[ForgotPassword] Erro ao solicitar recuperação:", err);
+      let msg = "Erro ao enviar link de recuperação.";
+      if (typeof err === "string" && err !== "{}" && err.trim()) {
+        msg = err;
+      } else if (err && typeof err === "object") {
+        const raw = err.message || err.error_description || err.msg || err.description;
+        if (typeof raw === "string" && raw !== "{}" && raw.trim()) {
+          msg = raw;
+        }
+      }
+      if (
+        msg.includes("Unable to process request") ||
+        msg.includes("unexpected_failure") ||
+        err?.status === 500
+      ) {
+        msg =
+          "O serviço de e-mail do Supabase não pôde enviar a mensagem. Verifique a configuração de SMTP ou o limite de envios no painel do Supabase.";
+      }
+      toast.error(msg, { duration: 6000 });
     } finally {
       setForgotLoading(false);
     }
@@ -142,10 +160,14 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
   async function handleGoogle() {
     setGoogleLoading(true);
     try {
+      const redirectUrl = typeof window !== "undefined"
+        ? `${window.location.origin.replace(/\/$/, "")}/auth/callback`
+        : "/auth/callback";
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/admin`,
+          redirectTo: redirectUrl,
         },
       });
       if (error) {
