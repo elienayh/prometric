@@ -63,14 +63,19 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
 
   async function handleForgotPassword(e: React.FormEvent) {
     e.preventDefault();
-    if (!forgotEmail) return;
+    const cleanEmail = forgotEmail.trim().toLowerCase();
+    if (!cleanEmail) return;
     setForgotLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: window.location.origin + "/reset-password",
+      const redirectUrl = typeof window !== "undefined"
+        ? `${window.location.origin.replace(/\/$/, "")}/reset-password`
+        : "/reset-password";
+
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: redirectUrl,
       });
       if (error) throw error;
-      toast.success("Enviamos um link de redefinição para seu e-mail.");
+      toast.success("Enviamos as instruções para o seu e-mail. Verifique sua caixa de entrada e spam.");
       setForgotOpen(false);
       setForgotEmail("");
     } catch (err) {
