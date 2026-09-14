@@ -1,0 +1,5 @@
+id,slug,name,max_students,max_users,price_monthly,features,is_active,sort_order,created_at,max_schools,max_evaluations,max_storage_mb
+e0d48a1f-2f62-4801-9c76-974c143d69e3,free,Gratuito,50,1,0.00,"[""Até 50 alunos"", ""1 usuário"", ""Relatórios básicos""]",t,1,2026-06-17 21:17:20.72521+00,,,
+22ec3cac-acc1-45ff-bc39-751528dc3904,professor,Professor,500,3,49.90,"[""Até 500 alunos"", ""3 usuários"", ""Relatórios PDF"", ""Avaliação em lote""]",t,2,2026-06-17 21:17:20.72521+00,,,
+09efe4a1-b3bb-42fc-b9b8-2c24cba146c5,school,Escola,2000,10,149.90,"[""Até 2000 alunos"", ""10 usuários"", ""Múltiplas escolas"", ""BI Avançado""]",t,3,2026-06-17 21:17:20.72521+00,,,
+4a9f02f2-125e-4f9f-a588-0686033bb593,network,Rede,999999,999,499.90,"[""Alunos ilimitados"", ""Usuários ilimitados"", ""Suporte prioritário"", ""API""]",t,4,2026-06-17 21:17:20.72521+00,,,

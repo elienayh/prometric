@@ -1,0 +1,1 @@
+import{pn as e}from"./index-CjiLIvhc.js";var t=e({type:`function`});export{t};

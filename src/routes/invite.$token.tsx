@@ -48,7 +48,7 @@ function AcceptInvite() {
       const user = userRes.user;
       if (!user) {
         toast.info("Entre na sua conta para aceitar o convite.");
-        navigate({ to: "/auth", search: { mode: "signup" } });
+        navigate({ to: "/auth", search: { mode: "signup" } as any });
         return;
       }
       if (invite.data.email && user.email && invite.data.email.toLowerCase() !== user.email.toLowerCase()) {

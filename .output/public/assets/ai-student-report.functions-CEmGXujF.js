@@ -1,0 +1,1 @@
+import{mn as e,yn as t}from"./index-CjiLIvhc.js";import{t as n}from"./auth-middleware-BYS1FMyo.js";var r=e({method:`POST`}).middleware([n]).handler(t(`fdf65247fe2f9f9745b3b496219d517e34af9a3a471f8e87bfb2a840b10904e6`));export{r as generateStudentReport};

@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-sLPvdpSW.js";import{nt as t}from"./index-CjiLIvhc.js";var n=e(),r=()=>(0,n.jsx)(t,{initialMode:`signup`});export{r as component};

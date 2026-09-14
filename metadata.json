@@ -1,0 +1,6 @@
+{
+  "name": "ProMetric",
+  "description": "Plataforma SaaS de Avaliação Física Inteligente com IA para escolas, academias, clubes e personal trainers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

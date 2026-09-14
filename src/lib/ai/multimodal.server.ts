@@ -66,15 +66,6 @@ async function callVisionProvider(
         user,
         image,
       );
-    case "lovable":
-      return callOpenAICompatibleVision(
-        "https://ai.gateway.lovable.dev/v1/chat/completions",
-        { "Lovable-API-Key": apiKey },
-        model,
-        system,
-        user,
-        image,
-      );
     case "google":
       return callGoogleVision(apiKey, model, system, user, image);
     case "anthropic":

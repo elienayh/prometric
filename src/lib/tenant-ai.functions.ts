@@ -2,14 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
 
-type ProviderId = "openai" | "google" | "anthropic" | "xai" | "lovable";
+type ProviderId = "openai" | "google" | "anthropic" | "xai";
 
 const VALID_PROVIDERS: ReadonlyArray<ProviderId> = [
-  "openai",
   "google",
+  "openai",
   "anthropic",
   "xai",
-  "lovable",
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,11 +76,9 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
     } as never);
     if (!isAdmin && !isPlatform) throw new Error("Sem permissão para gerenciar IA deste espaço");
 
-    // Lovable AI não exige chave do cliente
-    const isLovable = data.provider === "lovable";
     let encrypted: { ciphertext: string; iv: string; tag: string; fingerprint: string } | null = null;
 
-    if (!isLovable && data.apiKey && data.apiKey.length > 0) {
+    if (data.apiKey && data.apiKey.length > 0) {
       const { encryptApiKey } = await import("@/lib/ai/crypto.server");
       encrypted = encryptApiKey(data.apiKey);
     }
@@ -171,7 +168,7 @@ export const testTenantAiCredential = createServerFn({ method: "POST" })
     };
 
     let apiKey = data.overrideApiKey ?? "";
-    if (!apiKey && row.provider !== "lovable") {
+    if (!apiKey) {
       if (!row.api_key_ciphertext || !row.api_key_iv || !row.api_key_tag) {
         throw new Error("Chave de API não cadastrada para este provedor");
       }

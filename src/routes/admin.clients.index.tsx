@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
@@ -129,7 +130,7 @@ function ClientsPage() {
 
   const filtered = (data ?? []).filter((t) => t.name.toLowerCase().includes(search.toLowerCase()));
 
-  const goTo = (id: string) => router.navigate({ to: "/admin/clients/$id", params: { id } });
+  const goTo = (id: string) => (router.navigate as any)({ to: "/admin/clients/$id", params: { id } });
 
   return (
     <div className="space-y-6">
@@ -176,7 +177,7 @@ function ClientsPage() {
                 <div><dt className="text-muted-foreground">Criado em</dt><dd className="mt-0.5 font-medium">{fmtDate(t.created_at)}</dd></div>
               </dl>
               <div className="mt-3 flex flex-wrap justify-end gap-1 border-t border-border/40 pt-3" onClick={(e) => e.stopPropagation()}>
-                <Link to="/admin/clients/$id" params={{ id: t.id }}>
+                <Link to="/admin/clients/$id" params={{ id: t.id } as any}>
                   <Button variant="ghost" size="icon" aria-label="Detalhes" className="min-h-11 min-w-11"><Eye className="h-4 w-4" /></Button>
                 </Link>
                 {perms.isSuperAdmin && (
@@ -246,7 +247,7 @@ function ClientsPage() {
                     <td className="px-4 py-3 text-muted-foreground">{fmtDate(t.created_at)}</td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
-                        <Link to="/admin/clients/$id" params={{ id: t.id }}>
+                        <Link to="/admin/clients/$id" params={{ id: t.id } as any}>
                           <Button variant="ghost" size="icon" aria-label="Detalhes"><Eye className="h-4 w-4" /></Button>
                         </Link>
                         {perms.isSuperAdmin && (

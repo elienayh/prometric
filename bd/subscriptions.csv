@@ -1,0 +1,3 @@
+id,tenant_id,plan_id,status,amount_cents,currency,billing_cycle,trial_ends_at,current_period_start,current_period_end,canceled_at,notes,created_at,updated_at,stripe_customer_id,stripe_subscription_id,stripe_price_id,stripe_status,cancel_at_period_end,discount_cents,amount_yearly_cents
+dd8fad4e-56e0-482f-9ef5-ba91df4409b1,819b08a7-38d4-4d1d-87f0-82f74eba90a9,4a9f02f2-125e-4f9f-a588-0686033bb593,active,0,BRL,yearly,,,,,,2026-06-21 13:06:35.906581+00,2026-06-21 13:06:35.906581+00,,,,,f,0,0
+e06ebfb9-9043-405b-861f-053aea3e82c1,82728988-d739-4851-8718-cb574126d861,09efe4a1-b3bb-42fc-b9b8-2c24cba146c5,active,0,BRL,yearly,,,,,,2026-07-02 12:36:28.211133+00,2026-07-02 12:42:24.175491+00,,,,,f,0,0

@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-sLPvdpSW.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`p-6 text-sm`,children:`Escola não encontrada.`});export{n as notFoundComponent};

@@ -88,7 +88,8 @@ export const Route = createFileRoute("/blog/$slug")({
   head: ({ loaderData }) => {
     if (!loaderData) return { meta: [] };
     const { post, slug } = loaderData;
-    const url = `https://prometric.lovable.app/blog/${slug}`;
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : (process.env.APP_URL || "https://prometric.app");
+    const url = `${baseUrl}/blog/${slug}`;
     return {
       meta: [
         { title: `${post.title} | ProMetric` },

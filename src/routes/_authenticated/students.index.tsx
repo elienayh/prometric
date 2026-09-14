@@ -170,7 +170,7 @@ function StudentsPage() {
                   className="min-h-11 flex-1"
                   asChild
                 >
-                  <Link to="/students/$id" params={{ id: s.id }}>
+                  <Link to="/students/$id" params={{ id: s.id } as any}>
                     <LineChart className="mr-1 h-3.5 w-3.5" /> Ficha completa
                   </Link>
                 </Button>

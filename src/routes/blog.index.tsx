@@ -16,7 +16,7 @@ export const Route = createFileRoute("/blog/")({
       { property: "og:title", content: "Blog ProMetric — Avaliação Física Inteligente" },
       { property: "og:description", content: "Guias, tutoriais e referências sobre o Método ProMetric® e avaliação física escolar." },
     ],
-    links: [{ rel: "canonical", href: "https://prometric.lovable.app/blog" }],
+    links: [{ rel: "canonical", href: typeof window !== "undefined" ? `${window.location.origin}/blog` : "/blog" }],
   }),
   component: BlogIndex,
 });
@@ -33,7 +33,7 @@ function BlogIndex() {
         <ul className="space-y-5">
           {POSTS.map((p) => (
             <li key={p.slug} className="rounded-2xl border border-border bg-card p-6 shadow-card transition-colors hover:bg-secondary/40">
-              <Link to="/blog/$slug" params={{ slug: p.slug }} className="block">
+              <Link to="/blog/$slug" params={{ slug: p.slug } as any} className="block">
                 <h2 className="font-display text-xl font-semibold">{p.title}</h2>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{p.excerpt}</p>
                 <span className="mt-3 inline-block text-xs font-medium text-primary">Ler artigo →</span>

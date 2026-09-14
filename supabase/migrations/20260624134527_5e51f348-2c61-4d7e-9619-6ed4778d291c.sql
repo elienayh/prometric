@@ -1,7 +1,7 @@
 
 -- Provider enum
 DO $$ BEGIN
-  CREATE TYPE public.ai_provider AS ENUM ('openai','google','anthropic','xai','lovable');
+  CREATE TYPE public.ai_provider AS ENUM ('openai','google','anthropic','xai');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Table

@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import * as React from "react";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Activity, ArrowLeft, Loader2 } from "lucide-react";
@@ -16,7 +17,6 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 
 const searchSchema = z.object({ mode: z.enum(["signin", "signup"]).optional() });
 type AuthMode = "signin" | "signup";
@@ -137,16 +137,17 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
   async function handleGoogle() {
     setGoogleLoading(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin + "/admin",
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/admin`,
+        },
       });
-      if (result.error) {
-        toast.error("Não foi possível entrar com Google");
+      if (error) {
+        toast.error("Não foi possível entrar com Google: " + error.message);
         setGoogleLoading(false);
         return;
       }
-      if (result.redirected) return;
-      await redirectAfterAuth();
     } catch {
       toast.error("Erro inesperado no login com Google");
       setGoogleLoading(false);

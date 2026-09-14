@@ -1394,7 +1394,7 @@ export type Database = {
         | "admin_financeiro"
         | "admin_suporte"
         | "admin_operacional"
-      ai_provider: "openai" | "google" | "anthropic" | "xai" | "lovable"
+      ai_provider: "openai" | "google" | "anthropic" | "xai"
       class_shift: "morning" | "afternoon" | "evening" | "full"
       member_role: "admin" | "evaluator" | "viewer"
       payment_status: "pending" | "paid" | "failed" | "refunded"
@@ -1546,7 +1546,7 @@ export const Constants = {
         "admin_suporte",
         "admin_operacional",
       ],
-      ai_provider: ["openai", "google", "anthropic", "xai", "lovable"],
+      ai_provider: ["openai", "google", "anthropic", "xai"],
       class_shift: ["morning", "afternoon", "evening", "full"],
       member_role: ["admin", "evaluator", "viewer"],
       payment_status: ["pending", "paid", "failed", "refunded"],

@@ -1,0 +1,1 @@
+import{f as e,t,u as n}from"./generateCategoricalChart-CbAT4LVE.js";import{H as r,V as i}from"./index-CjiLIvhc.js";var a=t({chartName:`BarChart`,GraphicalChild:e,defaultTooltipEventType:`axis`,validateTooltipEventTypes:[`axis`,`item`],axisComponents:[{axisType:`xAxis`,AxisComp:r},{axisType:`yAxis`,AxisComp:i}],formatAxisMap:n});export{a as t};

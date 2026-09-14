@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 
-const BASE_URL = "https://prometric.lovable.app";
+const BASE_URL = process.env.APP_URL || "https://prometric.app";
 
 interface SitemapEntry {
   path: string;

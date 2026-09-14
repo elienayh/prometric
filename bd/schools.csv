@@ -1,0 +1,5 @@
+id,tenant_id,name,network,address,city,state,phone,email,logo_url,created_at,updated_at,demo_data,display_name,primary_color,secondary_color,description
+ed125660-02fa-4732-9e4a-cfb6ba040913,07cc7290-5d3f-421b-a514-b21d6a683494,Colégio Modelo ProMetric,,,São Paulo,SP,,,,2026-06-19 09:12:14.107688+00,2026-06-19 09:12:14.107688+00,t,,,,
+71cc3972-63e5-470e-b6fe-f7282bb082e3,07cc7290-5d3f-421b-a514-b21d6a683494,Escola Estadual Futuro,,,Campinas,SP,,,,2026-06-19 09:12:14.107688+00,2026-06-19 09:12:14.107688+00,t,,,,
+14f33684-d772-4f54-9128-43195d790f3a,07cc7290-5d3f-421b-a514-b21d6a683494,Centro Educacional Horizonte,,,Belo Horizonte,MG,,,,2026-06-19 09:12:14.107688+00,2026-06-19 09:12:14.107688+00,t,,,,
+3de28fa3-da50-4af0-aad4-13befa61ae82,82728988-d739-4851-8718-cb574126d861,Colégio Portal do Saber ,Privada ,,Espera Feliz ,MG,,,,2026-06-19 22:39:00.289645+00,2026-06-19 22:39:00.289645+00,f,,,,

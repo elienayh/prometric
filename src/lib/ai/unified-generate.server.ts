@@ -41,7 +41,7 @@ export async function resolveTenantModel(
         prompt_version: string | null;
       };
 
-  if (row?.is_active && row.provider !== "lovable" && row.api_key_ciphertext) {
+  if (row?.is_active && row.api_key_ciphertext) {
     const { decryptApiKey } = await import("./crypto.server");
     const apiKey = decryptApiKey({
       ciphertext: row.api_key_ciphertext,
@@ -57,13 +57,13 @@ export async function resolveTenantModel(
     };
   }
 
-  // Fallback: Lovable AI
-  const lovableKey = process.env.LOVABLE_API_KEY;
-  if (!lovableKey) throw new Error("LOVABLE_API_KEY ausente no servidor");
+  // Fallback: Google Gemini
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) throw new Error("GEMINI_API_KEY ausente no servidor");
   return {
-    provider: "lovable",
-    model: row?.is_active && row.provider === "lovable" ? row.model : DEFAULT_MODELS.lovable,
-    apiKey: lovableKey,
+    provider: "google",
+    model: row?.is_active && row.provider === "google" ? row.model : DEFAULT_MODELS.google,
+    apiKey: geminiKey,
     source: "fallback",
     promptVersion: row?.prompt_version ?? "v1.0.0",
   };
@@ -126,14 +126,6 @@ async function callProvider(
       return callOpenAICompatible(
         "https://api.x.ai/v1/chat/completions",
         { Authorization: `Bearer ${apiKey}` },
-        model,
-        system,
-        user,
-      );
-    case "lovable":
-      return callOpenAICompatible(
-        "https://ai.gateway.lovable.dev/v1/chat/completions",
-        { "Lovable-API-Key": apiKey },
         model,
         system,
         user,

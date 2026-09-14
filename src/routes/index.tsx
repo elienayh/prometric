@@ -1,4 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import * as React from "react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import {
@@ -11,8 +12,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
-const SITE_URL = "https://prometric.lovable.app";
-const OG_IMAGE = `${SITE_URL}/__l5e/assets-v1/197375d2-484d-475e-820d-6c6d29a369b2/og-cover.jpg`;
+const SITE_URL = typeof window !== "undefined" ? window.location.origin : (process.env.APP_URL || "");
+const OG_IMAGE = "/og-cover.jpg";
 
 const FAQ_ITEMS: { q: string; a: string }[] = [
   { q: "O que é o Método ProMetric®?", a: "É a metodologia proprietária do ProMetric para Avaliação Física Integrada. Combina antropometria, testes motores e cardiorrespiratórios em 5 dimensões (Saúde Corporal, Resistência, Mobilidade, Potência e Velocidade & Agilidade), gerando o Índice ProMetric® de 0 a 100." },
@@ -614,7 +615,7 @@ function Faq() {
   );
 }
 
-function FaqItem({ q, a }: { q: string; a: string }) {
+function FaqItem({ q, a }: { q: string; a: string; key?: React.Key }) {
   const [open, setOpen] = useState(false);
   return (
     <button

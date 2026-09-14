@@ -1,0 +1,6 @@
+id,tenant_id,full_name,email,phone,role,notes,created_at,updated_at,demo_data
+a6b50318-fbc6-449f-a4c4-c21c3d3e7a48,07cc7290-5d3f-421b-a514-b21d6a683494,Carlos Henrique Oliveira,carlos.oliveira@demo.prometric.app,(11) 99000-1001,evaluator,,2026-06-19 09:12:14.107688+00,2026-06-19 09:12:14.107688+00,t
+dd664adc-a4e1-4a6b-9be1-53aae5dac21f,07cc7290-5d3f-421b-a514-b21d6a683494,Mariana Souza,mariana.souza@demo.prometric.app,(11) 99000-1002,evaluator,,2026-06-19 09:12:14.107688+00,2026-06-19 09:12:14.107688+00,t
+b20d08ec-d308-4daa-9cef-a0f6ad3b5773,07cc7290-5d3f-421b-a514-b21d6a683494,Rafael Martins,rafael.martins@demo.prometric.app,(11) 99000-1003,evaluator,,2026-06-19 09:12:14.107688+00,2026-06-19 09:12:14.107688+00,t
+cbd9d742-c509-41b4-a572-33aeedc42e6f,07cc7290-5d3f-421b-a514-b21d6a683494,Juliana Almeida,juliana.almeida@demo.prometric.app,(11) 99000-1004,admin,,2026-06-19 09:12:14.107688+00,2026-06-19 09:12:14.107688+00,t
+b6fd78de-0943-4558-9af1-dd66cf295763,07cc7290-5d3f-421b-a514-b21d6a683494,Elienay Avaliador,elienayhemerson@hotmail.com,32984699080,evaluator,,2026-06-21 16:42:53.514363+00,2026-06-21 16:42:53.514363+00,f

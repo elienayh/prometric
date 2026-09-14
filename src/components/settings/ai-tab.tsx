@@ -26,17 +26,15 @@ import { Switch } from "@/components/ui/switch";
 
 
 const PROVIDER_LABELS: Record<ProviderId, string> = {
-  lovable: "ProMetric AI (padrão — sem chave necessária)",
-  openai: "OpenAI (GPT)",
   google: "Google (Gemini)",
+  openai: "OpenAI (GPT)",
   anthropic: "Anthropic (Claude)",
   xai: "xAI (Grok)",
 };
 
 const PROVIDER_HELP: Record<ProviderId, string> = {
-  lovable: "Use a IA integrada do ProMetric. O custo é pago pelo seu plano.",
-  openai: "Obtenha sua chave em platform.openai.com/api-keys",
   google: "Obtenha sua chave em aistudio.google.com/app/apikey",
+  openai: "Obtenha sua chave em platform.openai.com/api-keys",
   anthropic: "Obtenha sua chave em console.anthropic.com/settings/keys",
   xai: "Obtenha sua chave em console.x.ai",
 };
@@ -54,8 +52,8 @@ export function AiTab({ tenantId }: { tenantId: string | null }) {
     queryFn: () => getConfig({ data: { tenantId: tenantId! } }),
   });
 
-  const [provider, setProvider] = useState<ProviderId>("lovable");
-  const [model, setModel] = useState<string>(DEFAULT_MODELS.lovable);
+  const [provider, setProvider] = useState<ProviderId>("google");
+  const [model, setModel] = useState<string>(DEFAULT_MODELS.google);
   const [apiKey, setApiKey] = useState<string>("");
   const [isActive, setIsActive] = useState<boolean>(true);
 
@@ -125,7 +123,7 @@ export function AiTab({ tenantId }: { tenantId: string | null }) {
   }
 
   const cfg = cfgQuery.data;
-  const needsKey = provider !== "lovable";
+  const needsKey = true;
   const hasStoredKey = cfg?.has_key && cfg?.provider === provider;
 
   return (
