@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /auth
+Disallow: /_authenticated
+Disallow: /api
+Disallow: /invite
+
+Sitemap: https://prometric.lovable.app/sitemap.xml
