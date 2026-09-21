@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { PrometricIcon } from "@/components/brand/prometric-logo";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +40,7 @@ const STRUCTURED_DATA = [
     "@type": "Organization",
     name: "ProMetric",
     url: SITE_URL,
-    logo: `${SITE_URL}/favicon.ico`,
+    logo: `${SITE_URL}/prometric-icon.png`,
     description: "Plataforma de Avaliação Física Integrada baseada no Método ProMetric®.",
   },
   {
@@ -137,9 +138,7 @@ function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <Link to="/" className="flex items-center gap-2.5" aria-label="ProMetric — página inicial">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-brand shadow-glow">
-            <Activity className="h-5 w-5 text-primary-foreground" strokeWidth={2.5} />
-          </div>
+          <PrometricIcon className="h-9 w-9" />
           <span className="font-display text-lg font-bold tracking-tight">
             Pro<span className="text-gradient-brand">Metric</span>
           </span>
@@ -638,9 +637,9 @@ function SiteFooter() {
     <footer className="border-t border-border bg-secondary/30">
       <div className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-col items-center justify-between gap-3 md:flex-row">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <GraduationCap className="h-4 w-4 text-primary" />
-            ProMetric — Avaliação Física Inteligente com IA.
+          <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+            <PrometricIcon className="h-5 w-5" />
+            <span>ProMetric — Avaliação Física Inteligente com IA.</span>
           </div>
           <nav aria-label="Rodapé" className="flex items-center gap-5 text-xs text-muted-foreground">
             <Link to="/blog" className="hover:text-foreground">Blog</Link>

@@ -18,43 +18,58 @@ export async function resolveTenantModel(
   supabase: SupabaseClient,
   tenantId: string,
 ): Promise<ResolvedModel> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: cred } = await supabaseAdmin
-    .from("tenant_ai_credentials" as never)
-    .select(
-      "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
-    )
-    .eq("tenant_id" as never, tenantId)
-    .maybeSingle();
+  let row: {
+    provider: ProviderId;
+    model: string;
+    is_active: boolean;
+    api_key_ciphertext: string | null;
+    api_key_iv: string | null;
+    api_key_tag: string | null;
+    prompt_version: string | null;
+  } | null = null;
+
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: cred, error: credErr } = await supabaseAdmin
+      .from("tenant_ai_credentials" as never)
+      .select(
+        "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
+      )
+      .eq("tenant_id" as never, tenantId)
+      .maybeSingle();
+
+    if (!credErr && cred) {
+      row = cred as typeof row;
+    }
+  } catch (dbErr) {
+    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant:", dbErr);
+  }
 
   void supabase; // mantido para futura validação cruzada
 
-  const row = cred as
-    | null
-    | {
-        provider: ProviderId;
-        model: string;
-        is_active: boolean;
-        api_key_ciphertext: string | null;
-        api_key_iv: string | null;
-        api_key_tag: string | null;
-        prompt_version: string | null;
-      };
-
-  if (row?.is_active && row.api_key_ciphertext) {
-    const { decryptApiKey } = await import("./crypto.server");
-    const apiKey = decryptApiKey({
-      ciphertext: row.api_key_ciphertext,
-      iv: row.api_key_iv!,
-      tag: row.api_key_tag!,
-    });
-    return {
-      provider: row.provider,
-      model: row.model,
-      apiKey,
-      source: "tenant",
-      promptVersion: row.prompt_version ?? "v1.0.0",
-    };
+  if (row?.is_active && row.api_key_ciphertext && row.api_key_iv && row.api_key_tag) {
+    try {
+      const { decryptApiKey } = await import("./crypto.server");
+      const apiKey = decryptApiKey({
+        ciphertext: row.api_key_ciphertext,
+        iv: row.api_key_iv,
+        tag: row.api_key_tag,
+      });
+      if (apiKey && apiKey.trim().length > 5) {
+        return {
+          provider: row.provider,
+          model: row.model,
+          apiKey,
+          source: "tenant",
+          promptVersion: row.prompt_version ?? "v1.0.0",
+        };
+      }
+    } catch (cryptoErr) {
+      console.warn(
+        "[unified-generate] Chave do tenant falhou ao descriptografar. Utilizando Gemini do sistema:",
+        cryptoErr
+      );
+    }
   }
 
   // Fallback: Google Gemini
@@ -62,7 +77,7 @@ export async function resolveTenantModel(
   if (!geminiKey) throw new Error("GEMINI_API_KEY ausente no servidor");
   return {
     provider: "google",
-    model: row?.is_active && row.provider === "google" ? row.model : DEFAULT_MODELS.google,
+    model: DEFAULT_MODELS.google,
     apiKey: geminiKey,
     source: "fallback",
     promptVersion: row?.prompt_version ?? "v1.0.0",
@@ -164,21 +179,59 @@ async function callOpenAICompatible(
 }
 
 async function callGoogle(apiKey: string, model: string, system: string, user: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: [{ text: user }] }],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.7 },
-    }),
+  const { GoogleGenAI } = await import("@google/genai");
+
+  let chosenModel = model || "gemini-3.8-flash";
+  if (
+    chosenModel.includes("2.5-flash-lite") ||
+    chosenModel.includes("2.0-flash") ||
+    chosenModel.includes("1.5-flash")
+  ) {
+    chosenModel = "gemini-3.5-flash-lite";
+  } else if (chosenModel.includes("2.5-flash") || chosenModel.includes("pro")) {
+    chosenModel = "gemini-3.8-flash";
+  }
+
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
   });
-  if (!res.ok) throw new Error(`Falha na IA Google (${res.status}): ${(await res.text()).slice(0, 300)}`);
-  const json = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+
+  try {
+    const res = await ai.models.generateContent({
+      model: chosenModel,
+      contents: user,
+      config: {
+        systemInstruction: system,
+        responseMimeType: "application/json",
+        temperature: 0.7,
+      },
+    });
+    return res.text ?? "{}";
+  } catch (err: unknown) {
+    if (chosenModel !== "gemini-3.5-flash-lite") {
+      try {
+        console.warn(`[unified-generate] Modelo ${chosenModel} falhou, tentando fallback para gemini-3.5-flash-lite...`);
+        const fallbackRes = await ai.models.generateContent({
+          model: "gemini-3.5-flash-lite",
+          contents: user,
+          config: {
+            systemInstruction: system,
+            responseMimeType: "application/json",
+            temperature: 0.7,
+          },
+        });
+        return fallbackRes.text ?? "{}";
+      } catch {
+        // ignora erro do fallback e lança o erro original
+      }
+    }
+    throw new Error(`Falha na IA Google: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 async function callAnthropic(apiKey: string, model: string, system: string, user: string): Promise<string> {

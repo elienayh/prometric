@@ -103,14 +103,7 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
             api_key_tag: encrypted.tag,
             api_key_fingerprint: encrypted.fingerprint,
           }
-        : isLovable
-          ? {
-              api_key_ciphertext: null,
-              api_key_iv: null,
-              api_key_tag: null,
-              api_key_fingerprint: null,
-            }
-          : {}),
+        : {}),
       created_by: userId,
     };
 

@@ -1,6 +1,5 @@
-// Portal público — gera relatório com IA do tenant a partir do token do aluno.
-// Sem auth de usuário: valida o token via supabaseAdmin.
-// Sem fallback: se o tenant não tiver IA ativa (não-Lovable), rejeita.
+// Portal público — gera relatório com IA a partir do token do aluno.
+// Utiliza IA do tenant quando configurada, com fallback automático para Google Gemini.
 
 import { createServerFn } from "@tanstack/react-start";
 import { buildSystemPrompt, PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
@@ -13,34 +12,59 @@ export const generatePortalReport = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let s: { id?: string; tenant_id: string; full_name: string; sex?: string; birth_date?: string; portal_enabled?: boolean; is_active?: boolean } | null = null;
+    let evals: unknown[] = [];
 
-    // 1) Resolve aluno via token/slug
-    const { data: student, error: sErr } = await supabaseAdmin
-      .from("students")
-      .select("id,tenant_id,full_name,sex,birth_date,portal_enabled,is_active")
-      .or(`portal_token.eq.${data.token},portal_slug.eq.${data.token}`)
-      .limit(1)
-      .maybeSingle();
-    if (sErr || !student) throw new Error("Portal não encontrado");
-    const s = student as { id: string; tenant_id: string; full_name: string; sex: string; birth_date: string; portal_enabled: boolean; is_active: boolean };
-    if (!s.portal_enabled || !s.is_active) throw new Error("Portal indisponível");
+    // 1) Tenta resolver aluno via supabaseAdmin
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: student } = await supabaseAdmin
+        .from("students")
+        .select("id,tenant_id,full_name,sex,birth_date,portal_enabled,is_active")
+        .or(`portal_token.eq.${data.token},portal_slug.eq.${data.token}`)
+        .limit(1)
+        .maybeSingle();
 
-    // 2) Avaliações cronológicas
-    const { data: evals, error: eErr } = await supabaseAdmin
-      .from("evaluations")
-      .select("id,evaluated_at,age_years,weight_kg,height_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications")
-      .eq("student_id", s.id)
-      .order("evaluated_at", { ascending: true });
-    if (eErr) throw eErr;
+      if (student) {
+        s = student as typeof s;
+        if (s.portal_enabled === false || s.is_active === false) {
+          throw new Error("Portal indisponível");
+        }
+        const { data: evList } = await supabaseAdmin
+          .from("evaluations")
+          .select("id,evaluated_at,age_years,weight_kg,height_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications")
+          .eq("student_id", student.id)
+          .order("evaluated_at", { ascending: true });
+        evals = evList ?? [];
+      }
+    } catch (adminErr) {
+      if (adminErr instanceof Error && adminErr.message === "Portal indisponível") throw adminErr;
+      console.warn("[portal-ai-report] Busca via admin não concluída, tentando via RPC pública:", adminErr);
+    }
+
+    // 2) Se necessário, resolve via RPC público portal_get_data
+    if (!s) {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data: portalRes } = await supabase.rpc("portal_get_data" as never, { _token: data.token } as never);
+      const p = portalRes as { student?: { full_name: string; sex: string; birth_date: string; tenant_id?: string }; evaluations?: unknown[] } | null;
+      if (p?.student) {
+        s = {
+          full_name: p.student.full_name,
+          sex: p.student.sex,
+          birth_date: p.student.birth_date,
+          tenant_id: p.student.tenant_id ?? "",
+        };
+        evals = p.evaluations ?? [];
+      }
+    }
+
+    if (!s) throw new Error("Portal não encontrado");
     if (!evals || evals.length === 0) throw new Error("Nenhuma avaliação disponível");
 
-    // 3) IA do tenant — sem fallback Lovable
+    // 3) Resolução do modelo (chave do tenant ou fallback para Gemini)
     const { resolveTenantModel, generateJSON } = await import("@/lib/ai/unified-generate.server");
-    const resolved = await resolveTenantModel(supabaseAdmin as never, s.tenant_id);
-    if (resolved.source !== "tenant") {
-      throw new Error("A IA do tenant não está configurada. Solicite ao administrador para ativar o provedor de IA nas configurações.");
-    }
+    const { supabase } = await import("@/integrations/supabase/client");
+    const resolved = await resolveTenantModel(supabase as never, s.tenant_id);
 
     const userPrompt = `Gere um relatório evolutivo completo para a FAMÍLIA do aluno em JSON ESTRITO (sem markdown):
 {
@@ -51,7 +75,7 @@ export const generatePortalReport = createServerFn({ method: "POST" })
   "atividades_sugeridas": ["atividade 1", "atividade 2", "atividade 3", "atividade 4", "atividade 5"]
 }
 
-Aluno: ${s.full_name} | Sexo: ${s.sex} | Nascimento: ${s.birth_date}
+Aluno: ${s.full_name} | Sexo: ${s.sex ?? "—"} | Nascimento: ${s.birth_date ?? "—"}
 Total de avaliações: ${evals.length}
 Avaliações (cronológicas, com classificações): ${JSON.stringify(evals)}`;
 
@@ -79,6 +103,7 @@ Avaliações (cronológicas, com classificações): ${JSON.stringify(evals)}`;
       plano_evolucao: cleanArr(raw.plano_evolucao),
       atividades_sugeridas: cleanArr(raw.atividades_sugeridas),
       provider: resolved.provider,
+      source: resolved.source,
       promptVersion: PROMETRIC_PROMPT_VERSION,
       generatedAt: new Date().toISOString(),
     };

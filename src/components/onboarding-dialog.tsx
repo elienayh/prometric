@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { PrometricIcon } from "@/components/brand/prometric-logo";
 
 type TenantType = "professor" | "school" | "academy" | "club" | "personal_trainer";
 
@@ -49,9 +50,7 @@ export function OnboardingDialog() {
     <Dialog open>
       <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
         <DialogHeader>
-          <div className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-2xl bg-gradient-hero shadow-glow">
-            <Sparkles className="h-6 w-6 text-white" />
-          </div>
+          <PrometricIcon className="mx-auto mb-2 h-14 w-14" />
           <DialogTitle className="text-center font-display text-2xl">Vamos configurar seu espaço</DialogTitle>
           <DialogDescription className="text-center">
             Dê um nome ao seu ambiente — pode ser sua escola, academia ou seu próprio nome.

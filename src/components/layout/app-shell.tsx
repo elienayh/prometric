@@ -17,6 +17,7 @@ import { OnboardingDialog } from "@/components/onboarding-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { useImpersonation } from "@/hooks/use-impersonation";
+import { PrometricIcon } from "@/components/brand/prometric-logo";
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; tooltip?: string };
 type NavSection = { label: string; items: NavItem[]; adminOnly?: boolean };
@@ -157,9 +158,7 @@ function SidebarContent({
   return (
     <>
       <Link to="/dashboard" onClick={onNavigate} className="flex items-center gap-2.5 px-5 py-5">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-hero shadow-glow">
-          <Activity className="h-5 w-5 text-white" strokeWidth={2.5} />
-        </div>
+        <PrometricIcon className="h-10 w-10 shrink-0" />
         <div className="min-w-0">
           <div className="font-display text-base font-bold leading-none">
             Pro<span className="text-gradient-brand">Metric</span>

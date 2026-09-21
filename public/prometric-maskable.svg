@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="prometric-bg-maskable" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6B21A8" />
+      <stop offset="25%" stop-color="#7C3AED" />
+      <stop offset="55%" stop-color="#4F46E5" />
+      <stop offset="80%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+  </defs>
+
+  <!-- Fundo total 512x512 sem cantos cortados para suporte seguro a ícones maskable do Android -->
+  <rect width="512" height="512" fill="url(#prometric-bg-maskable)" />
+
+  <!-- Pulso centralizado dentro da safe-zone de 80% -->
+  <g transform="translate(48, 48) scale(0.8125)">
+    <!-- Brilho translúcido -->
+    <path
+      d="M 86 262 L 180 262 L 252 138 L 346 354 C 370 296 395 244 414 246 C 426 247 433 253 440 256"
+      fill="none"
+      stroke="#ffffff"
+      stroke-width="44"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-opacity="0.32"
+    />
+
+    <!-- Pulso nítido -->
+    <path
+      d="M 86 262 L 180 262 L 252 138 L 346 354 C 370 296 395 244 414 246 C 426 247 433 253 440 256"
+      fill="none"
+      stroke="#ffffff"
+      stroke-width="32"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+</svg>

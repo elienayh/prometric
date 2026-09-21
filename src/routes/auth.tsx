@@ -8,6 +8,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PrometricIcon } from "@/components/brand/prometric-logo";
 import {
   Select,
   SelectContent,
@@ -193,9 +194,7 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
           </Link>
           <div className="hidden h-full flex-col justify-center lg:flex">
             <div className="mb-5 inline-flex items-center gap-2.5">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-hero shadow-glow">
-                <Activity className="h-5 w-5 text-white" strokeWidth={2.5} />
-              </div>
+              <PrometricIcon className="h-11 w-11 shrink-0" />
               <span className="font-display text-2xl font-bold">
                 Pro<span className="text-gradient-brand">Metric</span>
               </span>
@@ -232,6 +231,12 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
           className="mx-auto mt-8 w-full max-w-md lg:mt-0 lg:flex lg:items-center"
         >
           <div className="w-full rounded-3xl border border-border/80 bg-card/85 p-8 shadow-pop backdrop-blur-xl">
+            <div className="mb-6 flex items-center gap-2.5 lg:hidden">
+              <PrometricIcon className="h-9 w-9 shrink-0" />
+              <span className="font-display text-xl font-bold">
+                Pro<span className="text-gradient-brand">Metric</span>
+              </span>
+            </div>
             <h2 className="font-display text-2xl font-bold tracking-tight">
               {mode === "signin" ? "Entrar no ProMetric" : "Criar sua conta grátis"}
             </h2>
