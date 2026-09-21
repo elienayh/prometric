@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "build": "vite build && node -e \"const fs=require('fs'); fs.mkdirSync('.output/server', {recursive: true}); fs.writeFileSync('.output/server/wrangler.json', JSON.stringify({name: 'prometric', main: '../../dist/server/server.js', compatibility_date: '2025-09-02', compatibility_flags: ['nodejs_compat'], assets: {directory: '../../dist/client', binding: 'ASSETS'}}, null, 2));\"",
     "preview": "vite preview --port=3000 --host=0.0.0.0",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
