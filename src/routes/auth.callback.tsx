@@ -5,12 +5,16 @@ import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 
-const callbackSearchSchema = z.object({
-  code: z.string().optional(),
-  error: z.string().optional(),
-  error_code: z.string().optional(),
-  error_description: z.string().optional(),
-});
+const callbackSearchSchema = z
+  .object({
+    code: z.string().optional(),
+    error: z.string().optional(),
+    error_code: z.string().optional(),
+    error_description: z.string().optional(),
+    state: z.string().optional(),
+    next: z.string().optional(),
+  })
+  .passthrough();
 
 export const Route = createFileRoute("/auth/callback")({
   validateSearch: callbackSearchSchema,
@@ -98,30 +102,15 @@ function AuthCallbackPage() {
           setStatus("success");
         }
 
-        // 6. Determinar rota de destino com base no perfil (admin vs usuário comum)
-        let destination = "/dashboard";
-        if (activeUserId) {
-          try {
-            const { data: roles } = await supabase
-              .from("admin_roles")
-              .select("role")
-              .eq("user_id", activeUserId)
-              .limit(1);
-
-            if (roles && roles.length > 0) {
-              destination = "/admin";
-            }
-          } catch {
-            destination = "/dashboard";
-          }
-        }
+        // 6. Redirecionar o usuário para /admin após autenticação
+        const destination = "/admin";
 
         // Redirecionar com pequeno delay para fluidez visual
         setTimeout(() => {
           if (isMounted) {
             navigate({ to: destination as any, replace: true });
           }
-        }, 600);
+        }, 500);
       } catch (err: any) {
         console.error("[AuthCallback] Erro no processamento:", err);
         if (isMounted) {
