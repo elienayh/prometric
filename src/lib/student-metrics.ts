@@ -1,27 +1,31 @@
 // ============================================================================
 // FONTE ÚNICA DE VERDADE (Single Source of Truth) — resultados por aluno
 // ----------------------------------------------------------------------------
-// Toda tela/relatório do ProMetric deve derivar os valores do aluno destas
-// funções. Elas NÃO criam cálculo novo: apenas leem `evaluations.classifications`
-// (gravado no lançamento pela lógica PROESP/ProMetric existente) e delegam o
-// score para `prometricIndex`/`overallScore`, que permanecem inalterados.
+// Toda tela/relatório do ProMetric deriva os valores do aluno destas funções.
+// Elas consolidam todo o histórico de testes realizados pelo aluno, garantindo
+// que qualquer teste já executado (seja antropometria, flexibilidade,
+// resistência, potência ou agilidade/velocidade) permaneça ativo e considerado
+// na condição física do aluno até que uma nova medição desse mesmo teste ocorra.
 //
 // Definições oficiais:
-//  • "Avaliação atual" → a avaliação mais recente que contém classificações.
-//    Uma atualização isolada de medidas não apaga o último resultado clínico.
-//  • "Evolução temporal" → cada ponto usa exclusivamente as classificações
-//    persistidas naquela avaliação. Valores de datas diferentes nunca são
-//    mesclados, preservando a rastreabilidade do registro original.
+//  • "Avaliação atual consolidada" → o estado acumulado mais recente de cada
+//    indicador/teste realizado pelo aluno em qualquer momento do seu histórico.
+//  • "Evolução temporal" → cada ponto cronológico representa o estado consolidado
+//    do aluno até aquela data, preservando também `recorded_classifications`
+//    e `recorded_values` para auditoria do que foi realizado na sessão específica.
 // ============================================================================
 
 import type { Classifications, ClassificationKey, Zone } from "./proesp";
 import { overallScore } from "./proesp";
 import { prometricIndex, type PMOverall } from "./prometric-method";
 
+export type { ClassificationKey };
+
 export type EvalLike = {
   id?: string;
   evaluated_at: string;
   classifications: Classifications | null;
+  [key: string]: unknown;
 };
 
 /** Ordena avaliações cronologicamente (mais antiga → mais recente). */
@@ -33,7 +37,7 @@ function hasClassifications(c: Classifications | null | undefined): boolean {
   return !!c && Object.values(c).some(Boolean);
 }
 
-/** Avaliação clínica atual: registro mais recente com alguma classificação. */
+/** Avaliação clínica atual: registro mais recente com alguma classificação ou o mais recente da lista. */
 export function currentEvaluation<T extends EvalLike>(evals: readonly T[]): T | null {
   const ordered = chronological(evals);
   for (let i = ordered.length - 1; i >= 0; i--) {
@@ -42,9 +46,24 @@ export function currentEvaluation<T extends EvalLike>(evals: readonly T[]): T | 
   return ordered[ordered.length - 1] ?? null;
 }
 
-/** Classificações da avaliação clínica atual, sem mesclar datas. */
+/**
+ * Classificações consolidadas de todo o histórico do aluno.
+ * Considera o registro mais recente de cada teste já realizado,
+ * garantindo que todas as avaliações do aluno sejam consideradas
+ * como fonte única de verdade.
+ */
 export function consolidatedClassifications(evals: readonly EvalLike[]): Classifications {
-  return { ...(currentEvaluation(evals)?.classifications ?? {}) };
+  const ordered = chronological(evals);
+  const result: Record<string, Zone> = {};
+  for (const ev of ordered) {
+    if (!ev.classifications) continue;
+    for (const [key, zone] of Object.entries(ev.classifications)) {
+      if (zone) {
+        result[key] = zone as Zone;
+      }
+    }
+  }
+  return result as Classifications;
 }
 
 export type Snapshot = {
@@ -57,18 +76,19 @@ export type Snapshot = {
   index: PMOverall;
 };
 
-/** Série temporal oficial: cada ponto conserva o registro da própria data. */
+/**
+ * Série temporal oficial: cada ponto reflete o estado consolidado acumulado
+ * até aquela data, permitindo acompanhar a evolução real do Índice ProMetric.
+ */
 export function consolidatedSeries(evals: readonly EvalLike[]): Snapshot[] {
-  return chronological(evals).map((ev) => {
-    const classifications = { ...(ev.classifications ?? {}) };
-    return {
-      id: ev.id,
-      evaluated_at: ev.evaluated_at,
-      classifications,
-      recorded: { ...(ev.classifications ?? {}) },
-      index: prometricIndex(classifications),
-    };
-  });
+  const withConsolidated = withConsolidatedView(evals);
+  return withConsolidated.map((ev) => ({
+    id: ev.id,
+    evaluated_at: ev.evaluated_at,
+    classifications: ev.classifications,
+    recorded: ev.recorded_classifications,
+    index: prometricIndex(ev.classifications),
+  }));
 }
 
 /** Índice ProMetric atual do aluno (mesma origem em todas as telas). */
@@ -92,24 +112,77 @@ export function latestRecordedValue<T extends EvalLike>(
   const ordered = chronological(evals);
   for (let i = ordered.length - 1; i >= 0; i--) {
     const v = (ordered[i] as unknown as Record<string, unknown>)[field];
-    if (typeof v === "number") return { value: v, source: ordered[i] };
+    if (typeof v === "number" && !isNaN(v)) return { value: v, source: ordered[i] };
   }
   return { value: null, source: ordered[ordered.length - 1] ?? null };
 }
 
+export const NUMERIC_EVAL_FIELDS = [
+  "weight_kg",
+  "height_cm",
+  "waist_circumference_cm",
+  "imc",
+  "rce",
+  "sit_and_reach_cm",
+  "abdominal_reps",
+  "horizontal_jump_cm",
+  "medicine_ball_m",
+  "square_test_s",
+  "sprint_20m_s",
+  "run_6min_m",
+] as const;
+
 /**
- * Normaliza apenas a ordem e preserva exatamente as classificações registradas
- * em cada avaliação. O campo auxiliar explicita o valor original para telas de
- * auditoria, sem mudar os dados clínicos.
+ * Normaliza e consolida cronologicamente as avaliações de um aluno.
+ * Cada avaliação na saída possui:
+ *  - `classifications`: as classificações consolidadas de todos os testes até aquela data.
+ *  - `recorded_classifications`: o registro estrito apenas dos testes feitos naquele dia.
+ *  - Os campos numéricos mais recentes consolidados até aquela data.
+ *  - `recorded_values`: os valores brutos medidos exclusivamente naquele dia.
  */
 export function withConsolidatedView<T extends EvalLike>(
   evals: readonly T[],
-): (T & { recorded_classifications: Classifications })[] {
-  return chronological(evals).map((ev) => {
+): (T & {
+  recorded_classifications: Classifications;
+  recorded_values: Record<string, number | null>;
+  classifications: Classifications;
+})[] {
+  const ordered = chronological(evals);
+  const accumulatedClass: Record<string, Zone> = {};
+  const accumulatedNums: Record<string, number> = {};
+
+  return ordered.map((ev) => {
+    const evRecord = ev as unknown as Record<string, unknown>;
+
+    // 1. Snapshot dos testes registrados puramente nesta data
+    const recorded_classifications: Record<string, Zone> = {};
+    if (ev.classifications) {
+      for (const [key, zone] of Object.entries(ev.classifications)) {
+        if (zone) {
+          recorded_classifications[key] = zone as Zone;
+          accumulatedClass[key] = zone as Zone;
+        }
+      }
+    }
+
+    // 2. Snapshot dos valores numéricos medidos puramente nesta data
+    const recorded_values: Record<string, number | null> = {};
+    for (const f of NUMERIC_EVAL_FIELDS) {
+      const val = evRecord[f];
+      if (typeof val === "number" && !isNaN(val)) {
+        recorded_values[f] = val;
+        accumulatedNums[f] = val;
+      } else {
+        recorded_values[f] = null;
+      }
+    }
+
     return {
       ...ev,
-      recorded_classifications: { ...(ev.classifications ?? {}) },
-      classifications: { ...(ev.classifications ?? {}) },
+      ...accumulatedNums,
+      recorded_classifications: recorded_classifications as Classifications,
+      recorded_values,
+      classifications: { ...accumulatedClass } as Classifications,
     };
   });
 }

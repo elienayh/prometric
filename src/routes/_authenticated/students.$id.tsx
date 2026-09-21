@@ -48,7 +48,7 @@ type EvalRow = {
   classifications: Classifications;
   /** Zonas efetivamente registradas nesta avaliação (histórico/auditoria). */
   recorded_classifications?: Classifications;
-
+  recorded_values?: Record<string, number | null>;
 };
 
 type Indicator = { key: ClassificationKey; field: keyof EvalRow; label: string; unit: string; higherBetter: boolean };
@@ -365,7 +365,8 @@ async function fetchLatestForStudents(sids: string[]): Promise<EvalRow[]> {
   }
   const latest: EvalRow[] = [];
   for (const arr of byStudent.values()) {
-    const current = currentEvaluation(arr) as EvalRow | null;
+    const consolidated = withConsolidatedView(arr);
+    const current = consolidated[consolidated.length - 1] as EvalRow | null;
     if (current) latest.push(current);
   }
   return latest;
@@ -477,7 +478,11 @@ function ClinicalCard({
   // Mesma origem de dados do modal "Evolução": registros que possuem valor
   // para este teste. A última avaliação pode ser apenas de peso/altura e não
   // conter este teste — nesse caso usamos o registro mais recente que o contém.
-  const withValue = data.filter((ev) => num(ev, ind.field) != null);
+  const withValue = data.filter((ev) => {
+    const rec = ev.recorded_values;
+    if (rec) return rec[ind.field] != null;
+    return num(ev, ind.field) != null;
+  });
   const source = withValue[withValue.length - 1] ?? last;
   const baseline = withValue.length > 1 ? withValue[0] : (first && first.id !== source.id ? first : null);
 
@@ -700,14 +705,22 @@ function TestEvolutionDialog({
   const rows = useMemo(() => {
     if (!ind) return [] as { id: string; date: string; label: string; value: number | null; zone: Zone | undefined }[];
     return data
-      .filter((ev) => num(ev, ind.field) != null)
-      .map((ev) => ({
-        id: ev.id,
-        date: ev.evaluated_at,
-        label: new Date(ev.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }),
-        value: num(ev, ind.field),
-        zone: ev.classifications?.[ind.key],
-      }));
+      .filter((ev) => {
+        const rec = ev.recorded_values;
+        if (rec) return rec[ind.field] != null;
+        return num(ev, ind.field) != null;
+      })
+      .map((ev) => {
+        const rec = ev.recorded_values;
+        const v = rec ? rec[ind.field] : num(ev, ind.field);
+        return {
+          id: ev.id,
+          date: ev.evaluated_at,
+          label: new Date(ev.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }),
+          value: v,
+          zone: (ev.recorded_classifications ?? ev.classifications)?.[ind.key],
+        };
+      });
   }, [data, ind]);
 
   if (!ind) return null;
@@ -851,10 +864,19 @@ function EvolutionChart({ data }: { data: EvalRow[] }) {
   const unit = ind ? ind.unit : "/100";
   const higherBetter = ind ? ind.higherBetter : true;
 
-  const series = data.map((e) => ({
-    date: new Date(e.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }),
-    valor: ind ? num(e, ind.field) : prometricIndex(e.classifications ?? {}).score,
-  }));
+  const series = data.map((e) => {
+    let valor: number | null = null;
+    if (ind) {
+      const rec = e.recorded_values;
+      valor = rec ? rec[ind.field] : num(e, ind.field);
+    } else {
+      valor = prometricIndex(e.classifications ?? {}).score;
+    }
+    return {
+      date: new Date(e.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }),
+      valor,
+    };
+  });
 
   const first = series.find((s) => s.valor != null)?.valor ?? null;
   const last = [...series].reverse().find((s) => s.valor != null)?.valor ?? null;
