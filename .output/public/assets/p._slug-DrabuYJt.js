@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-sLPvdpSW.js";import{c as t,et as n}from"./index-CjiLIvhc.js";var r=e();function i(){let{slug:e}=n.useParams();return(0,r.jsx)(t,{lookupKey:e})}export{i as component};
