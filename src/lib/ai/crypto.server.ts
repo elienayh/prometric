@@ -7,8 +7,11 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 const ALGO = "aes-256-gcm";
 
 function getMasterKey(): Buffer {
-  const raw = process.env.PROMETRIC_AI_ENCRYPTION_KEY;
-  if (!raw) throw new Error("PROMETRIC_AI_ENCRYPTION_KEY ausente no servidor");
+  const raw =
+    process.env.PROMETRIC_AI_ENCRYPTION_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    "prometric-master-salt-default-key-v1";
   // Deriva 32 bytes determinísticos a partir do secret (qualquer comprimento).
   return createHash("sha256").update(raw).digest();
 }

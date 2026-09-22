@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Calendar, Download, ExternalLink, Eye, FileDown, MessageSquarePlus, Pencil, Printer, Ruler, Save, Share2, Sparkles, Trash2, TrendingDown, TrendingUp, User, Zap } from "lucide-react";
+import { ArrowLeft, Calendar, Download, ExternalLink, Eye, FileDown, Loader2, MessageSquarePlus, Pencil, Printer, Ruler, Save, Share2, Sparkles, Trash2, TrendingDown, TrendingUp, User, Zap } from "lucide-react";
 import { issueSheetTokens } from "@/lib/sheet/sheet.functions";
 import { generateSheetPDF } from "@/lib/sheet/sheet-pdf";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -204,6 +204,30 @@ function StudentDetail() {
     { label: "PDF", icon: Download, primary: true, accent: "amber", pinnedEnd: true, onClick: handlePDF },
   ];
 
+  if (student.isLoading) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Carregando ficha do aluno...</p>
+      </div>
+    );
+  }
+
+  if (student.isError || !s) {
+    return (
+      <div className="space-y-4">
+        <Link to="/students" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" /> Voltar para alunos
+        </Link>
+        <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-8 text-center">
+          <p className="text-sm font-medium text-destructive">Não foi possível carregar os dados deste aluno.</p>
+          <Button variant="outline" className="mt-4" onClick={() => student.refetch()}>
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

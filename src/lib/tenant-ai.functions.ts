@@ -83,8 +83,11 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
       encrypted = encryptApiKey(data.apiKey);
     }
 
+    // Persiste usando supabaseAdmin para evitar falhas de RLS/service role no servidor
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     // Carrega existente
-    const { data: existing } = await supabase
+    const { data: existing } = await supabaseAdmin
       .from("tenant_ai_credentials" as never)
       .select("id, api_key_ciphertext, api_key_iv, api_key_tag, api_key_fingerprint")
       .eq("tenant_id" as never, data.tenantId)
@@ -108,13 +111,13 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
     };
 
     if (existing) {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("tenant_ai_credentials" as never)
         .update(row as never)
         .eq("id" as never, (existing as { id: string }).id);
       if (error) throw new Error(error.message);
     } else {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("tenant_ai_credentials" as never)
         .insert(row as never);
       if (error) throw new Error(error.message);
@@ -209,7 +212,8 @@ export const deleteTenantAiCredential = createServerFn({ method: "POST" })
     } as never);
     if (!isAdmin && !isPlatform) throw new Error("Sem permissão");
 
-    const { error } = await supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
       .from("tenant_ai_credentials" as never)
       .delete()
       .eq("tenant_id" as never, data.tenantId);

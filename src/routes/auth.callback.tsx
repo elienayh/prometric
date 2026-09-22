@@ -102,8 +102,22 @@ function AuthCallbackPage() {
           setStatus("success");
         }
 
-        // 6. Redirecionar o usuário para /admin após autenticação
-        const destination = "/admin";
+        // 6. Redirecionar o usuário: se tiver cargo de admin vai para /admin, caso contrário para /dashboard
+        let destination = "/dashboard";
+        try {
+          if (activeUserId) {
+            const { data: roles } = await supabase
+              .from("admin_roles")
+              .select("role")
+              .eq("user_id", activeUserId)
+              .limit(1);
+            if (roles && roles.length > 0) {
+              destination = "/admin";
+            }
+          }
+        } catch (roleErr) {
+          console.warn("[AuthCallback] Verificação de admin ignorada:", roleErr);
+        }
 
         // Redirecionar com pequeno delay para fluidez visual
         setTimeout(() => {
