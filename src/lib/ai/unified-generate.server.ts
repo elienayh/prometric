@@ -42,10 +42,27 @@ export async function resolveTenantModel(
       row = cred as typeof row;
     }
   } catch (dbErr) {
-    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant:", dbErr);
+    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant via admin:", dbErr);
   }
 
-  void supabase; // mantido para futura validação cruzada
+  // Fallback de leitura usando o client do usuário se fornecido
+  if (!row && supabase) {
+    try {
+      const { data: credUser, error: credErrUser } = await supabase
+        .from("tenant_ai_credentials" as never)
+        .select(
+          "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
+        )
+        .eq("tenant_id" as never, tenantId)
+        .maybeSingle();
+
+      if (!credErrUser && credUser) {
+        row = credUser as typeof row;
+      }
+    } catch {
+      // ignora
+    }
+  }
 
   if (row?.is_active && row.api_key_ciphertext && row.api_key_iv && row.api_key_tag) {
     try {
@@ -56,32 +73,55 @@ export async function resolveTenantModel(
         tag: row.api_key_tag,
       });
       if (apiKey && apiKey.trim().length > 5) {
+        let chosenModel = row.model;
+        if (row.provider === "google") {
+          if (
+            chosenModel.includes("2.5-flash-lite") ||
+            chosenModel.includes("2.0-flash") ||
+            chosenModel.includes("1.5-flash") ||
+            chosenModel === "gemini-flash-lite"
+          ) {
+            chosenModel = "gemini-3.5-flash-lite";
+          } else if (
+            chosenModel.includes("2.5-flash") ||
+            chosenModel.includes("2.0") ||
+            chosenModel === "gemini-flash"
+          ) {
+            chosenModel = "gemini-3.8-flash";
+          }
+        }
+
         return {
           provider: row.provider,
-          model: row.model,
-          apiKey,
+          model: chosenModel,
+          apiKey: apiKey.trim(),
           source: "tenant",
           promptVersion: row.prompt_version ?? "v1.0.0",
         };
       }
     } catch (cryptoErr) {
       console.warn(
-        "[unified-generate] Chave do tenant falhou ao descriptografar. Utilizando Gemini do sistema:",
+        "[unified-generate] Chave do tenant falhou ao descriptografar. Tentando Gemini do sistema:",
         cryptoErr
       );
     }
   }
 
-  // Fallback: Google Gemini
+  // Fallback: Google Gemini do sistema (se disponível)
   const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) throw new Error("GEMINI_API_KEY ausente no servidor");
-  return {
-    provider: "google",
-    model: DEFAULT_MODELS.google,
-    apiKey: geminiKey,
-    source: "fallback",
-    promptVersion: row?.prompt_version ?? "v1.0.0",
-  };
+  if (geminiKey && geminiKey.trim().length > 5) {
+    return {
+      provider: "google",
+      model: DEFAULT_MODELS.google,
+      apiKey: geminiKey.trim(),
+      source: "fallback",
+      promptVersion: row?.prompt_version ?? "v1.0.0",
+    };
+  }
+
+  throw new Error(
+    "Nenhuma chave de IA configurada para este espaço. Acesse Configurações > Inteligência Artificial para cadastrar sua chave da API do Google Gemini."
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

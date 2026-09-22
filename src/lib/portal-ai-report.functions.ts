@@ -58,6 +58,23 @@ export const generatePortalReport = createServerFn({ method: "POST" })
       }
     }
 
+    if (s && !s.tenant_id) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: st } = await supabaseAdmin
+          .from("students")
+          .select("tenant_id")
+          .or(`portal_token.eq.${data.token},portal_slug.eq.${data.token}`)
+          .limit(1)
+          .maybeSingle();
+        if (st?.tenant_id) {
+          s.tenant_id = st.tenant_id;
+        }
+      } catch {
+        // ignora
+      }
+    }
+
     if (!s) throw new Error("Portal não encontrado");
     if (!evals || evals.length === 0) throw new Error("Nenhuma avaliação disponível");
 

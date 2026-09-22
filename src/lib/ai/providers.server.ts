@@ -65,7 +65,23 @@ async function pingXai(apiKey: string, model: string) {
 }
 
 async function pingGoogle(apiKey: string, model: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  let chosenModel = model || "gemini-3.8-flash";
+  if (
+    chosenModel.includes("2.5-flash-lite") ||
+    chosenModel.includes("2.0-flash") ||
+    chosenModel.includes("1.5-flash") ||
+    chosenModel === "gemini-flash-lite"
+  ) {
+    chosenModel = "gemini-3.5-flash-lite";
+  } else if (
+    chosenModel.includes("2.5-flash") ||
+    chosenModel.includes("2.0") ||
+    chosenModel === "gemini-flash"
+  ) {
+    chosenModel = "gemini-3.8-flash";
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(chosenModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

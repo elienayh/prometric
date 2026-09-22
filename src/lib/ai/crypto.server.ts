@@ -6,13 +6,25 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 
 const ALGO = "aes-256-gcm";
 
+// Obtém a lista de possíveis chaves candidatas para garantir decodificação uniforme
+// independentemente de qual variável de ambiente estava ativa quando a chave foi salva.
+function getCandidateKeys(): string[] {
+  const list = [
+    process.env.PROMETRIC_AI_ENCRYPTION_KEY,
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    "sb_publishable_nPkW_QcQk2Rki7BIeu9PCA_MfkcEnS4",
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    "prometric-master-salt-default-key-v1",
+  ].filter(Boolean) as string[];
+
+  // Remove duplicatas
+  return Array.from(new Set(list));
+}
+
 function getMasterKey(): Buffer {
-  const raw =
-    process.env.PROMETRIC_AI_ENCRYPTION_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    "prometric-master-salt-default-key-v1";
-  // Deriva 32 bytes determinísticos a partir do secret (qualquer comprimento).
+  const candidates = getCandidateKeys();
+  const raw = candidates[0] || "prometric-master-salt-default-key-v1";
   return createHash("sha256").update(raw).digest();
 }
 
@@ -39,11 +51,23 @@ export function encryptApiKey(plain: string): EncryptedPayload {
 }
 
 export function decryptApiKey(payload: { ciphertext: string; iv: string; tag: string }): string {
-  const key = getMasterKey();
-  const iv = Buffer.from(payload.iv, "base64");
-  const tag = Buffer.from(payload.tag, "base64");
-  const decipher = createDecipheriv(ALGO, key, iv);
-  decipher.setAuthTag(tag);
-  const dec = Buffer.concat([decipher.update(Buffer.from(payload.ciphertext, "base64")), decipher.final()]);
-  return dec.toString("utf8");
+  const candidates = getCandidateKeys();
+  let lastError: unknown = null;
+
+  for (const raw of candidates) {
+    try {
+      const key = createHash("sha256").update(raw).digest();
+      const iv = Buffer.from(payload.iv, "base64");
+      const tag = Buffer.from(payload.tag, "base64");
+      const decipher = createDecipheriv(ALGO, key, iv);
+      decipher.setAuthTag(tag);
+      const dec = Buffer.concat([decipher.update(Buffer.from(payload.ciphertext, "base64")), decipher.final()]);
+      return dec.toString("utf8");
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw new Error(`Falha ao descriptografar chave de API: ${lastError instanceof Error ? lastError.message : "Chave inválida ou corrompida"}`);
 }
+

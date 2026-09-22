@@ -78,20 +78,41 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
 
     let encrypted: { ciphertext: string; iv: string; tag: string; fingerprint: string } | null = null;
 
-    if (data.apiKey && data.apiKey.length > 0) {
+    if (data.apiKey && data.apiKey.trim().length > 0) {
       const { encryptApiKey } = await import("@/lib/ai/crypto.server");
-      encrypted = encryptApiKey(data.apiKey);
+      encrypted = encryptApiKey(data.apiKey.trim());
     }
 
-    // Persiste usando supabaseAdmin para evitar falhas de RLS/service role no servidor
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Carrega credencial existente para preservar a chave caso o usuário só tenha alterado provedor/modelo/ativo
+    let existing: {
+      id?: string;
+      api_key_ciphertext?: string | null;
+      api_key_iv?: string | null;
+      api_key_tag?: string | null;
+      api_key_fingerprint?: string | null;
+    } | null = null;
 
-    // Carrega existente
-    const { data: existing } = await supabaseAdmin
+    const { data: exUser } = await supabase
       .from("tenant_ai_credentials" as never)
       .select("id, api_key_ciphertext, api_key_iv, api_key_tag, api_key_fingerprint")
       .eq("tenant_id" as never, data.tenantId)
       .maybeSingle();
+
+    if (exUser) {
+      existing = exUser as typeof existing;
+    } else {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: exAdmin } = await supabaseAdmin
+          .from("tenant_ai_credentials" as never)
+          .select("id, api_key_ciphertext, api_key_iv, api_key_tag, api_key_fingerprint")
+          .eq("tenant_id" as never, data.tenantId)
+          .maybeSingle();
+        if (exAdmin) existing = exAdmin as typeof existing;
+      } catch {
+        // ignora fallback de leitura
+      }
+    }
 
     const row = {
       tenant_id: data.tenantId,
@@ -106,21 +127,32 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
             api_key_tag: encrypted.tag,
             api_key_fingerprint: encrypted.fingerprint,
           }
+        : existing?.api_key_ciphertext
+        ? {
+            api_key_ciphertext: existing.api_key_ciphertext,
+            api_key_iv: existing.api_key_iv,
+            api_key_tag: existing.api_key_tag,
+            api_key_fingerprint: existing.api_key_fingerprint,
+          }
         : {}),
       created_by: userId,
     };
 
-    if (existing) {
-      const { error } = await supabaseAdmin
+    // Salva preferencialmente usando o cliente autenticado do usuário (context.supabase),
+    // que atende às políticas de RLS (is_tenant_admin / is_platform_admin).
+    const { error: userSaveErr } = await supabase
+      .from("tenant_ai_credentials" as never)
+      .upsert(row as never, { onConflict: "tenant_id" });
+
+    if (userSaveErr) {
+      console.warn("[tenant-ai] Tentativa com context.supabase falhou, tentando admin:", userSaveErr.message);
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error: adminSaveErr } = await supabaseAdmin
         .from("tenant_ai_credentials" as never)
-        .update(row as never)
-        .eq("id" as never, (existing as { id: string }).id);
-      if (error) throw new Error(error.message);
-    } else {
-      const { error } = await supabaseAdmin
-        .from("tenant_ai_credentials" as never)
-        .insert(row as never);
-      if (error) throw new Error(error.message);
+        .upsert(row as never, { onConflict: "tenant_id" });
+      if (adminSaveErr) {
+        throw new Error(userSaveErr.message || adminSaveErr.message);
+      }
     }
 
     return { ok: true };
@@ -131,10 +163,17 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
 // ─────────────────────────────────────────────────────────────────────────────
 export const testTenantAiCredential = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { tenantId: string; overrideApiKey?: string }) => {
-    if (!data?.tenantId) throw new Error("tenantId obrigatório");
-    return data;
-  })
+  .inputValidator(
+    (data: {
+      tenantId: string;
+      overrideApiKey?: string;
+      provider?: ProviderId;
+      model?: string;
+    }) => {
+      if (!data?.tenantId) throw new Error("tenantId obrigatório");
+      return data;
+    },
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: isAdmin } = await supabase.rpc("is_tenant_admin" as never, {
@@ -145,28 +184,40 @@ export const testTenantAiCredential = createServerFn({ method: "POST" })
     } as never);
     if (!isAdmin && !isPlatform) throw new Error("Sem permissão");
 
-    // Server-side lê a credencial completa via service role para descriptografar
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: cred, error: credErr } = await supabaseAdmin
-      .from("tenant_ai_credentials" as never)
-      .select("provider, model, api_key_ciphertext, api_key_iv, api_key_tag")
-      .eq("tenant_id" as never, data.tenantId)
-      .maybeSingle();
-    if (credErr) throw new Error(credErr.message);
-    if (!cred) throw new Error("Nenhuma credencial cadastrada — salve antes de testar");
-
-    const row = cred as {
+    // Lê registro existente (via supabase autenticado ou supabaseAdmin)
+    let row: {
       provider: ProviderId;
       model: string;
       api_key_ciphertext: string | null;
       api_key_iv: string | null;
       api_key_tag: string | null;
-    };
+    } | null = null;
 
-    let apiKey = data.overrideApiKey ?? "";
+    const { data: credUser } = await supabase
+      .from("tenant_ai_credentials" as never)
+      .select("provider, model, api_key_ciphertext, api_key_iv, api_key_tag")
+      .eq("tenant_id" as never, data.tenantId)
+      .maybeSingle();
+
+    if (credUser) {
+      row = credUser as typeof row;
+    } else {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: credAdmin } = await supabaseAdmin
+        .from("tenant_ai_credentials" as never)
+        .select("provider, model, api_key_ciphertext, api_key_iv, api_key_tag")
+        .eq("tenant_id" as never, data.tenantId)
+        .maybeSingle();
+      if (credAdmin) row = credAdmin as typeof row;
+    }
+
+    let apiKey = data.overrideApiKey ? data.overrideApiKey.trim() : "";
+    const providerToTest = data.provider || row?.provider || "google";
+    const modelToTest = data.model || row?.model || "gemini-3.8-flash";
+
     if (!apiKey) {
-      if (!row.api_key_ciphertext || !row.api_key_iv || !row.api_key_tag) {
-        throw new Error("Chave de API não cadastrada para este provedor");
+      if (!row || !row.api_key_ciphertext || !row.api_key_iv || !row.api_key_tag) {
+        throw new Error("Chave de API não cadastrada para este espaço. Digite sua chave ou salve antes de testar.");
       }
       const { decryptApiKey } = await import("@/lib/ai/crypto.server");
       apiKey = decryptApiKey({
@@ -177,18 +228,34 @@ export const testTenantAiCredential = createServerFn({ method: "POST" })
     }
 
     const { pingProvider } = await import("@/lib/ai/providers.server");
-    const result = await pingProvider(row.provider, apiKey, row.model);
+    const result = await pingProvider(providerToTest, apiKey, modelToTest);
 
-    // Persiste resultado do teste
-    await supabaseAdmin
-      .from("tenant_ai_credentials" as never)
-      .update({
+    // Persiste resultado do teste se o registro já existir no banco
+    if (row) {
+      const updateData = {
         last_tested_at: new Date().toISOString(),
         last_test_ok: result.ok,
         last_test_error: result.ok ? null : (result.error ?? "Erro desconhecido"),
         last_test_latency_ms: result.latencyMs,
-      } as never)
-      .eq("tenant_id" as never, data.tenantId);
+      };
+
+      const { error: updErr } = await supabase
+        .from("tenant_ai_credentials" as never)
+        .update(updateData as never)
+        .eq("tenant_id" as never, data.tenantId);
+
+      if (updErr) {
+        try {
+          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+          await supabaseAdmin
+            .from("tenant_ai_credentials" as never)
+            .update(updateData as never)
+            .eq("tenant_id" as never, data.tenantId);
+        } catch {
+          // ignora
+        }
+      }
+    }
 
     return result;
   });
@@ -212,11 +279,19 @@ export const deleteTenantAiCredential = createServerFn({ method: "POST" })
     } as never);
     if (!isAdmin && !isPlatform) throw new Error("Sem permissão");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
+    const { error: delErr } = await supabase
       .from("tenant_ai_credentials" as never)
       .delete()
       .eq("tenant_id" as never, data.tenantId);
-    if (error) throw new Error(error.message);
+
+    if (delErr) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error: adminDelErr } = await supabaseAdmin
+        .from("tenant_ai_credentials" as never)
+        .delete()
+        .eq("tenant_id" as never, data.tenantId);
+      if (adminDelErr) throw new Error(delErr.message || adminDelErr.message);
+    }
+
     return { ok: true };
   });

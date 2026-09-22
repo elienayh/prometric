@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Gradiente de alta vibração do ProMetric (violeta -> índigo -> azul -> ciano) -->
+    <linearGradient id="prometric-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6B21A8" />
+      <stop offset="25%" stop-color="#7C3AED" />
+      <stop offset="55%" stop-color="#4F46E5" />
+      <stop offset="80%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+
+    <!-- Brilho difuso da onda de pulso / ECG -->
+    <filter id="prometric-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="7" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Fundo do ícone com squircle clássico mobile -->
+  <rect width="512" height="512" rx="116" ry="116" fill="url(#prometric-bg)" />
+
+  <!-- Camada de brilho exterior translúcido -->
+  <path
+    d="M 86 262 L 180 262 L 252 138 L 346 354 C 370 296 395 244 414 246 C 426 247 433 253 440 256"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="42"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-opacity="0.32"
+  />
+
+  <!-- Linha de pulso ProMetric sólida com acabamento arredondado -->
+  <path
+    d="M 86 262 L 180 262 L 252 138 L 346 354 C 370 296 395 244 414 246 C 426 247 433 253 440 256"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="30"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
