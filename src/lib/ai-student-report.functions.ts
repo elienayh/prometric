@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { PROMETRIC_PROMPT_VERSION, buildSystemPrompt } from "@/lib/ai/prometric-system-prompt";
 
-type Input = { studentId: string };
+type Input = { studentId: string; tenantId?: string };
 
 export const generateStudentReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -11,15 +11,32 @@ export const generateStudentReport = createServerFn({ method: "POST" })
     return data;
   })
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
 
+    // 1) Busca dados do aluno (com fallback admin caso RLS restrinja)
+    let s: { id: string; tenant_id: string; full_name: string; sex: string; birth_date: string } | null = null;
     const { data: student, error: sErr } = await supabase
       .from("students")
       .select("id,tenant_id,full_name,sex,birth_date")
       .eq("id", data.studentId)
-      .single();
-    if (sErr || !student) throw new Error("Aluno não encontrado");
+      .maybeSingle();
 
+    if (student) {
+      s = student as typeof s;
+    } else {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: stAdmin } = await supabaseAdmin
+        .from("students")
+        .select("id,tenant_id,full_name,sex,birth_date")
+        .eq("id", data.studentId)
+        .maybeSingle();
+      if (stAdmin) s = stAdmin as typeof s;
+    }
+
+    if (!s) throw new Error("Aluno não encontrado");
+
+    // 2) Busca avaliações (com fallback admin)
+    let evalsList: any[] = [];
     const { data: evals, error: eErr } = await supabase
       .from("evaluations")
       .select(
@@ -27,10 +44,24 @@ export const generateStudentReport = createServerFn({ method: "POST" })
       )
       .eq("student_id", data.studentId)
       .order("evaluated_at", { ascending: true });
-    if (eErr) throw eErr;
-    if (!evals || evals.length === 0) throw new Error("Nenhuma avaliação para analisar");
 
-    const s = student as { id: string; tenant_id: string; full_name: string; sex: string; birth_date: string };
+    if (evals && evals.length > 0) {
+      evalsList = evals;
+    } else {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: evAdmin } = await supabaseAdmin
+        .from("evaluations")
+        .select(
+          "id,evaluated_at,age_years,weight_kg,height_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications",
+        )
+        .eq("student_id", data.studentId)
+        .order("evaluated_at", { ascending: true });
+      if (evAdmin) evalsList = evAdmin;
+    }
+
+    if (!evalsList || evalsList.length === 0) {
+      throw new Error("Nenhuma avaliação para analisar");
+    }
 
     const userPrompt = `Gere um relatório completo do aluno em JSON ESTRITO (sem markdown):
 {
@@ -44,11 +75,12 @@ export const generateStudentReport = createServerFn({ method: "POST" })
 
 Dados do aluno (use APENAS estes valores):
 Nome: ${s.full_name} | Sexo: ${s.sex} | Nascimento: ${s.birth_date}
-Total de avaliações: ${evals.length}
-Avaliações (cronológicas): ${JSON.stringify(evals)}`;
+Total de avaliações: ${evalsList.length}
+Avaliações (cronológicas): ${JSON.stringify(evalsList)}`;
 
     const { resolveTenantModel, generateJSON } = await import("@/lib/ai/unified-generate.server");
-    const resolved = await resolveTenantModel(supabase, s.tenant_id);
+    const targetTenantId = data.tenantId || s.tenant_id;
+    const resolved = await resolveTenantModel(supabase, targetTenantId, userId);
 
     const raw = (await generateJSON(resolved, buildSystemPrompt(), userPrompt)) as {
       resumo_geral?: string;

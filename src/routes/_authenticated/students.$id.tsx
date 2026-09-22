@@ -306,7 +306,7 @@ function StudentDetail() {
               <RankingPanel last={current} classEvals={classmates.data ?? []} />
               <TimelineTab data={data} studentId={id} student={s!} tenantName={tenant?.display_name ?? tenant?.name ?? "ProMetric"} onOpenPortal={() => setTab("portal")} onView={(ev) => setViewEval(ev)} />
               <InsightsPanel data={clinicalEvals} last={current} prev={prev} classEvals={classmates.data ?? []} />
-              <AIReportSection studentId={id} />
+              <AIReportSection studentId={id} tenantId={tenant?.id} />
             </>
           ) : (
             <div className="rounded-2xl border border-dashed border-border bg-gradient-card p-10 text-center">
@@ -1883,7 +1883,7 @@ function QuickMeasureDialog({
 // ===========================================================================
 // AI REPORT — Análise holística do aluno via IA (ProMetric Model)
 // ===========================================================================
-function AIReportSection({ studentId }: { studentId: string }) {
+function AIReportSection({ studentId, tenantId }: { studentId: string; tenantId?: string }) {
   type Report = {
     resumo_geral: string;
     evolucao: string;
@@ -1907,7 +1907,7 @@ function AIReportSection({ studentId }: { studentId: string }) {
     setLoading(true);
     try {
       const { generateStudentReport } = await import("@/lib/ai-student-report.functions");
-      const r = await generateStudentReport({ data: { studentId } }) as Report;
+      const r = await generateStudentReport({ data: { studentId, tenantId } }) as Report;
       setReport(r);
       try { window.localStorage.setItem(storageKey, JSON.stringify(r)); } catch { /* noop */ }
       toast.success("Relatório gerado pela IA");

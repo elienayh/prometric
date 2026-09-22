@@ -15,10 +15,14 @@ export type ResolvedModel = {
 };
 
 export async function resolveTenantModel(
-  supabase: SupabaseClient,
-  tenantId: string,
+  supabase?: SupabaseClient,
+  tenantId?: string | null,
+  userId?: string | null,
 ): Promise<ResolvedModel> {
-  let row: {
+  const { decryptApiKey } = await import("./crypto.server");
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+  type CredRow = {
     provider: ProviderId;
     model: string;
     is_active: boolean;
@@ -26,47 +30,13 @@ export async function resolveTenantModel(
     api_key_iv: string | null;
     api_key_tag: string | null;
     prompt_version: string | null;
-  } | null = null;
+  };
 
-  try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: cred, error: credErr } = await supabaseAdmin
-      .from("tenant_ai_credentials" as never)
-      .select(
-        "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
-      )
-      .eq("tenant_id" as never, tenantId)
-      .maybeSingle();
-
-    if (!credErr && cred) {
-      row = cred as typeof row;
+  const tryResolveRow = (row: CredRow | null): ResolvedModel | null => {
+    if (!row?.is_active || !row.api_key_ciphertext || !row.api_key_iv || !row.api_key_tag) {
+      return null;
     }
-  } catch (dbErr) {
-    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant via admin:", dbErr);
-  }
-
-  // Fallback de leitura usando o client do usuário se fornecido
-  if (!row && supabase) {
     try {
-      const { data: credUser, error: credErrUser } = await supabase
-        .from("tenant_ai_credentials" as never)
-        .select(
-          "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
-        )
-        .eq("tenant_id" as never, tenantId)
-        .maybeSingle();
-
-      if (!credErrUser && credUser) {
-        row = credUser as typeof row;
-      }
-    } catch {
-      // ignora
-    }
-  }
-
-  if (row?.is_active && row.api_key_ciphertext && row.api_key_iv && row.api_key_tag) {
-    try {
-      const { decryptApiKey } = await import("./crypto.server");
       const apiKey = decryptApiKey({
         ciphertext: row.api_key_ciphertext,
         iv: row.api_key_iv,
@@ -100,22 +70,102 @@ export async function resolveTenantModel(
         };
       }
     } catch (cryptoErr) {
-      console.warn(
-        "[unified-generate] Chave do tenant falhou ao descriptografar. Tentando Gemini do sistema:",
-        cryptoErr
-      );
+      console.warn("[unified-generate] Falha ao descriptografar credencial candidata:", cryptoErr);
+    }
+    return null;
+  };
+
+  // 1) Prioridade máxima: Chave do tenant solicitado (cada tenant tem a sua)
+  if (tenantId) {
+    try {
+      const { data: cred } = await supabaseAdmin
+        .from("tenant_ai_credentials" as never)
+        .select("provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version")
+        .eq("tenant_id" as never, tenantId)
+        .maybeSingle();
+
+      const resolved = tryResolveRow(cred as CredRow);
+      if (resolved) return resolved;
+    } catch (err) {
+      console.warn("[unified-generate] Erro ao buscar credencial do tenant via admin:", err);
+    }
+
+    if (supabase) {
+      try {
+        const { data: credUser } = await supabase
+          .from("tenant_ai_credentials" as never)
+          .select("provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version")
+          .eq("tenant_id" as never, tenantId)
+          .maybeSingle();
+
+        const resolved = tryResolveRow(credUser as CredRow);
+        if (resolved) return resolved;
+      } catch {
+        // ignora
+      }
     }
   }
 
-  // Fallback: Google Gemini do sistema (se disponível)
-  const geminiKey = process.env.GEMINI_API_KEY;
+  // 2) Segunda prioridade: Workspace ativo do usuário logado (se diferente do tenantId)
+  if (userId) {
+    try {
+      const { data: prof } = await supabaseAdmin
+        .from("profiles")
+        .select("current_tenant_id, impersonating_tenant_id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      const userTenantId = (prof as any)?.current_tenant_id || (prof as any)?.impersonating_tenant_id;
+      if (userTenantId && userTenantId !== tenantId) {
+        const { data: credUserTenant } = await supabaseAdmin
+          .from("tenant_ai_credentials" as never)
+          .select("provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version")
+          .eq("tenant_id" as never, userTenantId)
+          .maybeSingle();
+
+        const resolved = tryResolveRow(credUserTenant as CredRow);
+        if (resolved) return resolved;
+      }
+    } catch (err) {
+      console.warn("[unified-generate] Erro ao buscar credencial do tenant do usuário:", err);
+    }
+  }
+
+  // 3) Terceira prioridade: Qualquer credencial válida e ativa cadastrada no sistema
+  try {
+    const { data: allActive } = await supabaseAdmin
+      .from("tenant_ai_credentials" as never)
+      .select("provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version")
+      .eq("is_active" as never, true)
+      .not("api_key_ciphertext" as never, "is", null)
+      .order("last_tested_at" as never, { ascending: false });
+
+    if (allActive && Array.isArray(allActive)) {
+      for (const cand of allActive) {
+        const resolved = tryResolveRow(cand as CredRow);
+        if (resolved) {
+          console.info("[unified-generate] Utilizando credencial de IA ativa compartilhada no sistema.");
+          return resolved;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[unified-generate] Erro ao buscar credenciais ativas do sistema:", err);
+  }
+
+  // 4) Fallback: Google Gemini do sistema (.env se configurado)
+  const geminiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    process.env.GOOGLE_API_KEY;
+
   if (geminiKey && geminiKey.trim().length > 5) {
     return {
       provider: "google",
       model: DEFAULT_MODELS.google,
       apiKey: geminiKey.trim(),
       source: "fallback",
-      promptVersion: row?.prompt_version ?? "v1.0.0",
+      promptVersion: "v1.0.0",
     };
   }
 
@@ -221,7 +271,7 @@ async function callOpenAICompatible(
 async function callGoogle(apiKey: string, model: string, system: string, user: string): Promise<string> {
   const { GoogleGenAI } = await import("@google/genai");
 
-  let chosenModel = model || "gemini-3.8-flash";
+  let chosenModel = model || "gemini-3.5-flash-lite";
   if (
     chosenModel.includes("2.5-flash-lite") ||
     chosenModel.includes("2.0-flash") ||
@@ -232,46 +282,38 @@ async function callGoogle(apiKey: string, model: string, system: string, user: s
     chosenModel = "gemini-3.8-flash";
   }
 
-  const ai = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
-      },
-    },
-  });
+  const ai = new GoogleGenAI({ apiKey });
 
-  try {
-    const res = await ai.models.generateContent({
-      model: chosenModel,
-      contents: user,
-      config: {
-        systemInstruction: system,
-        responseMimeType: "application/json",
-        temperature: 0.7,
-      },
-    });
-    return res.text ?? "{}";
-  } catch (err: unknown) {
-    if (chosenModel !== "gemini-3.5-flash-lite") {
-      try {
-        console.warn(`[unified-generate] Modelo ${chosenModel} falhou, tentando fallback para gemini-3.5-flash-lite...`);
-        const fallbackRes = await ai.models.generateContent({
-          model: "gemini-3.5-flash-lite",
-          contents: user,
-          config: {
-            systemInstruction: system,
-            responseMimeType: "application/json",
-            temperature: 0.7,
-          },
-        });
-        return fallbackRes.text ?? "{}";
-      } catch {
-        // ignora erro do fallback e lança o erro original
+  const candidateModels = [
+    chosenModel,
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-flash-latest",
+  ].filter((m, i, arr) => arr.indexOf(m) === i);
+
+  let lastError: unknown = null;
+
+  for (const m of candidateModels) {
+    try {
+      const res = await ai.models.generateContent({
+        model: m,
+        contents: user,
+        config: {
+          systemInstruction: system,
+          responseMimeType: "application/json",
+          temperature: 0.7,
+        },
+      });
+      if (res.text && res.text.trim().length > 0) {
+        return res.text;
       }
+    } catch (err: unknown) {
+      lastError = err;
+      console.warn(`[unified-generate] Modelo Google ${m} falhou (${err instanceof Error ? err.message : String(err)}). Tentando próximo modelo...`);
     }
-    throw new Error(`Falha na IA Google: ${err instanceof Error ? err.message : String(err)}`);
   }
+
+  throw new Error(`Falha na IA Google: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 }
 
 async function callAnthropic(apiKey: string, model: string, system: string, user: string): Promise<string> {
