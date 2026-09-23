@@ -1,10 +1,11 @@
 // Camada server-only — resolve o provedor + modelo + chave da IA para um tenant.
-// Se o tenant não tiver credencial ativa, faz fallback para Lovable AI.
+// Se o tenant não tiver credencial ativa, utiliza o Gemini do sistema como fallback.
 // NUNCA importar deste arquivo a partir de código de browser.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProviderId } from "./providers-catalog";
 import { DEFAULT_MODELS } from "./providers-catalog";
+import { getServerEnv } from "@/lib/server-env";
 
 export type ResolvedModel = {
   provider: ProviderId;
@@ -88,7 +89,7 @@ export async function resolveTenantModel(
   }
 
   // Fallback: Google Gemini
-  const geminiKey = process.env.GEMINI_API_KEY;
+  const geminiKey = getServerEnv("GEMINI_API_KEY");
   if (!geminiKey) throw new Error("GEMINI_API_KEY ausente no servidor");
   return {
     provider: "google",

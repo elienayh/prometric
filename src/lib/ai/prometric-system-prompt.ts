@@ -2,7 +2,7 @@
 // PROMETRIC® SYSTEM PROMPT MESTRE — v1.0.0
 // ─────────────────────────────────────────────────────────────────────────────
 // Toda chamada de IA do ProMetric DEVE injetar este prompt como `system`,
-// independente do provedor (OpenAI, Gemini, Anthropic, xAI ou Lovable AI).
+// independente do provedor (OpenAI, Gemini, Anthropic ou xAI).
 // Versionado: cada `ai_generations.prompt_version` grava a versão usada para
 // auditoria e A/B test futuro.
 // ─────────────────────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@
 // Reuses PROMETRIC_AI_ENCRYPTION_KEY as the HMAC secret.
 
 import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { getServerEnv } from "@/lib/server-env";
 
 export const SHEET_VERSION = "v1";
 
@@ -15,10 +16,13 @@ export type SheetPayload = {
 
 function getKey(): Buffer {
   const raw =
-    process.env.PROMETRIC_AI_ENCRYPTION_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    "prometric-master-salt-default-key-v1";
+    getServerEnv("PROMETRIC_AI_ENCRYPTION_KEY") ||
+    getServerEnv("SUPABASE_SERVICE_ROLE_KEY");
+  if (!raw) {
+    throw new Error(
+      "Segredo de assinatura HMAC não configurado no servidor (PROMETRIC_AI_ENCRYPTION_KEY ou SUPABASE_SERVICE_ROLE_KEY ausente).",
+    );
+  }
   return createHash("sha256").update(raw).digest();
 }
 
