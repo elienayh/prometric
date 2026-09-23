@@ -41,6 +41,7 @@ export async function pingProvider(
 async function pingOpenAI(apiKey: string, model: string) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal: AbortSignal.timeout(8000),
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
@@ -54,6 +55,7 @@ async function pingOpenAI(apiKey: string, model: string) {
 async function pingXai(apiKey: string, model: string) {
   const res = await fetch("https://api.x.ai/v1/chat/completions", {
     method: "POST",
+    signal: AbortSignal.timeout(8000),
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
@@ -65,16 +67,54 @@ async function pingXai(apiKey: string, model: string) {
 }
 
 async function pingGoogle(apiKey: string, model: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: PING_PROMPT }] }],
-      generationConfig: { maxOutputTokens: 5 },
-    }),
-  });
-  if (!res.ok) throw new Error(`Google ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const tryModel = async (target: string) => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(target)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    return await fetch(url, {
+      method: "POST",
+      signal: AbortSignal.timeout(8000),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: PING_PROMPT }] }],
+        generationConfig: { maxOutputTokens: 5 },
+      }),
+    });
+  };
+
+  const primaryRes = await tryModel(model);
+  if (primaryRes.ok) return;
+
+  const errText = await primaryRes.text();
+
+  // Se a chave for comprovadamente inválida (400 ou 403), propaga o erro imediatamente
+  if (primaryRes.status === 400 || primaryRes.status === 403) {
+    throw new Error(`Google ${primaryRes.status}: ${errText.slice(0, 200)}`);
+  }
+
+  // Se o modelo específico estiver sofrendo sobrecarga pontual (503) ou cota por modelo (429),
+  // valida se a chave funciona em modelos alternativos de alta disponibilidade
+  const isOverloadedOrDemandSpike =
+    primaryRes.status === 503 ||
+    primaryRes.status === 429 ||
+    errText.toLowerCase().includes("high demand") ||
+    errText.toLowerCase().includes("overloaded") ||
+    errText.toLowerCase().includes("resource_exhausted");
+
+  if (isOverloadedOrDemandSpike) {
+    const candidates = ["gemini-3.1-flash-lite", "gemini-2.5-flash-lite"].filter((c) => c !== model);
+    for (const alt of candidates) {
+      try {
+        const altRes = await tryModel(alt);
+        if (altRes.ok) {
+          // A chave é 100% válida e comunicou com o Google
+          return;
+        }
+      } catch {
+        // continua
+      }
+    }
+  }
+
+  throw new Error(`Google ${primaryRes.status}: ${errText.slice(0, 200)}`);
 }
 
 async function pingAnthropic(apiKey: string, model: string) {

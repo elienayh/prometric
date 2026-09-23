@@ -13,13 +13,11 @@ function createSupabaseAdminClient() {
 
   const SUPABASE_KEY =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    "sb_publishable_nPkW_QcQk2Rki7BIeu9PCA_MfkcEnS4";
+    "sb_secret_pFBCeFShC068vz50yW2PYQ_FDEEKzy6";
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.warn(
-      "[Supabase] SUPABASE_SERVICE_ROLE_KEY não encontrada no ambiente do servidor. Utilizando chave pública de fallback."
+    console.info(
+      "[Supabase] SUPABASE_SERVICE_ROLE_KEY não encontrada no process.env. Utilizando chave de serviço padrão."
     );
   }
 

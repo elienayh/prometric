@@ -4,7 +4,7 @@
 export type ProviderId = "openai" | "google" | "anthropic" | "xai";
 
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
-  google: "gemini-3.8-flash",
+  google: "gemini-3.1-flash-lite",
   openai: "gpt-5-mini",
   anthropic: "claude-3-5-haiku-20241022",
   xai: "grok-3-mini",
@@ -12,8 +12,9 @@ export const DEFAULT_MODELS: Record<ProviderId, string> = {
 
 export const HOMOLOGATED_MODELS: Record<ProviderId, { id: string; label: string }[]> = {
   google: [
+    { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite (estável e rápido)" },
     { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (recomendado)" },
-    { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (econômico e rápido)" },
+    { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (econômico)" },
   ],
   openai: [
     { id: "gpt-5", label: "GPT-5 (premium)" },
