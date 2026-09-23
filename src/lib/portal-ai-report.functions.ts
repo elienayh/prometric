@@ -22,7 +22,6 @@ export const generatePortalReport = createServerFn({ method: "POST" })
         .from("students")
         .select("id,tenant_id,full_name,sex,birth_date,portal_enabled,is_active")
         .or(`portal_token.eq.${data.token},portal_slug.eq.${data.token}`)
-        .order("is_active", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -47,13 +46,9 @@ export const generatePortalReport = createServerFn({ method: "POST" })
     if (!s) {
       const { supabase } = await import("@/integrations/supabase/client");
       const { data: portalRes } = await supabase.rpc("portal_get_data" as never, { _token: data.token } as never);
-      const p = portalRes as {
-        student?: { id?: string; full_name: string; sex: string; birth_date: string; tenant_id?: string };
-        evaluations?: unknown[];
-      } | null;
+      const p = portalRes as { student?: { full_name: string; sex: string; birth_date: string; tenant_id?: string }; evaluations?: unknown[] } | null;
       if (p?.student) {
         s = {
-          id: p.student.id,
           full_name: p.student.full_name,
           sex: p.student.sex,
           birth_date: p.student.birth_date,
@@ -63,47 +58,13 @@ export const generatePortalReport = createServerFn({ method: "POST" })
       }
     }
 
-    if (s && !s.tenant_id) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        if (s.id) {
-          const { data: stById } = await supabaseAdmin
-            .from("students")
-            .select("tenant_id")
-            .eq("id", s.id)
-            .maybeSingle();
-          if (stById?.tenant_id) {
-            s.tenant_id = stById.tenant_id;
-          }
-        }
-        if (!s.tenant_id) {
-          const { data: stByToken } = await supabaseAdmin
-            .from("students")
-            .select("tenant_id")
-            .or(`portal_token.eq.${data.token},portal_slug.eq.${data.token}`)
-            .order("is_active", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (stByToken?.tenant_id) {
-            s.tenant_id = stByToken.tenant_id;
-          }
-        }
-      } catch (err) {
-        console.warn("[portal-ai-report] Erro ao recuperar tenant_id do aluno:", err);
-      }
-    }
-
     if (!s) throw new Error("Portal não encontrado");
     if (!evals || evals.length === 0) throw new Error("Nenhuma avaliação disponível");
 
-    console.info(
-      `[portal-ai-report] Solicitando relatório de IA para o aluno "${s.full_name}" (tenant_id: "${s.tenant_id}", ${evals.length} avaliações)`
-    );
-
     // 3) Resolução do modelo (chave do tenant ou fallback para Gemini)
     const { resolveTenantModel, generateJSON } = await import("@/lib/ai/unified-generate.server");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const resolved = await resolveTenantModel(supabaseAdmin as never, s.tenant_id);
+    const { supabase } = await import("@/integrations/supabase/client");
+    const resolved = await resolveTenantModel(supabase as never, s.tenant_id);
 
     const userPrompt = `Gere um relatório evolutivo completo para a FAMÍLIA do aluno em JSON ESTRITO (sem markdown):
 {

@@ -419,10 +419,22 @@ export async function downloadStudentEvolutionPDF(
   doc.setGState(new (doc as any).GState({ opacity: 0.12 }));
   doc.roundedRect(rightHeroX, chipY, 46, 8, 1.5, 1.5, "F");
   doc.setGState(new (doc as any).GState({ opacity: 1 }));
-  doc.setFont("helvetica", "bold").setFontSize(9);
+
+  // Draw clean vector triangle for up/down indicator (guarantees perfect rendering without font encoding bugs)
+  doc.setFillColor(...chipColor);
+  const triCx = rightHeroX + 5.5;
+  const triCy = chipY + 4;
+  if (delta >= 0) {
+    // Up arrow triangle (▲)
+    doc.triangle(triCx - 1.8, triCy + 1.5, triCx + 1.8, triCy + 1.5, triCx, triCy - 1.8, "F");
+  } else {
+    // Down arrow triangle (▼)
+    doc.triangle(triCx - 1.8, triCy - 1.8, triCx + 1.8, triCy - 1.8, triCx, triCy + 1.5, "F");
+  }
+
+  doc.setFont("helvetica", "bold").setFontSize(8.5);
   doc.setTextColor(...chipColor);
-  const arrowEv = delta >= 0 ? "▲" : "▼";
-  doc.text(`${arrowEv} ${delta >= 0 ? "+" : ""}${delta} pts evolução`, rightHeroX + 23, chipY + 5.5, { align: "center" });
+  doc.text(`${delta >= 0 ? "+" : ""}${delta} pts evolução`, rightHeroX + 9, chipY + 5.3);
 
   // Interpretative sentence below hero
   y += heroH + 3;
@@ -530,16 +542,30 @@ export async function downloadStudentEvolutionPDF(
   // 3. Inicial × Atual
   leftY = sectionTitle(leftX, leftY, "Inicial × Atual");
   dimDeltas.forEach((d) => {
-    const sign = d.delta > 0 ? "+" : d.delta < 0 ? "" : "±";
-    const arrow = d.delta > 0 ? "▲" : d.delta < 0 ? "▼" : "=";
+    const sign = d.delta > 0 ? "+" : d.delta < 0 ? "" : "";
     const tone: [number, number, number] = d.delta > 0 ? [34, 197, 94] : d.delta < 0 ? [239, 68, 68] : [120, 120, 120];
     doc.setFont("helvetica", "normal").setFontSize(7.5);
     doc.setTextColor(60);
     doc.text(d.dimension, leftX, leftY + 3);
-    doc.text(`${d.first} → ${d.last}`, leftX + colWidth - 18, leftY + 3, { align: "right" });
+    doc.text(`${d.first} -> ${d.last}`, leftX + colWidth - 18, leftY + 3, { align: "right" });
+
+    // Vector triangle indicator for delta
+    doc.setFillColor(...tone);
+    const triX = leftX + colWidth - 14;
+    const triY = leftY + 2.2;
+    if (d.delta > 0) {
+      doc.triangle(triX - 1.2, triY + 1, triX + 1.2, triY + 1, triX, triY - 1.2, "F");
+    } else if (d.delta < 0) {
+      doc.triangle(triX - 1.2, triY - 1.2, triX + 1.2, triY - 1.2, triX, triY + 1, "F");
+    } else {
+      doc.setFont("helvetica", "bold").setFontSize(7.5);
+      doc.setTextColor(...tone);
+      doc.text("=", triX, leftY + 3, { align: "center" });
+    }
+
     doc.setFont("helvetica", "bold").setFontSize(7.5);
     doc.setTextColor(...tone);
-    doc.text(`${arrow} ${sign}${d.delta}`, leftX + colWidth - 2, leftY + 3, { align: "right" });
+    doc.text(`${sign}${d.delta}`, leftX + colWidth - 2, leftY + 3, { align: "right" });
     leftY += 4;
   });
 

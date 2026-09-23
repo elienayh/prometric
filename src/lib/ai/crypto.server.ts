@@ -6,36 +6,13 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 
 const ALGO = "aes-256-gcm";
 
-// Chave canônica estável compartilhada entre build, preview e produção
-const CANONICAL_STATIC_KEY = "sb_publishable_nPkW_QcQk2Rki7BIeu9PCA_MfkcEnS4";
-
-// Garante que PROMETRIC_AI_ENCRYPTION_KEY fique definida de forma estável no runtime
-if (!process.env.PROMETRIC_AI_ENCRYPTION_KEY) {
-  process.env.PROMETRIC_AI_ENCRYPTION_KEY =
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    CANONICAL_STATIC_KEY;
-}
-
-// Obtém a lista de possíveis chaves candidatas para garantir decodificação uniforme
-// independentemente de qual variável de ambiente estava ativa quando a chave foi salva.
-function getCandidateKeys(): string[] {
-  const list = [
-    process.env.PROMETRIC_AI_ENCRYPTION_KEY,
-    CANONICAL_STATIC_KEY,
-    process.env.SUPABASE_PUBLISHABLE_KEY,
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-    "prometric-master-salt-default-key-v1",
-  ].filter(Boolean) as string[];
-
-  // Remove duplicatas mantendo a ordem de prioridade
-  return Array.from(new Set(list));
-}
-
 function getMasterKey(): Buffer {
-  const candidates = getCandidateKeys();
-  const raw = candidates[0] || CANONICAL_STATIC_KEY;
+  const raw =
+    process.env.PROMETRIC_AI_ENCRYPTION_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    "prometric-master-salt-default-key-v1";
+  // Deriva 32 bytes determinísticos a partir do secret (qualquer comprimento).
   return createHash("sha256").update(raw).digest();
 }
 
@@ -62,30 +39,11 @@ export function encryptApiKey(plain: string): EncryptedPayload {
 }
 
 export function decryptApiKey(payload: { ciphertext: string; iv: string; tag: string }): string {
-  if (!payload?.ciphertext || !payload?.iv || !payload?.tag) {
-    throw new Error("Payload criptográfico incompleto (ciphertext, iv ou tag ausente)");
-  }
-
-  const candidates = getCandidateKeys();
-  let lastError: unknown = null;
-
-  for (const raw of candidates) {
-    try {
-      const key = createHash("sha256").update(raw).digest();
-      const iv = Buffer.from(payload.iv, "base64");
-      const tag = Buffer.from(payload.tag, "base64");
-      const decipher = createDecipheriv(ALGO, key, iv);
-      decipher.setAuthTag(tag);
-      const dec = Buffer.concat([decipher.update(Buffer.from(payload.ciphertext, "base64")), decipher.final()]);
-      const res = dec.toString("utf8");
-      if (res && res.length > 0) {
-        return res;
-      }
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  throw new Error(`Falha ao descriptografar chave de API: ${lastError instanceof Error ? lastError.message : "Chave inválida ou corrompida"}`);
+  const key = getMasterKey();
+  const iv = Buffer.from(payload.iv, "base64");
+  const tag = Buffer.from(payload.tag, "base64");
+  const decipher = createDecipheriv(ALGO, key, iv);
+  decipher.setAuthTag(tag);
+  const dec = Buffer.concat([decipher.update(Buffer.from(payload.ciphertext, "base64")), decipher.final()]);
+  return dec.toString("utf8");
 }
-

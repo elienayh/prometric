@@ -15,15 +15,10 @@ export type ResolvedModel = {
 };
 
 export async function resolveTenantModel(
-  supabase?: SupabaseClient,
-  tenantId?: string | null,
-  userId?: string | null,
+  supabase: SupabaseClient,
+  tenantId: string,
 ): Promise<ResolvedModel> {
-  const { decryptApiKey } = await import("./crypto.server");
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-  type CredRow = {
-    tenant_id?: string;
+  let row: {
     provider: ProviderId;
     model: string;
     is_active: boolean;
@@ -31,231 +26,62 @@ export async function resolveTenantModel(
     api_key_iv: string | null;
     api_key_tag: string | null;
     prompt_version: string | null;
-  };
+  } | null = null;
 
-  const normalizeGoogleModel = (model: string): string => {
-    let chosen = model || "gemini-3.1-flash-lite";
-    if (
-      chosen.includes("lite") ||
-      chosen.includes("3.5") ||
-      chosen.includes("2.5") ||
-      chosen.includes("2.0") ||
-      chosen.includes("1.5")
-    ) {
-      chosen = "gemini-3.1-flash-lite";
-    } else if (chosen.includes("pro")) {
-      chosen = "gemini-3.1-pro-preview";
-    } else if (chosen.includes("3.8")) {
-      chosen = "gemini-3.8-flash";
-    } else {
-      chosen = "gemini-3.1-flash-lite";
-    }
-    return chosen;
-  };
-
-  console.info(
-    `[resolveTenantModel] Iniciando resolução de IA: tenantId="${tenantId ?? "(nenhum)"}", userId="${userId ?? "(nenhum)"}"`
-  );
-
-  // 1) Prioridade máxima: Chave do tenant solicitado (cada tenant tem a sua)
-  if (tenantId) {
-    let cred: CredRow | null = null;
-    try {
-      const { data } = await supabaseAdmin
-        .from("tenant_ai_credentials" as never)
-        .select("tenant_id, provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version")
-        .eq("tenant_id" as never, tenantId)
-        .maybeSingle();
-      cred = data as CredRow | null;
-    } catch (err) {
-      console.warn(`[resolveTenantModel] Erro ao buscar credencial do tenant "${tenantId}" via admin:`, err);
-    }
-
-    if (!cred && supabase) {
-      try {
-        const { data } = await supabase
-          .from("tenant_ai_credentials" as never)
-          .select("tenant_id, provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version")
-          .eq("tenant_id" as never, tenantId)
-          .maybeSingle();
-        cred = data as CredRow | null;
-      } catch (err) {
-        console.warn(`[resolveTenantModel] Erro ao buscar credencial do tenant "${tenantId}" via supabase client:`, err);
-      }
-    }
-
-    if (cred) {
-      console.info(
-        `[resolveTenantModel] Linha encontrada em tenant_ai_credentials para tenantId="${tenantId}": provider="${cred.provider}", model="${cred.model}", is_active=${cred.is_active}, has_ciphertext=${Boolean(cred.api_key_ciphertext)}`
-      );
-
-      if (!cred.is_active) {
-        console.warn(`[resolveTenantModel] A chave de IA do tenant "${tenantId}" está desativada.`);
-        throw new Error(
-          "A chave de IA cadastrada para este espaço está desativada. Acesse Configurações > Inteligência Artificial para ativá-la."
-        );
-      }
-
-      if (!cred.api_key_ciphertext || !cred.api_key_iv || !cred.api_key_tag) {
-        console.warn(`[resolveTenantModel] A credencial de IA do tenant "${tenantId}" está incompleta.`);
-        throw new Error(
-          "A credencial de IA deste espaço está com campos incompletos no banco de dados. Acesse Configurações > Inteligência Artificial e recadastre a chave."
-        );
-      }
-
-      try {
-        const apiKey = decryptApiKey({
-          ciphertext: cred.api_key_ciphertext,
-          iv: cred.api_key_iv,
-          tag: cred.api_key_tag,
-        });
-
-        if (!apiKey || apiKey.trim().length < 5) {
-          throw new Error("Chave de API descriptografada vazia ou em formato inválido");
-        }
-
-        const chosenModel = cred.provider === "google" ? normalizeGoogleModel(cred.model) : cred.model;
-
-        console.info(
-          `[resolveTenantModel] Descriptografia concluída com SUCESSO. Fonte: "tenant" (${tenantId}), provider: "${cred.provider}", model: "${chosenModel}".`
-        );
-
-        return {
-          provider: cred.provider,
-          model: chosenModel,
-          apiKey: apiKey.trim(),
-          source: "tenant",
-          promptVersion: cred.prompt_version ?? "v1.0.0",
-        };
-      } catch (decryptErr) {
-        const msg = decryptErr instanceof Error ? decryptErr.message : String(decryptErr);
-        console.error(`[resolveTenantModel] ERRO ao descriptografar chave do tenant "${tenantId}":`, msg);
-        throw new Error(
-          `Falha ao descriptografar a chave de IA cadastrada para este espaço (${msg}). Acesse Configurações > Inteligência Artificial para recadastrar sua chave.`
-        );
-      }
-    } else {
-      console.info(`[resolveTenantModel] Nenhuma linha encontrada em tenant_ai_credentials para tenantId="${tenantId}".`);
-    }
-  }
-
-  // 2) Segunda prioridade: Workspace ativo do usuário logado (se diferente do tenantId)
-  if (userId) {
-    try {
-      const { data: prof } = await supabaseAdmin
-        .from("profiles")
-        .select("current_tenant_id, impersonating_tenant_id")
-        .eq("id", userId)
-        .maybeSingle();
-
-      const userTenantId = (prof as any)?.current_tenant_id || (prof as any)?.impersonating_tenant_id;
-      if (userTenantId && userTenantId !== tenantId) {
-        console.info(`[resolveTenantModel] Verificando workspace do usuário logado: "${userTenantId}"`);
-        const { data: credUserTenant } = await supabaseAdmin
-          .from("tenant_ai_credentials" as never)
-          .select("tenant_id, provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version")
-          .eq("tenant_id" as never, userTenantId)
-          .maybeSingle();
-
-        if (credUserTenant) {
-          const c = credUserTenant as CredRow;
-          console.info(`[resolveTenantModel] Linha encontrada para userTenantId="${userTenantId}": is_active=${c.is_active}`);
-          if (!c.is_active) {
-            throw new Error(
-              "A chave de IA cadastrada no seu espaço de trabalho está inativa. Acesse Configurações > Inteligência Artificial para ativá-la."
-            );
-          }
-          try {
-            const apiKey = decryptApiKey({
-              ciphertext: c.api_key_ciphertext!,
-              iv: c.api_key_iv!,
-              tag: c.api_key_tag!,
-            });
-            const chosenModel = c.provider === "google" ? normalizeGoogleModel(c.model) : c.model;
-            console.info(`[resolveTenantModel] Descriptografia concluída com SUCESSO. Fonte: "user-tenant" ("${userTenantId}").`);
-            return {
-              provider: c.provider,
-              model: chosenModel,
-              apiKey: apiKey.trim(),
-              source: "user-tenant",
-              promptVersion: c.prompt_version ?? "v1.0.0",
-            };
-          } catch (decryptErr) {
-            const msg = decryptErr instanceof Error ? decryptErr.message : String(decryptErr);
-            console.error(`[resolveTenantModel] ERRO ao descriptografar chave do user-tenant "${userTenantId}":`, msg);
-            throw new Error(`Falha ao descriptografar a chave de IA do seu espaço de trabalho: ${msg}.`);
-          }
-        }
-      }
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("Falha ao descriptografar")) throw err;
-      console.warn("[resolveTenantModel] Erro ao buscar credencial do tenant do usuário:", err);
-    }
-  }
-
-  // 3) Terceira prioridade: Qualquer credencial válida e ativa cadastrada no sistema
   try {
-    const { data: allActive } = await supabaseAdmin
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: cred, error: credErr } = await supabaseAdmin
       .from("tenant_ai_credentials" as never)
-      .select("tenant_id, provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version")
-      .eq("is_active" as never, true)
-      .not("api_key_ciphertext" as never, "is", null)
-      .order("last_tested_at" as never, { ascending: false });
+      .select(
+        "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
+      )
+      .eq("tenant_id" as never, tenantId)
+      .maybeSingle();
 
-    if (allActive && Array.isArray(allActive)) {
-      for (const cand of allActive) {
-        const c = cand as CredRow;
-        try {
-          if (c.api_key_ciphertext && c.api_key_iv && c.api_key_tag) {
-            const apiKey = decryptApiKey({
-              ciphertext: c.api_key_ciphertext,
-              iv: c.api_key_iv,
-              tag: c.api_key_tag,
-            });
-            if (apiKey && apiKey.trim().length > 5) {
-              const chosenModel = c.provider === "google" ? normalizeGoogleModel(c.model) : c.model;
-              console.info(`[resolveTenantModel] Descriptografia concluída com SUCESSO. Fonte: "shared" (tenant: "${c.tenant_id}").`);
-              return {
-                provider: c.provider,
-                model: chosenModel,
-                apiKey: apiKey.trim(),
-                source: "shared",
-                promptVersion: c.prompt_version ?? "v1.0.0",
-              };
-            }
-          }
-        } catch (decryptErr) {
-          console.warn(`[resolveTenantModel] Ignorando credencial ativa compartilhada com falha de descriptografia (tenant "${c.tenant_id}"):`, decryptErr);
-        }
-      }
+    if (!credErr && cred) {
+      row = cred as typeof row;
     }
-  } catch (err) {
-    console.warn("[resolveTenantModel] Erro ao buscar credenciais ativas do sistema:", err);
+  } catch (dbErr) {
+    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant:", dbErr);
   }
 
-  // 4) Fallback: Google Gemini do sistema (.env se configurado)
-  const geminiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-    process.env.GOOGLE_API_KEY;
+  void supabase; // mantido para futura validação cruzada
 
-  if (geminiKey && geminiKey.trim().length > 5) {
-    console.info(`[resolveTenantModel] Utilizando chave GEMINI_API_KEY do sistema (.env). Fonte: "system-env".`);
-    return {
-      provider: "google",
-      model: DEFAULT_MODELS.google,
-      apiKey: geminiKey.trim(),
-      source: "fallback",
-      promptVersion: "v1.0.0",
-    };
+  if (row?.is_active && row.api_key_ciphertext && row.api_key_iv && row.api_key_tag) {
+    try {
+      const { decryptApiKey } = await import("./crypto.server");
+      const apiKey = decryptApiKey({
+        ciphertext: row.api_key_ciphertext,
+        iv: row.api_key_iv,
+        tag: row.api_key_tag,
+      });
+      if (apiKey && apiKey.trim().length > 5) {
+        return {
+          provider: row.provider,
+          model: row.model,
+          apiKey,
+          source: "tenant",
+          promptVersion: row.prompt_version ?? "v1.0.0",
+        };
+      }
+    } catch (cryptoErr) {
+      console.warn(
+        "[unified-generate] Chave do tenant falhou ao descriptografar. Utilizando Gemini do sistema:",
+        cryptoErr
+      );
+    }
   }
 
-  console.warn(
-    `[resolveTenantModel] Nenhuma chave de IA configurada para o espaço "${tenantId ?? "(nenhum)"}".`
-  );
-  throw new Error(
-    "Nenhuma chave de IA configurada para este espaço. Acesse Configurações > Inteligência Artificial para cadastrar sua chave da API do Google Gemini."
-  );
+  // Fallback: Google Gemini
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) throw new Error("GEMINI_API_KEY ausente no servidor");
+  return {
+    provider: "google",
+    model: DEFAULT_MODELS.google,
+    apiKey: geminiKey,
+    source: "fallback",
+    promptVersion: row?.prompt_version ?? "v1.0.0",
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -295,7 +121,7 @@ function safeParseJSON(raw: string): unknown {
   }
 }
 
-export async function callProvider(
+async function callProvider(
   provider: ProviderId,
   apiKey: string,
   model: string,
@@ -355,36 +181,47 @@ async function callOpenAICompatible(
 async function callGoogle(apiKey: string, model: string, system: string, user: string): Promise<string> {
   const { GoogleGenAI } = await import("@google/genai");
 
-  let chosenModel = model || "gemini-3.1-flash-lite";
+  let chosenModel = model || "gemini-3.8-flash";
   if (
-    chosenModel.includes("lite") ||
-    chosenModel.includes("3.5") ||
-    chosenModel.includes("2.5") ||
-    chosenModel.includes("2.0") ||
-    chosenModel.includes("1.5")
+    chosenModel.includes("2.5-flash-lite") ||
+    chosenModel.includes("2.0-flash") ||
+    chosenModel.includes("1.5-flash")
   ) {
-    chosenModel = "gemini-3.1-flash-lite";
-  } else if (chosenModel.includes("pro")) {
-    chosenModel = "gemini-3.1-pro-preview";
-  } else if (chosenModel.includes("3.8")) {
+    chosenModel = "gemini-3.5-flash-lite";
+  } else if (chosenModel.includes("2.5-flash") || chosenModel.includes("pro")) {
     chosenModel = "gemini-3.8-flash";
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
 
-  const candidateModels = [
-    chosenModel,
-    "gemini-3.1-flash-lite",
-    "gemini-3.8-flash",
-  ].filter((m, i, arr) => arr.indexOf(m) === i);
+  const isTransientOrQuotaError = (msg: string) => {
+    const lower = msg.toLowerCase();
+    return (
+      lower.includes("resource_exhausted") ||
+      lower.includes("quota") ||
+      lower.includes("429") ||
+      lower.includes("overloaded") ||
+      lower.includes("503") ||
+      lower.includes("temporarily unavailable")
+    );
+  };
 
-  let lastError: unknown = null;
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  for (const m of candidateModels) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+  // Função interna que tenta executar um modelo específico com até 2 tentativas
+  const tryGenerate = async (targetModel: string): Promise<string> => {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const res = await ai.models.generateContent({
-          model: m,
+          model: targetModel,
           contents: user,
           config: {
             systemInstruction: system,
@@ -392,33 +229,47 @@ async function callGoogle(apiKey: string, model: string, system: string, user: s
             temperature: 0.7,
           },
         });
-        if (res.text && res.text.trim().length > 0) {
-          return res.text;
-        }
+        return res.text ?? "{}";
       } catch (err: unknown) {
         lastError = err;
         const msg = err instanceof Error ? err.message : String(err);
-        const isTransient =
-          msg.includes("503") ||
-          msg.includes("429") ||
-          msg.includes("UNAVAILABLE") ||
-          msg.includes("high demand");
-        if (isTransient && attempt === 0) {
-          console.warn(
-            `[unified-generate] Modelo Google ${m} com pico de demanda temporário (503/429). Aguardando 1.5s para tentar novamente...`
-          );
-          await new Promise((r) => setTimeout(r, 1500));
+        if (attempt < 2 && isTransientOrQuotaError(msg)) {
+          console.warn(`[unified-generate] Tentativa ${attempt} no modelo ${targetModel} encontrou erro temporário/cota: ${msg}. Aguardando 1.5s antes de retentar...`);
+          await delay(1500 * attempt);
           continue;
         }
-        console.warn(
-          `[unified-generate] Modelo Google ${m} falhou (${msg}). Tentando próximo modelo...`
-        );
         break;
       }
     }
-  }
+    throw lastError;
+  };
 
-  throw new Error(`Falha na IA Google: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+  try {
+    return await tryGenerate(chosenModel);
+  } catch (primaryErr: unknown) {
+    const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+
+    // Se o modelo principal falhou (por exemplo por limite de quota por minuto ou sobrecarga do modelo)
+    // tenta fallback imediato para o modelo econômico e leve "gemini-3.5-flash-lite"
+    if (chosenModel !== "gemini-3.5-flash-lite") {
+      try {
+        console.warn(`[unified-generate] Modelo ${chosenModel} falhou (${primaryMsg}). Acionando fallback resiliente para gemini-3.5-flash-lite...`);
+        return await tryGenerate("gemini-3.5-flash-lite");
+      } catch (fallbackErr: unknown) {
+        console.warn("[unified-generate] Fallback gemini-3.5-flash-lite também falhou:", fallbackErr);
+      }
+    }
+
+    // Mensagens claras e orientadoras para o usuário
+    if (isTransientOrQuotaError(primaryMsg)) {
+      if (primaryMsg.toLowerCase().includes("overloaded")) {
+        throw new Error("A API do Gemini está temporariamente sobrecarregada nos servidores do Google. Por favor, aguarde alguns segundos e tente novamente.");
+      }
+      throw new Error("Limite de requisições por minuto da sua chave Gemini foi atingido. Aguarde cerca de 30 a 60 segundos antes de gerar um novo relatório.");
+    }
+
+    throw new Error(`Falha na IA Google: ${primaryMsg}`);
+  }
 }
 
 async function callAnthropic(apiKey: string, model: string, system: string, user: string): Promise<string> {

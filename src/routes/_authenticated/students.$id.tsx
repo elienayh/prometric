@@ -93,22 +93,27 @@ function StudentDetail() {
 
   const student = useQuery({
     queryKey: ["student", id],
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 3000),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("students")
         .select("id,full_name,sex,birth_date,phone,email,class_id,class:classes(name,school_id,school:schools(name))")
-        .eq("id", id).single();
+        .eq("id", id)
+        .maybeSingle();
       if (error) throw error;
       return data as unknown as {
         id: string; full_name: string; sex: "male" | "female"; birth_date: string;
         phone: string | null; email: string | null; class_id: string | null;
         class: { name: string; school_id: string | null; school: { name: string } | null } | null;
-      };
+      } | null;
     },
   });
 
   const evals = useQuery({
     queryKey: ["student-evals", id],
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 3000),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("evaluations")
@@ -306,7 +311,7 @@ function StudentDetail() {
               <RankingPanel last={current} classEvals={classmates.data ?? []} />
               <TimelineTab data={data} studentId={id} student={s!} tenantName={tenant?.display_name ?? tenant?.name ?? "ProMetric"} onOpenPortal={() => setTab("portal")} onView={(ev) => setViewEval(ev)} />
               <InsightsPanel data={clinicalEvals} last={current} prev={prev} classEvals={classmates.data ?? []} />
-              <AIReportSection studentId={id} tenantId={tenant?.id} />
+              <AIReportSection studentId={id} />
             </>
           ) : (
             <div className="rounded-2xl border border-dashed border-border bg-gradient-card p-10 text-center">
@@ -1883,7 +1888,7 @@ function QuickMeasureDialog({
 // ===========================================================================
 // AI REPORT — Análise holística do aluno via IA (ProMetric Model)
 // ===========================================================================
-function AIReportSection({ studentId, tenantId }: { studentId: string; tenantId?: string }) {
+function AIReportSection({ studentId }: { studentId: string }) {
   type Report = {
     resumo_geral: string;
     evolucao: string;
@@ -1907,7 +1912,7 @@ function AIReportSection({ studentId, tenantId }: { studentId: string; tenantId?
     setLoading(true);
     try {
       const { generateStudentReport } = await import("@/lib/ai-student-report.functions");
-      const r = await generateStudentReport({ data: { studentId, tenantId } }) as Report;
+      const r = await generateStudentReport({ data: { studentId } }) as Report;
       setReport(r);
       try { window.localStorage.setItem(storageKey, JSON.stringify(r)); } catch { /* noop */ }
       toast.success("Relatório gerado pela IA");
