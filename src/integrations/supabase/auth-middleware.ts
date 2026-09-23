@@ -11,9 +11,11 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
   async ({ next }) => {
     
     const SUPABASE_URL =
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL) ||
       getServerEnv('SUPABASE_URL') ||
       getServerEnv('VITE_SUPABASE_URL');
     const SUPABASE_PUBLISHABLE_KEY =
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY) ||
       getServerEnv('SUPABASE_PUBLISHABLE_KEY') ||
       getServerEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
 

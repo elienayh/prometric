@@ -54,6 +54,18 @@ export function getServerEnv(key: string): string | undefined {
     }
   }
 
+  // 4. Tenta do import.meta.env (Vite dev server / SSR)
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.env) {
+      const val = (import.meta.env as Record<string, unknown>)[key];
+      if (typeof val === "string" && val.trim().length > 0) {
+        return val.trim();
+      }
+    }
+  } catch {
+    // import.meta.env não disponível
+  }
+
   return undefined;
 }
 

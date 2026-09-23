@@ -7,6 +7,7 @@ import { getServerEnv } from '@/lib/server-env';
 
 function createSupabaseAdminClient() {
   const SUPABASE_URL =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL) ||
     getServerEnv('SUPABASE_URL') ||
     getServerEnv('VITE_SUPABASE_URL');
 
