@@ -54,7 +54,7 @@ Testes:
 - Resistência cardiorrespiratória (corrida 6min): ${ev.run_6min_m} m
 Classificações já calculadas pelo Modelo ProMetric® (fonte da verdade): ${JSON.stringify(ev.classifications)}`;
 
-    // Resolve provedor: tenant > Gemini fallback
+    // Resolve provedor: tenant > Lovable fallback
     const { resolveTenantModel, generateJSON } = await import("@/lib/ai/unified-generate.server");
     const resolved = await resolveTenantModel(supabase, (ev as { tenant_id: string }).tenant_id);
 

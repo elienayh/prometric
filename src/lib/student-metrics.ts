@@ -121,9 +121,6 @@ export const NUMERIC_EVAL_FIELDS = [
   "weight_kg",
   "height_cm",
   "waist_circumference_cm",
-  "waist_cm",
-  "hip_cm",
-  "wingspan_cm",
   "imc",
   "rce",
   "sit_and_reach_cm",
@@ -169,17 +166,12 @@ export function withConsolidatedView<T extends EvalLike>(
     }
 
     // 2. Snapshot dos valores numéricos medidos puramente nesta data
-    // Suporta tanto 'number' quanto strings numéricas vindas do PostgREST/PostgreSQL
     const recorded_values: Record<string, number | null> = {};
     for (const f of NUMERIC_EVAL_FIELDS) {
       const val = evRecord[f];
-      const parsed =
-        val !== null && val !== undefined && val !== "" && !isNaN(Number(val))
-          ? Number(val)
-          : null;
-      if (parsed !== null) {
-        recorded_values[f] = parsed;
-        accumulatedNums[f] = parsed;
+      if (typeof val === "number" && !isNaN(val)) {
+        recorded_values[f] = val;
+        accumulatedNums[f] = val;
       } else {
         recorded_values[f] = null;
       }

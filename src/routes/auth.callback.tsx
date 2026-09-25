@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { claimPendingInvitesForUser } from "@/lib/team-invitations.functions";
 
 const callbackSearchSchema = z
   .object({
@@ -102,8 +103,15 @@ function AuthCallbackPage() {
           setStatus("success");
         }
 
+        // Reivindica automaticamente convites pendentes caso o usuário tenha sido convidado
+        try {
+          await claimPendingInvitesForUser();
+        } catch (claimErr) {
+          console.warn("[AuthCallback] Verificação de convites ignorada:", claimErr);
+        }
+
         // 6. Redirecionar o usuário: se tiver cargo de admin vai para /admin, caso contrário para /dashboard
-        let destination = "/dashboard";
+        let destination = search.next || "/dashboard";
         try {
           if (activeUserId) {
             const { data: roles } = await supabase

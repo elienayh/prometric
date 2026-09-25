@@ -430,9 +430,6 @@ function StationMode({ scope, tenantId }: { scope: Scope; tenantId: string }) {
         setSaving((p) => ({ ...p, [sid]: "done" }));
         qc.invalidateQueries({ queryKey: ["qe-today-evals"] });
         qc.invalidateQueries({ queryKey: ["evaluations"] });
-        qc.invalidateQueries({ queryKey: ["class-stats"] });
-        qc.invalidateQueries({ queryKey: ["group-stats"] });
-        qc.invalidateQueries({ queryKey: ["evals-report"] });
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Erro ao salvar");
         setSaving((p) => { const n = { ...p }; delete n[sid]; return n; });
@@ -908,9 +905,6 @@ function SpreadsheetMode({ scope, tenantId }: { scope: Scope; tenantId: string }
         if (error) throw error;
         setSaving((p) => ({ ...p, [sid]: "done" }));
         qc.invalidateQueries({ queryKey: ["evaluations"] });
-        qc.invalidateQueries({ queryKey: ["class-stats"] });
-        qc.invalidateQueries({ queryKey: ["group-stats"] });
-        qc.invalidateQueries({ queryKey: ["evals-report"] });
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Erro ao salvar");
         setSaving((p) => { const n = { ...p }; delete n[sid]; return n; });

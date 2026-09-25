@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, Building2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { PrometricIcon } from "@/components/brand/prometric-logo";
+import { claimPendingInvitesForUser } from "@/lib/team-invitations.functions";
 
 type TenantType = "professor" | "school" | "academy" | "club" | "personal_trainer";
 
@@ -23,7 +24,43 @@ const typeOptions: { value: TenantType; label: string }[] = [
 export function OnboardingDialog() {
   const [name, setName] = useState("");
   const [type, setType] = useState<TenantType>("professor");
+  const [checkingInvites, setCheckingInvites] = useState(true);
+  const [claimedTenant, setClaimedTenant] = useState(false);
   const qc = useQueryClient();
+
+  // Ao abrir o diálogo, primeiro checa se há algum convite pendente para o e-mail deste usuário!
+  // Se houver, aceita automaticamente e vincula à organização convidada, sem criar novo tenant.
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkInvites() {
+      try {
+        const res = await claimPendingInvitesForUser();
+        if (res.claimedCount > 0) {
+          if (mounted) {
+            setClaimedTenant(true);
+            toast.success("Você foi vinculado à equipe da escola/organização que te convidou!");
+            await Promise.all([
+              qc.invalidateQueries({ queryKey: ["current-tenant"] }),
+              qc.invalidateQueries({ queryKey: ["my-memberships"] }),
+              qc.invalidateQueries({ queryKey: ["profile"] }),
+            ]);
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn("[OnboardingDialog] Falha ao verificar convites:", err);
+      } finally {
+        if (mounted) setCheckingInvites(false);
+      }
+    }
+
+    checkInvites();
+
+    return () => {
+      mounted = false;
+    };
+  }, [qc]);
 
   const create = useMutation({
     mutationFn: async () => {
@@ -45,6 +82,35 @@ export function OnboardingDialog() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Erro ao criar espaço"),
   });
 
+  if (checkingInvites) {
+    return (
+      <Dialog open>
+        <DialogContent className="sm:max-w-md text-center p-8" onPointerDownOutside={(e) => e.preventDefault()}>
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <DialogTitle className="mt-2 font-display text-lg">Verificando seus acessos...</DialogTitle>
+          <DialogDescription>
+            Buscando se você já possui convites de equipe para alguma escola ou organização.
+          </DialogDescription>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (claimedTenant) {
+    return (
+      <Dialog open>
+        <DialogContent className="sm:max-w-md text-center p-8" onPointerDownOutside={(e) => e.preventDefault()}>
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-500/10 text-emerald-500">
+            <CheckCircle2 className="h-6 w-6" />
+          </div>
+          <DialogTitle className="mt-3 font-display text-xl font-bold">Convite localizado!</DialogTitle>
+          <DialogDescription>
+            Você foi conectado à equipe que te convidou. Carregando seu ambiente de trabalho...
+          </DialogDescription>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open>

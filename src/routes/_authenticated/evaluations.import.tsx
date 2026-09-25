@@ -2,7 +2,7 @@
 //
 // Pipeline padrão: QR → resolve aluno → recorta ROIs → Tesseract.js (local).
 // IA do tenant só é chamada sob demanda (botão "Interpretar com IA") ou para
-// um campo individual com baixa confiança.
+// um campo individual com baixa confiança. Sem fallback Lovable.
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery } from "@tanstack/react-query";

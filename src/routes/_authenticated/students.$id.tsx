@@ -90,7 +90,6 @@ function trendIcon(diff: number | null, positive: boolean | null) {
 
 function StudentDetail() {
   const { id } = Route.useParams();
-  const qc = useQueryClient();
 
   const student = useQuery({
     queryKey: ["student", id],
@@ -336,12 +335,7 @@ function StudentDetail() {
           studentId={id}
           tenantId={tenant?.id ?? null}
           student={{ full_name: s.full_name, sex: s.sex, birth_date: s.birth_date }}
-          onSaved={() => {
-            evals.refetch();
-            qc.invalidateQueries({ queryKey: ["class-stats"] });
-            qc.invalidateQueries({ queryKey: ["group-stats"] });
-            qc.invalidateQueries({ queryKey: ["evals-report"] });
-          }}
+          onSaved={() => { evals.refetch(); }}
         />
       )}
 

@@ -18,8 +18,16 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { claimPendingInvitesForUser, acceptTeamInvite } from "@/lib/team-invitations.functions";
 
-const searchSchema = z.object({ mode: z.enum(["signin", "signup"]).optional() });
+const searchSchema = z
+  .object({
+    mode: z.enum(["signin", "signup"]).optional(),
+    email: z.string().optional(),
+    token: z.string().optional(),
+    inviteToken: z.string().optional(),
+  })
+  .passthrough();
 type AuthMode = "signin" | "signup";
 const accountTypes = [
   { value: "teacher", label: "Professor" },
@@ -58,9 +66,17 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
 
+  const search = Route.useSearch();
+
   useEffect(() => {
     setMode(initialMode);
   }, [initialMode]);
+
+  useEffect(() => {
+    if (search.email && !email) {
+      setEmail(search.email);
+    }
+  }, [search.email, email]);
 
   async function handleForgotPassword(e: React.FormEvent) {
     e.preventDefault();
@@ -108,6 +124,26 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
     try {
       const { data: u } = await supabase.auth.getUser();
       if (u.user) {
+        // 1. Se foi passado token explícito de convite na URL, aceita imediatamente
+        const explicitToken = search.token || search.inviteToken;
+        if (explicitToken) {
+          try {
+            await acceptTeamInvite({ data: { token: explicitToken } });
+          } catch (e) {
+            console.warn("[Auth] Erro ao aceitar convite por token:", e);
+          }
+        } else {
+          // 2. Reivindica automaticamente convites enviados para o e-mail deste usuário
+          try {
+            const claimRes = await claimPendingInvitesForUser();
+            if (claimRes.claimedCount > 0) {
+              toast.success("Você foi adicionado à equipe da organização que te convidou!");
+            }
+          } catch (e) {
+            console.warn("[Auth] Erro ao reivindicar convites:", e);
+          }
+        }
+
         const { data: roles } = await supabase
           .from("admin_roles")
           .select("role")

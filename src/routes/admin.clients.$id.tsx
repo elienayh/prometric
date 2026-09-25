@@ -15,10 +15,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Building2, Users, GraduationCap, ClipboardList, School as SchoolIcon,
-  LogIn, Pause, Play, Ban, Trash2, Save, Activity, Shield, FileText, HardDrive, Sparkles,
+  LogIn, Pause, Play, Ban, Trash2, Save, Activity, Shield, FileText, HardDrive,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AiTab } from "@/components/settings/ai-tab";
 
 export const Route = createFileRoute("/admin/clients/$id")({ component: ClientDetailPage });
 
@@ -280,9 +279,6 @@ function ClientDetailPage() {
           <TabsTrigger value="audit">Auditoria</TabsTrigger>
           <TabsTrigger value="finance">Financeiro</TabsTrigger>
           <TabsTrigger value="support">Suporte</TabsTrigger>
-          <TabsTrigger value="ai" className="gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-primary" /> Inteligência Artificial
-          </TabsTrigger>
         </TabsList>
 
         {/* DADOS GERAIS */}
@@ -447,11 +443,6 @@ function ClientDetailPage() {
               ))}
             </ul>
           </Card>
-        </TabsContent>
-
-        {/* INTELIGÊNCIA ARTIFICIAL */}
-        <TabsContent value="ai" className="space-y-4">
-          <AiTab tenantId={id} />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,5 +1,6 @@
 // Server function: receives a sheet token + image, verifies HMAC, resolves
-// student + tenant, calls the TENANT-configured AI (or system fallback) and returns parsed OCR fields.
+// student + tenant, calls the TENANT-configured AI (never Lovable AI fallback
+// unless explicitly chosen by the tenant) and returns parsed OCR fields.
 //
 // Reuses the existing prometric AI plumbing (tenant_ai_credentials, master
 // prompt, structured output via JSON). Never logs the raw image.

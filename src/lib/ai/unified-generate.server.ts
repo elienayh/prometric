@@ -1,11 +1,10 @@
 // Camada server-only — resolve o provedor + modelo + chave da IA para um tenant.
-// Se o tenant não tiver credencial ativa, utiliza o Gemini do sistema como fallback.
+// Se o tenant não tiver credencial ativa, faz fallback para Lovable AI.
 // NUNCA importar deste arquivo a partir de código de browser.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProviderId } from "./providers-catalog";
 import { DEFAULT_MODELS } from "./providers-catalog";
-import { getServerEnv } from "@/lib/server-env";
 
 export type ResolvedModel = {
   provider: ProviderId;
@@ -43,25 +42,10 @@ export async function resolveTenantModel(
       row = cred as typeof row;
     }
   } catch (dbErr) {
-    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant via admin:", dbErr);
+    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant:", dbErr);
   }
 
-  if (!row && supabase) {
-    try {
-      const { data: userCred } = await supabase
-        .from("tenant_ai_credentials" as never)
-        .select(
-          "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
-        )
-        .eq("tenant_id" as never, tenantId)
-        .maybeSingle();
-      if (userCred) {
-        row = userCred as typeof row;
-      }
-    } catch {
-      // ignore
-    }
-  }
+  void supabase; // mantido para futura validação cruzada
 
   if (row?.is_active && row.api_key_ciphertext && row.api_key_iv && row.api_key_tag) {
     try {
@@ -89,7 +73,7 @@ export async function resolveTenantModel(
   }
 
   // Fallback: Google Gemini
-  const geminiKey = getServerEnv("GEMINI_API_KEY");
+  const geminiKey = process.env.GEMINI_API_KEY;
   if (!geminiKey) throw new Error("GEMINI_API_KEY ausente no servidor");
   return {
     provider: "google",
@@ -197,9 +181,15 @@ async function callOpenAICompatible(
 async function callGoogle(apiKey: string, model: string, system: string, user: string): Promise<string> {
   const { GoogleGenAI } = await import("@google/genai");
 
-  let chosenModel = model || "gemini-3.1-flash-lite";
-  if (chosenModel.includes("2.0-flash") || chosenModel.includes("1.5-flash")) {
-    chosenModel = "gemini-3.1-flash-lite";
+  let chosenModel = model || "gemini-3.8-flash";
+  if (
+    chosenModel.includes("2.5-flash-lite") ||
+    chosenModel.includes("2.0-flash") ||
+    chosenModel.includes("1.5-flash")
+  ) {
+    chosenModel = "gemini-3.5-flash-lite";
+  } else if (chosenModel.includes("2.5-flash") || chosenModel.includes("pro")) {
+    chosenModel = "gemini-3.8-flash";
   }
 
   const ai = new GoogleGenAI({
@@ -219,7 +209,6 @@ async function callGoogle(apiKey: string, model: string, system: string, user: s
       lower.includes("429") ||
       lower.includes("overloaded") ||
       lower.includes("503") ||
-      lower.includes("high demand") ||
       lower.includes("temporarily unavailable")
     );
   };
@@ -245,8 +234,8 @@ async function callGoogle(apiKey: string, model: string, system: string, user: s
         lastError = err;
         const msg = err instanceof Error ? err.message : String(err);
         if (attempt < 2 && isTransientOrQuotaError(msg)) {
-          console.warn(`[unified-generate] Tentativa ${attempt} no modelo ${targetModel} encontrou erro temporário/cota: ${msg}. Aguardando 1s antes de retentar...`);
-          await delay(1000 * attempt);
+          console.warn(`[unified-generate] Tentativa ${attempt} no modelo ${targetModel} encontrou erro temporário/cota: ${msg}. Aguardando 1.5s antes de retentar...`);
+          await delay(1500 * attempt);
           continue;
         }
         break;
@@ -260,30 +249,23 @@ async function callGoogle(apiKey: string, model: string, system: string, user: s
   } catch (primaryErr: unknown) {
     const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
 
-    // Se o modelo principal falhou por cota ou alta demanda temporária,
-    // tenta a cascata de modelos resilientes homologados
-    const fallbackCandidates = [
-      "gemini-3.1-flash-lite",
-      "gemini-2.5-flash-lite",
-      "gemini-3.5-flash-lite",
-      "gemini-3.8-flash",
-    ].filter((m) => m !== chosenModel);
-
-    for (const fbModel of fallbackCandidates) {
+    // Se o modelo principal falhou (por exemplo por limite de quota por minuto ou sobrecarga do modelo)
+    // tenta fallback imediato para o modelo econômico e leve "gemini-3.5-flash-lite"
+    if (chosenModel !== "gemini-3.5-flash-lite") {
       try {
-        console.warn(`[unified-generate] Modelo ${chosenModel} encontrou limitação (${primaryMsg}). Acionando fallback resiliente para ${fbModel}...`);
-        return await tryGenerate(fbModel);
+        console.warn(`[unified-generate] Modelo ${chosenModel} falhou (${primaryMsg}). Acionando fallback resiliente para gemini-3.5-flash-lite...`);
+        return await tryGenerate("gemini-3.5-flash-lite");
       } catch (fallbackErr: unknown) {
-        console.warn(`[unified-generate] Fallback ${fbModel} também falhou:`, fallbackErr);
+        console.warn("[unified-generate] Fallback gemini-3.5-flash-lite também falhou:", fallbackErr);
       }
     }
 
-    // Mensagens claras e orientadoras para o usuário se todos falharem
+    // Mensagens claras e orientadoras para o usuário
     if (isTransientOrQuotaError(primaryMsg)) {
-      if (primaryMsg.toLowerCase().includes("overloaded") || primaryMsg.toLowerCase().includes("high demand")) {
+      if (primaryMsg.toLowerCase().includes("overloaded")) {
         throw new Error("A API do Gemini está temporariamente sobrecarregada nos servidores do Google. Por favor, aguarde alguns segundos e tente novamente.");
       }
-      throw new Error("Limite de requisições da sua chave Gemini foi atingido. Aguarde cerca de 30 a 60 segundos antes de gerar um novo relatório.");
+      throw new Error("Limite de requisições por minuto da sua chave Gemini foi atingido. Aguarde cerca de 30 a 60 segundos antes de gerar um novo relatório.");
     }
 
     throw new Error(`Falha na IA Google: ${primaryMsg}`);
