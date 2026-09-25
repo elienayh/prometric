@@ -41,6 +41,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCurrentTenant } from "@/hooks/use-tenant";
+import { useIsPlatformAdmin } from "@/hooks/use-admin";
+import { useImpersonation } from "@/hooks/use-impersonation";
 import { PageHeader, EmptyState } from "@/components/layout/page-header";
 import {
   createTeamInvite,
@@ -73,8 +75,9 @@ const ROLE_DESCRIPTION: Record<Role, string> = {
 
 function TeamPage() {
   const { tenantId, tenant, role: myRole } = useCurrentTenant();
+  const { isAdmin: isPlatformAdmin } = useIsPlatformAdmin();
+  const impersonation = useImpersonation();
   const qc = useQueryClient();
-  const isAdmin = myRole === "admin";
 
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [successInvite, setSuccessInvite] = useState<InviteResult | null>(null);
@@ -95,6 +98,12 @@ function TeamPage() {
       });
     },
   });
+
+  const isAdmin =
+    myRole === "admin" ||
+    !!teamQuery.data?.canAdmin ||
+    isPlatformAdmin ||
+    !!impersonation;
 
   // Mutação para revogar convite
   const revokeMutation = useMutation({

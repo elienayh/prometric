@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const InviteInput = z.object({
   tenantId: z.string().uuid(),
@@ -25,14 +24,15 @@ export const createTeamInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => InviteInput.parse(d))
   .handler(async ({ data, context }): Promise<InviteResult> => {
-    const { supabase, userId } = context;
+    const { userId } = context;
     const { tenantId, fullName, email, phone, role, origin } = data;
     const cleanEmail = email.toLowerCase().trim();
 
-    // 1. Validar permissão do usuário que está convidando (deve ser admin do tenant)
-    const { data: canAdmin } = await supabase.rpc("is_tenant_admin", { _tenant: tenantId });
-    const { data: canWrite } = await supabase.rpc("can_write_tenant", { _tenant: tenantId });
-    if (!canAdmin && !canWrite) {
+    const { supabaseAdmin, checkTenantAdminPermission } = await import("./team-invitations.server");
+
+    // 1. Validar permissão administrativa
+    const canAdmin = await checkTenantAdminPermission(userId, tenantId);
+    if (!canAdmin) {
       throw new Error("Você não tem permissão de administrador para convidar membros nesta escola/organização.");
     }
 
@@ -200,6 +200,7 @@ export const getInviteDetails = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ token: z.string().min(8) }).parse(d))
   .handler(async ({ data }): Promise<InviteDetails> => {
     const { token } = data;
+    const { supabaseAdmin } = await import("./team-invitations.server");
 
     const { data: inv, error: invErr } = await supabaseAdmin
       .from("tenant_invitations")
@@ -248,6 +249,7 @@ export const acceptTeamInvite = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { userId } = context;
     const { token } = data;
+    const { supabaseAdmin } = await import("./team-invitations.server");
 
     // 1. Buscar convite no banco com bypass de RLS
     const { data: inv, error: invErr } = await supabaseAdmin
@@ -351,6 +353,7 @@ export const claimPendingInvitesForUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { userId } = context;
+    const { supabaseAdmin } = await import("./team-invitations.server");
 
     // Buscar perfil do usuário para saber o e-mail cadastrado
     const { data: profile } = await supabaseAdmin
@@ -362,7 +365,6 @@ export const claimPendingInvitesForUser = createServerFn({ method: "POST" })
     let cleanEmail = profile?.email?.toLowerCase().trim();
 
     if (!cleanEmail) {
-      // Buscar da auth
       const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
       cleanEmail = authUser.user?.email?.toLowerCase().trim();
     }
@@ -390,7 +392,6 @@ export const claimPendingInvitesForUser = createServerFn({ method: "POST" })
         continue;
       }
 
-      // Inserir em tenant_members
       await supabaseAdmin.from("tenant_members").upsert(
         {
           tenant_id: inv.tenant_id,
@@ -400,7 +401,6 @@ export const claimPendingInvitesForUser = createServerFn({ method: "POST" })
         { onConflict: "tenant_id,user_id" }
       );
 
-      // Marcar convite como aceito
       await supabaseAdmin
         .from("tenant_invitations")
         .update({
@@ -413,7 +413,6 @@ export const claimPendingInvitesForUser = createServerFn({ method: "POST" })
       claimedTenantIds.push(inv.tenant_id);
     }
 
-    // Se o usuário não tinha nenhum tenant ativo e reivindicou ao menos um, definir o primeiro como ativo
     if (claimedTenantIds.length > 0 && !profile?.current_tenant_id) {
       await supabaseAdmin
         .from("profiles")
@@ -455,17 +454,29 @@ export const listTeamMembersAndInvites = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ tenantId: z.string().uuid(), origin: z.string().url().optional() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { userId } = context;
     const { tenantId, origin } = data;
+    const { supabaseAdmin, checkTenantAdminPermission, ensureTenantAdminEnrolled } = await import("./team-invitations.server");
 
-    // Verificar se o usuário tem permissão de leitura neste tenant
-    const { data: canRead } = await supabase.rpc("is_tenant_member", { _tenant: tenantId });
-    const { data: canAdmin } = await supabase.rpc("is_tenant_admin", { _tenant: tenantId });
-    if (!canRead && !canAdmin) {
+    // 1. Auto-heal preventivo: assegura que o tenant possui seu administrador registrado
+    await ensureTenantAdminEnrolled(tenantId);
+
+    // 2. Verificar permissão de leitura / admin
+    const canAdmin = await checkTenantAdminPermission(userId, tenantId);
+
+    // Checa se o usuário é ao menos membro deste tenant
+    const { data: memberCheck } = await supabaseAdmin
+      .from("tenant_members")
+      .select("role")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!memberCheck && !canAdmin) {
       throw new Error("Acesso negado à equipe deste espaço.");
     }
 
-    // 1. Buscar membros de tenant_members
+    // 3. Buscar membros de tenant_members
     const { data: membersRaw, error: memErr } = await supabaseAdmin
       .from("tenant_members")
       .select("tenant_id, user_id, role, created_at, phone")
@@ -495,7 +506,7 @@ export const listTeamMembersAndInvites = createServerFn({ method: "POST" })
       };
     });
 
-    // 2. Buscar convites pendentes (se for admin)
+    // 4. Buscar convites pendentes (se tiver permissão de admin)
     let invites: PendingInviteInfo[] = [];
     if (canAdmin) {
       const baseUrl = origin ? origin.replace(/\/$/, "") : "https://prometric.app";
@@ -534,10 +545,11 @@ export const revokeTeamInvite = createServerFn({ method: "POST" })
     z.object({ tenantId: z.string().uuid(), inviteId: z.string().uuid() }).parse(d)
   )
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
+    const { userId } = context;
     const { tenantId, inviteId } = data;
+    const { supabaseAdmin, checkTenantAdminPermission } = await import("./team-invitations.server");
 
-    const { data: canAdmin } = await supabase.rpc("is_tenant_admin", { _tenant: tenantId });
+    const canAdmin = await checkTenantAdminPermission(userId, tenantId);
     if (!canAdmin) throw new Error("Apenas administradores podem revogar convites.");
 
     const { error } = await supabaseAdmin
@@ -556,15 +568,39 @@ export const removeTeamMember = createServerFn({ method: "POST" })
     z.object({ tenantId: z.string().uuid(), memberUserId: z.string().uuid() }).parse(d)
   )
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { userId } = context;
     const { tenantId, memberUserId } = data;
+    const { supabaseAdmin, checkTenantAdminPermission } = await import("./team-invitations.server");
 
     if (userId === memberUserId) {
       throw new Error("Você não pode remover a si mesmo da equipe.");
     }
 
-    const { data: canAdmin } = await supabase.rpc("is_tenant_admin", { _tenant: tenantId });
+    const canAdmin = await checkTenantAdminPermission(userId, tenantId);
     if (!canAdmin) throw new Error("Apenas administradores podem remover membros.");
+
+    // Regra: Todas as contas devem possuir ao menos um admin.
+    // Não permitir remover o único admin da organização!
+    const { data: memberToRemove } = await supabaseAdmin
+      .from("tenant_members")
+      .select("role")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", memberUserId)
+      .maybeSingle();
+
+    if (memberToRemove?.role === "admin") {
+      const { count: adminCount } = await supabaseAdmin
+        .from("tenant_members")
+        .select("user_id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("role", "admin");
+
+      if ((adminCount ?? 0) <= 1) {
+        throw new Error(
+          "A organização deve possuir ao menos um administrador. Promova outro membro a administrador antes de remover este."
+        );
+      }
+    }
 
     // Desvincular de tenant_members
     const { error } = await supabaseAdmin
@@ -595,13 +631,38 @@ export const updateTeamMemberRole = createServerFn({ method: "POST" })
         role: z.enum(["admin", "evaluator", "viewer"]),
       })
       .parse(d)
-    )
+  )
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
+    const { userId } = context;
     const { tenantId, memberUserId, role } = data;
+    const { supabaseAdmin, checkTenantAdminPermission } = await import("./team-invitations.server");
 
-    const { data: canAdmin } = await supabase.rpc("is_tenant_admin", { _tenant: tenantId });
+    const canAdmin = await checkTenantAdminPermission(userId, tenantId);
     if (!canAdmin) throw new Error("Apenas administradores podem alterar funções de membros.");
+
+    // Se estiver rebaixando um admin para outra função, garantir que não é o único admin
+    if (role !== "admin") {
+      const { data: currentMember } = await supabaseAdmin
+        .from("tenant_members")
+        .select("role")
+        .eq("tenant_id", tenantId)
+        .eq("user_id", memberUserId)
+        .maybeSingle();
+
+      if (currentMember?.role === "admin") {
+        const { count: adminCount } = await supabaseAdmin
+          .from("tenant_members")
+          .select("user_id", { count: "exact", head: true })
+          .eq("tenant_id", tenantId)
+          .eq("role", "admin");
+
+        if ((adminCount ?? 0) <= 1) {
+          throw new Error(
+            "Todas as contas devem possuir ao menos um administrador. Promova outro membro a administrador antes de rebaixar este."
+          );
+        }
+      }
+    }
 
     const { error } = await supabaseAdmin
       .from("tenant_members")
@@ -617,14 +678,35 @@ export const switchActiveTenant = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ tenantId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { userId } = context;
     const { tenantId } = data;
+    const { supabaseAdmin, ensureTenantAdminEnrolled } = await import("./team-invitations.server");
 
-    // Validar se o usuário é membro do tenant desejado ou super admin
-    const { data: isMember } = await supabase.rpc("is_tenant_member", { _tenant: tenantId });
-    const { data: isSuperAdmin } = await supabase.rpc("is_super_admin", { _user: userId });
+    // Auto-heal preventivo
+    await ensureTenantAdminEnrolled(tenantId);
 
-    if (!isMember && !isSuperAdmin) {
+    // Validar se o usuário é membro do tenant desejado, owner, super admin ou impersonando
+    const { data: isMember } = await supabaseAdmin
+      .from("tenant_members")
+      .select("role")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const { data: isSuperAdmin } = await supabaseAdmin
+      .from("admin_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "super_admin")
+      .maybeSingle();
+
+    const { data: tenant } = await supabaseAdmin
+      .from("tenants")
+      .select("owner_id")
+      .eq("id", tenantId)
+      .maybeSingle();
+
+    if (!isMember && !isSuperAdmin && tenant?.owner_id !== userId) {
       throw new Error("Você não pertence a esta organização/escola.");
     }
 
