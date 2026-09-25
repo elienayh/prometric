@@ -44,8 +44,10 @@ import {
   aggregateCohort,
   peerDimensions,
   topByIndicator,
+  fetchClassCohortStats,
   type CohortStudentLatest,
   type CohortFirst,
+  type StatsPayload,
 } from "@/lib/cohort-stats";
 import { CohortSummaryBanner } from "@/components/analytics/cohort-summary-banner";
 import { AggregateRadar } from "@/components/analytics/aggregate-radar";
@@ -80,24 +82,6 @@ type StudentRow = {
   sex: "male" | "female";
   birth_date: string;
   is_active: boolean;
-};
-
-type StatsPayload = {
-  header: {
-    id: string;
-    name: string;
-    grade: string | null;
-    school_year: number | null;
-    shift: string | null;
-    school_id: string | null;
-    school_name: string | null;
-    students_count: number;
-    evaluations_count: number;
-    last_evaluation_at: string | null;
-  };
-  students_latest: CohortStudentLatest[];
-  students_first: CohortFirst[];
-  school_latest: (Record<string, string> | null)[];
 };
 
 function ageFrom(birth: string) {
@@ -154,15 +138,11 @@ function ClassStudentsPage() {
     },
   });
 
-  // Cohort statistics & evaluations
+  // Cohort statistics & evaluations (alimentado de forma resiliente)
   const stats = useQuery({
     queryKey: ["class-stats", id],
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("class_stats", { _class: id });
-      if (error) throw error;
-      return data as unknown as StatsPayload | null;
-    },
+    staleTime: 60 * 1000,
+    queryFn: async () => fetchClassCohortStats(id),
   });
 
   const c = info.data;
