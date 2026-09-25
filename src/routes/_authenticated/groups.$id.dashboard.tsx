@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentTenant } from "@/hooks/use-tenant";
 import { aggregateCohort, peerDimensions, topByIndicator, type CohortStudentLatest, type CohortFirst } from "@/lib/cohort-stats";
 import { SummaryKPIs } from "@/components/analytics/summary-kpis";
+import { CohortSummaryBanner } from "@/components/analytics/cohort-summary-banner";
 import { DistributionChart } from "@/components/analytics/distribution-chart";
 import { AggregateRadar } from "@/components/analytics/aggregate-radar";
 import { RankingTable } from "@/components/analytics/ranking-table";
@@ -165,6 +166,24 @@ function GroupDashboard() {
         </div>
         <ActionBar actions={actions} />
       </div>
+
+      <CohortSummaryBanner
+        kind="grupo"
+        cohortName={brand.displayName === "ProMetric" ? header.name : brand.displayName}
+        subtitle={header.description ?? undefined}
+        totalMembers={header.students_count}
+        evaluatedCount={agg.evaluatedCount}
+        avgScore={agg.avgScore}
+        avgCategory={agg.avgCategory}
+        dimensions={agg.dimensions}
+        distribution={agg.distribution}
+        atRiskCount={agg.atRisk.length}
+        topGainsCount={agg.topGains.length}
+        lastEvaluationAt={header.last_evaluation_at}
+        onPrintSheets={handlePrintSheets}
+        onGeneratePDF={handlePDF}
+        quickEvalTo="/quick-eval"
+      />
 
       <SummaryKPIs
         items={[

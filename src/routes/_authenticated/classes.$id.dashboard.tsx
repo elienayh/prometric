@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentTenant } from "@/hooks/use-tenant";
 import { aggregateCohort, peerDimensions, topByIndicator, type CohortStudentLatest, type CohortFirst } from "@/lib/cohort-stats";
 import { SummaryKPIs } from "@/components/analytics/summary-kpis";
+import { CohortSummaryBanner } from "@/components/analytics/cohort-summary-banner";
 import { DistributionChart } from "@/components/analytics/distribution-chart";
 import { AggregateRadar } from "@/components/analytics/aggregate-radar";
 import { RankingTable } from "@/components/analytics/ranking-table";
@@ -131,6 +132,26 @@ function ClassDashboard() {
         </div>
         <ActionBar actions={actions} />
       </div>
+
+      <CohortSummaryBanner
+        kind="turma"
+        cohortName={header.name}
+        subtitle={[header.grade, header.school_name].filter(Boolean).join(" • ")}
+        totalMembers={header.students_count}
+        evaluatedCount={agg.evaluatedCount}
+        avgScore={agg.avgScore}
+        avgCategory={agg.avgCategory}
+        dimensions={agg.dimensions}
+        distribution={agg.distribution}
+        atRiskCount={agg.atRisk.length}
+        topGainsCount={agg.topGains.length}
+        lastEvaluationAt={header.last_evaluation_at}
+        onPrintSheets={handlePrintSheets}
+        onGeneratePDF={handlePDF}
+        onExportCSV={exportCSV}
+        quickEvalTo="/quick-eval"
+        quickEvalSearch={{ class: id }}
+      />
 
       <SummaryKPIs
         items={[
