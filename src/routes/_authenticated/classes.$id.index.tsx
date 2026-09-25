@@ -186,6 +186,7 @@ function ClassStudentsPage() {
         sitAndReachCm: latest?.sit_and_reach_cm ?? null,
         abdominalReps: latest?.abdominal_reps ?? null,
         medicineBallM: latest?.medicine_ball_m ?? null,
+        squareTestS: latest?.square_test_s ?? null,
         imc: latest?.imc ?? null,
       };
     });
@@ -573,19 +574,31 @@ function ClassStudentsPage() {
                             <div className="rounded bg-muted/30 p-1.5">
                               <span className="block text-[10px] text-muted-foreground">Potência</span>
                               <span className="font-semibold tabular-nums text-foreground">
-                                {s.jumpCm != null ? `${s.jumpCm} cm` : "—"}
+                                {s.jumpCm != null
+                                  ? `${s.jumpCm} cm`
+                                  : s.medicineBallM != null
+                                  ? `${s.medicineBallM} m`
+                                  : "—"}
                               </span>
                             </div>
                             <div className="rounded bg-muted/30 p-1.5">
                               <span className="block text-[10px] text-muted-foreground">Velocidade</span>
                               <span className="font-semibold tabular-nums text-foreground">
-                                {s.sprintS != null ? `${s.sprintS.toFixed(2)}s` : "—"}
+                                {s.sprintS != null
+                                  ? `${s.sprintS.toFixed(2)}s`
+                                  : s.squareTestS != null
+                                  ? `${s.squareTestS.toFixed(2)}s`
+                                  : "—"}
                               </span>
                             </div>
                             <div className="rounded bg-muted/30 p-1.5">
                               <span className="block text-[10px] text-muted-foreground">Resistência</span>
                               <span className="font-semibold tabular-nums text-foreground">
-                                {s.runM != null ? `${s.runM} m` : "—"}
+                                {s.runM != null
+                                  ? `${s.runM} m`
+                                  : s.abdominalReps != null
+                                  ? `${s.abdominalReps} reps`
+                                  : "—"}
                               </span>
                             </div>
                           </div>
@@ -713,13 +726,25 @@ function ClassStudentsPage() {
                               )}
                             </td>
                             <td className="px-3 py-3 text-center tabular-nums">
-                              {s.jumpCm != null ? `${s.jumpCm} cm` : "—"}
+                              {s.jumpCm != null
+                                ? `${s.jumpCm} cm`
+                                : s.medicineBallM != null
+                                ? `${s.medicineBallM} m`
+                                : "—"}
                             </td>
                             <td className="px-3 py-3 text-center tabular-nums">
-                              {s.sprintS != null ? `${s.sprintS.toFixed(2)} s` : "—"}
+                              {s.sprintS != null
+                                ? `${s.sprintS.toFixed(2)} s`
+                                : s.squareTestS != null
+                                ? `${s.squareTestS.toFixed(2)} s`
+                                : "—"}
                             </td>
                             <td className="px-3 py-3 text-center tabular-nums">
-                              {s.runM != null ? `${s.runM} m` : "—"}
+                              {s.runM != null
+                                ? `${s.runM} m`
+                                : s.abdominalReps != null
+                                ? `${s.abdominalReps} reps`
+                                : "—"}
                             </td>
                             <td className="px-3 py-3 text-center tabular-nums">
                               {s.sitAndReachCm != null ? `${s.sitAndReachCm} cm` : "—"}

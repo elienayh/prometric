@@ -1,5 +1,6 @@
 // Aggregations for class/group dashboards from raw RPC payloads.
 import { supabase } from "@/integrations/supabase/client";
+import { withConsolidatedView } from "./student-metrics";
 import type { Classifications, ClassificationKey, Zone } from "./proesp";
 import { ZONES } from "./proesp";
 import {
@@ -218,28 +219,12 @@ export function topByIndicator(
 }
 
 /**
- * Carrega estatísticas completas de uma turma com garantia de resiliência.
- * Tenta a RPC `class_stats` primeiro e, se a RPC retornar nulo, falhar ou
- * vier com lista vazia de avaliações enquanto há avaliações cadastradas,
- * consulta diretamente as tabelas `classes`, `students` e `evaluations`.
+ * Carrega estatísticas completas de uma turma com consolidação cumulativa
+ * de todo o histórico de testes (Single Source of Truth).
+ * Garante que qualquer teste já executado pelo aluno permaneça ativo e considerado,
+ * unificando a nota do aluno em todas as telas e exibindo todos os testes realizados.
  */
 export async function fetchClassCohortStats(classId: string): Promise<StatsPayload | null> {
-  let rpcData: StatsPayload | null = null;
-  try {
-    const { data, error } = await supabase.rpc("class_stats", { _class: classId });
-    if (!error && data) {
-      rpcData = data as unknown as StatsPayload;
-    }
-  } catch {
-    // fallback para tabelas diretas
-  }
-
-  // Se a RPC retornou dados e possui avaliações consolidadas, retorna direto
-  if (rpcData && Array.isArray(rpcData.students_latest) && rpcData.students_latest.length > 0) {
-    return rpcData;
-  }
-
-  // Fallback: consulta direta às tabelas para alimentar os dados da turma
   const { data: classRow } = await supabase
     .from("classes")
     .select("id, name, grade, school_year, shift, school_id, school:schools(name)")
@@ -247,7 +232,7 @@ export async function fetchClassCohortStats(classId: string): Promise<StatsPaylo
     .maybeSingle();
 
   if (!classRow) {
-    return rpcData ?? null;
+    return null;
   }
 
   const { data: students } = await supabase
@@ -265,7 +250,7 @@ export async function fetchClassCohortStats(classId: string): Promise<StatsPaylo
       .from("evaluations")
       .select("id, student_id, evaluated_at, age_years, weight_kg, height_cm, imc, rce, sit_and_reach_cm, abdominal_reps, horizontal_jump_cm, medicine_ball_m, square_test_s, sprint_20m_s, run_6min_m, classifications")
       .in("student_id", sids)
-      .order("evaluated_at", { ascending: false });
+      .order("evaluated_at", { ascending: true });
     evaluations = evals ?? [];
   }
 
@@ -283,8 +268,15 @@ export async function fetchClassCohortStats(classId: string): Promise<StatsPaylo
   for (const [sid, sEvals] of evalsByStudent.entries()) {
     const st = studentMap.get(sid);
     if (!st || !sEvals.length) continue;
-    const latest = sEvals[0]; // mais recente
-    const first = sEvals[sEvals.length - 1]; // primeira
+
+    // FONTE ÚNICA DE VERDADE: Consolidação cumulativa de todos os testes já realizados
+    const consolidatedList = withConsolidatedView(sEvals);
+    const latest = consolidatedList[consolidatedList.length - 1]; // estado acumulado mais recente
+
+    // Identificar baseline com testes para cálculo fidedigno de evolução
+    const firstWithTests = consolidatedList.find(
+      (e) => e.recorded_classifications && Object.values(e.recorded_classifications).some(Boolean)
+    ) ?? consolidatedList[0];
 
     students_latest.push({
       student_id: sid,
@@ -310,18 +302,20 @@ export async function fetchClassCohortStats(classId: string): Promise<StatsPaylo
 
     students_first.push({
       student_id: sid,
-      evaluated_at: first.evaluated_at,
-      classifications: (first.classifications ?? null) as Classifications | null,
+      evaluated_at: firstWithTests.evaluated_at,
+      classifications: firstWithTests.evaluated_at !== latest.evaluated_at
+        ? ((firstWithTests.classifications ?? null) as Classifications | null)
+        : null,
     });
   }
 
-  let school_latest = rpcData?.school_latest ?? [];
-  if (!school_latest.length && classRow.school_id) {
+  let school_latest: (Record<string, string> | null)[] = [];
+  if (classRow.school_id) {
     try {
       const { data: schoolClasses } = await supabase.from("classes").select("id").eq("school_id", classRow.school_id);
       const cids = (schoolClasses ?? []).map((c) => c.id);
       if (cids.length) {
-        const { data: schStudents } = await supabase.from("students").select("id").in("class_id", cids).limit(250);
+        const { data: schStudents } = await supabase.from("students").select("id").in("class_id", cids).limit(200);
         const schSids = (schStudents ?? []).map((s) => s.id);
         if (schSids.length) {
           const { data: schEvals } = await supabase.from("evaluations").select("student_id, classifications, evaluated_at").in("student_id", schSids).order("evaluated_at", { ascending: false });
@@ -341,48 +335,32 @@ export async function fetchClassCohortStats(classId: string): Promise<StatsPaylo
     }
   }
 
-  const lastEvaluationAt = evaluations.length > 0 ? evaluations[0].evaluated_at : (rpcData?.header?.last_evaluation_at ?? null);
+  const lastEvaluationAt = evaluations.length > 0 ? evaluations[evaluations.length - 1].evaluated_at : null;
 
   return {
     header: {
       id: classRow.id,
       name: classRow.name,
-      grade: classRow.grade ?? rpcData?.header?.grade ?? null,
-      school_year: classRow.school_year ?? rpcData?.header?.school_year ?? null,
-      shift: classRow.shift ?? rpcData?.header?.shift ?? null,
-      school_id: classRow.school_id ?? rpcData?.header?.school_id ?? null,
-      school_name: (classRow.school as any)?.name ?? rpcData?.header?.school_name ?? null,
+      grade: classRow.grade ?? null,
+      school_year: classRow.school_year ?? null,
+      shift: classRow.shift ?? null,
+      school_id: classRow.school_id ?? null,
+      school_name: (classRow.school as any)?.name ?? null,
       students_count: studentList.length,
       evaluations_count: evaluations.length,
       last_evaluation_at: lastEvaluationAt,
     },
-    students_latest: students_latest.length > 0 ? students_latest : (rpcData?.students_latest ?? []),
-    students_first: students_first.length > 0 ? students_first : (rpcData?.students_first ?? []),
+    students_latest,
+    students_first,
     school_latest,
   };
 }
 
 /**
- * Carrega estatísticas completas de um grupo com garantia de resiliência.
- * Tenta a RPC `group_stats` primeiro e, se a RPC retornar nulo ou
- * vier com lista vazia enquanto há avaliações cadastradas,
- * consulta diretamente as tabelas `groups`, `students` e `evaluations`.
+ * Carrega estatísticas completas de um grupo com consolidação cumulativa
+ * de todo o histórico de testes (Single Source of Truth).
  */
 export async function fetchGroupCohortStats(groupId: string): Promise<GroupStatsPayload | null> {
-  let rpcData: GroupStatsPayload | null = null;
-  try {
-    const { data, error } = await supabase.rpc("group_stats", { _group: groupId });
-    if (!error && data) {
-      rpcData = data as unknown as GroupStatsPayload;
-    }
-  } catch {
-    // fallback para tabelas diretas
-  }
-
-  if (rpcData && Array.isArray(rpcData.students_latest) && rpcData.students_latest.length > 0) {
-    return rpcData;
-  }
-
   const { data: groupRow } = await supabase
     .from("groups")
     .select("id, name, description, primary_color")
@@ -390,7 +368,7 @@ export async function fetchGroupCohortStats(groupId: string): Promise<GroupStats
     .maybeSingle();
 
   if (!groupRow) {
-    return rpcData ?? null;
+    return null;
   }
 
   const { data: students } = await supabase
@@ -408,7 +386,7 @@ export async function fetchGroupCohortStats(groupId: string): Promise<GroupStats
       .from("evaluations")
       .select("id, student_id, evaluated_at, age_years, weight_kg, height_cm, imc, rce, sit_and_reach_cm, abdominal_reps, horizontal_jump_cm, medicine_ball_m, square_test_s, sprint_20m_s, run_6min_m, classifications")
       .in("student_id", sids)
-      .order("evaluated_at", { ascending: false });
+      .order("evaluated_at", { ascending: true });
     evaluations = evals ?? [];
   }
 
@@ -426,8 +404,13 @@ export async function fetchGroupCohortStats(groupId: string): Promise<GroupStats
   for (const [sid, sEvals] of evalsByStudent.entries()) {
     const st = studentMap.get(sid);
     if (!st || !sEvals.length) continue;
-    const latest = sEvals[0];
-    const first = sEvals[sEvals.length - 1];
+
+    const consolidatedList = withConsolidatedView(sEvals);
+    const latest = consolidatedList[consolidatedList.length - 1];
+
+    const firstWithTests = consolidatedList.find(
+      (e) => e.recorded_classifications && Object.values(e.recorded_classifications).some(Boolean)
+    ) ?? consolidatedList[0];
 
     students_latest.push({
       student_id: sid,
@@ -453,27 +436,29 @@ export async function fetchGroupCohortStats(groupId: string): Promise<GroupStats
 
     students_first.push({
       student_id: sid,
-      evaluated_at: first.evaluated_at,
-      classifications: (first.classifications ?? null) as Classifications | null,
+      evaluated_at: firstWithTests.evaluated_at,
+      classifications: firstWithTests.evaluated_at !== latest.evaluated_at
+        ? ((firstWithTests.classifications ?? null) as Classifications | null)
+        : null,
     });
   }
 
-  const lastEvaluationAt = evaluations.length > 0 ? evaluations[0].evaluated_at : (rpcData?.header?.last_evaluation_at ?? null);
+  const lastEvaluationAt = evaluations.length > 0 ? evaluations[evaluations.length - 1].evaluated_at : null;
 
   return {
     header: {
       id: groupRow.id,
       name: groupRow.name,
-      description: groupRow.description ?? rpcData?.header?.description ?? null,
-      color: groupRow.primary_color ?? rpcData?.header?.color ?? null,
+      description: groupRow.description ?? null,
+      color: groupRow.primary_color ?? null,
       students_count: studentList.length,
       evaluations_count: evaluations.length,
       last_evaluation_at: lastEvaluationAt,
     },
-    students_latest: students_latest.length > 0 ? students_latest : (rpcData?.students_latest ?? []),
-    students_first: students_first.length > 0 ? students_first : (rpcData?.students_first ?? []),
-    origin_classes_latest: rpcData?.origin_classes_latest ?? [],
-    school_latest: rpcData?.school_latest ?? [],
+    students_latest,
+    students_first,
+    origin_classes_latest: [],
+    school_latest: [],
   };
 }
 

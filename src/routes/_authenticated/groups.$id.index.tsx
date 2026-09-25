@@ -632,19 +632,31 @@ function GroupMembersPage() {
                             <div className="rounded bg-muted/30 p-1.5">
                               <span className="block text-[10px] text-muted-foreground">Potência</span>
                               <span className="font-semibold tabular-nums text-foreground">
-                                {s.jumpCm != null ? `${s.jumpCm} cm` : "—"}
+                                {s.jumpCm != null
+                                  ? `${s.jumpCm} cm`
+                                  : s.medicineBallM != null
+                                  ? `${s.medicineBallM} m`
+                                  : "—"}
                               </span>
                             </div>
                             <div className="rounded bg-muted/30 p-1.5">
                               <span className="block text-[10px] text-muted-foreground">Velocidade</span>
                               <span className="font-semibold tabular-nums text-foreground">
-                                {s.sprintS != null ? `${s.sprintS.toFixed(2)}s` : "—"}
+                                {s.sprintS != null
+                                  ? `${s.sprintS.toFixed(2)}s`
+                                  : s.squareTestS != null
+                                  ? `${s.squareTestS.toFixed(2)}s`
+                                  : "—"}
                               </span>
                             </div>
                             <div className="rounded bg-muted/30 p-1.5">
                               <span className="block text-[10px] text-muted-foreground">Resistência</span>
                               <span className="font-semibold tabular-nums text-foreground">
-                                {s.runM != null ? `${s.runM} m` : "—"}
+                                {s.runM != null
+                                  ? `${s.runM} m`
+                                  : s.abdominalReps != null
+                                  ? `${s.abdominalReps} reps`
+                                  : "—"}
                               </span>
                             </div>
                           </div>
