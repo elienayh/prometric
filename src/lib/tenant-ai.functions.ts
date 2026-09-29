@@ -41,38 +41,36 @@ async function assertCanManageTenantAi(
     console.warn("[tenant-ai] is_platform_admin rpc check failed:", e);
   }
 
-  // 2. Fallback resiliente via supabaseAdmin (impersonação, cargo admin, owner ou super admin)
+  // 2. Fallback resiliente via supabaseAdmin verificando perfil (role e impersonação) ou membro admin
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  const [profileRes, memberRes, tenantRes, adminRoleRes] = await Promise.all([
-    supabaseAdmin
-      .from("profiles")
-      .select("impersonating_tenant_id")
-      .eq("id", userId)
-      .maybeSingle(),
-    supabaseAdmin
-      .from("tenant_members")
-      .select("role")
-      .eq("tenant_id", tenantId)
-      .eq("user_id", userId)
-      .maybeSingle(),
-    supabaseAdmin
-      .from("tenants")
-      .select("owner_id")
-      .eq("id", tenantId)
-      .maybeSingle(),
-    supabaseAdmin
-      .from("admin_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("role", "super_admin")
-      .maybeSingle(),
-  ]);
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("role, is_platform_admin, current_tenant_id, impersonating_tenant_id")
+    .eq("id", userId)
+    .maybeSingle();
 
-  if (profileRes.data?.impersonating_tenant_id === tenantId) return true;
-  if (memberRes.data?.role === "admin") return true;
-  if (tenantRes.data?.owner_id === userId) return true;
-  if (adminRoleRes.data) return true;
+  if (profile) {
+    if (
+      profile.role === "admin" ||
+      profile.is_platform_admin === true ||
+      profile.impersonating_tenant_id === tenantId ||
+      profile.current_tenant_id === tenantId
+    ) {
+      return true;
+    }
+  }
+
+  const { data: member } = await supabaseAdmin
+    .from("tenant_members")
+    .select("role")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (member && member.role === "admin") {
+    return true;
+  }
 
   throw new Error("Sem permissão para gerenciar IA deste espaço");
 }

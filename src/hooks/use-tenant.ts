@@ -28,13 +28,10 @@ export function useMyMemberships() {
   return useQuery({
     queryKey: ["my-memberships", user?.id],
     enabled: !!user && !loading,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
-    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenant_members")
-        .select("tenant_id, role, tenant:tenants(id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone,owner_id)")
+        .select("tenant_id, role, tenant:tenants(id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone)")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -48,9 +45,6 @@ export function useProfile() {
   return useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user && !loading,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
-    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -58,25 +52,12 @@ export function useProfile() {
         .eq("id", user!.id)
         .maybeSingle();
       if (error) throw error;
-
-      // Se o usuário não possui profile no banco, provisiona no server-side com service_role
-      if (!data && user?.id) {
-        try {
-          const { ensureUserProfile } = await import("@/lib/team-invitations.functions");
-          const created = await ensureUserProfile();
-          if (created) return created;
-        } catch (e) {
-          console.warn("[useProfile] Provisionando perfil no servidor:", e);
-        }
-      }
-
       return data;
     },
   });
 }
 
 export function useCurrentTenant() {
-  const { user } = useAuth();
   const profile = useProfile();
   const memberships = useMyMemberships();
   const currentTenantId = profile.data?.current_tenant_id ?? null;
@@ -113,13 +94,10 @@ export function useCurrentTenant() {
   const impersonatedTenantQ = useQuery({
     queryKey: ["impersonated-tenant", currentTenantId],
     enabled: needsDirectFetch,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
-    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants")
-        .select("id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone,owner_id")
+        .select("id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
         .eq("id", currentTenantId!)
         .maybeSingle();
       if (error) throw error;
@@ -137,28 +115,21 @@ export function useCurrentTenant() {
         }
       : memberships.data?.[0] ?? null);
 
-  const isOwner =
-    !!user &&
-    !!current?.tenant &&
-    (current.tenant as any).owner_id === user.id;
-
-  const effectiveRole = isOwner ? ("admin" as const) : current?.role ?? null;
-
   const isLoading =
-    (profile.isLoading && !profile.data) ||
-    (memberships.isLoading && !memberships.data) ||
-    (needsDirectFetch && impersonatedTenantQ.isLoading && !impersonatedTenantQ.data);
+    profile.isLoading ||
+    memberships.isLoading ||
+    memberships.isFetching ||
+    (needsDirectFetch && impersonatedTenantQ.isLoading);
 
   return {
     tenant: current?.tenant ?? null,
-    role: effectiveRole,
+    role: current?.role ?? null,
     tenantId: current?.tenant_id ?? null,
     isLoading,
     hasNoTenant:
       memberships.isSuccess &&
       !memberships.isFetching &&
       (memberships.data?.length ?? 0) === 0 &&
-      !currentTenantId &&
       !impersonatingId,
     memberships: memberships.data ?? [],
   };

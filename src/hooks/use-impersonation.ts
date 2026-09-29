@@ -22,8 +22,7 @@ export function useImpersonation(): ImpersonationState | null {
   const q = useQuery({
     queryKey: ["impersonation", user?.id],
     enabled: !!user,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -53,14 +52,11 @@ export function useImpersonation(): ImpersonationState | null {
       "postgres_changes",
       { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` },
       (payload) => {
-        const next = payload.new as { impersonating_tenant_id?: string | null };
-        const prev = payload.old as { impersonating_tenant_id?: string | null } | null;
+        const next = payload.new as { impersonating_tenant_id: string | null };
+        const prev = payload.old as { impersonating_tenant_id: string | null } | null;
         qc.invalidateQueries({ queryKey: ["impersonation", user.id] });
-        if (
-          prev?.impersonating_tenant_id !== undefined &&
-          prev.impersonating_tenant_id !== next?.impersonating_tenant_id
-        ) {
-          qc.invalidateQueries();
+        if ((prev?.impersonating_tenant_id ?? null) !== (next.impersonating_tenant_id ?? null)) {
+          qc.clear();
         }
       },
     );

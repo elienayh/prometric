@@ -71,18 +71,6 @@ function AcceptInvitePage() {
           }
         }
 
-        // Se houver código PKCE (?code=...) na URL vindo de confirmação ou invite
-        if (typeof window !== "undefined" && window.location.search) {
-          const searchParams = new URLSearchParams(window.location.search);
-          const code = searchParams.get("code");
-          if (code) {
-            const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
-            if (!exchangeErr) {
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-          }
-        }
-
         const { data } = await supabase.auth.getUser();
         if (mounted) {
           setCurrentUser(data.user || null);

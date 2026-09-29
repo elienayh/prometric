@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
@@ -66,7 +66,7 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
 
-  const search = (useSearch({ strict: false }) as any) || {};
+  const search = Route.useSearch();
 
   useEffect(() => {
     setMode(initialMode);

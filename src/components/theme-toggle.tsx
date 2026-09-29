@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -5,6 +6,28 @@ import { useTheme } from "@/components/theme-provider";
 
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, toggle } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Alternar tema"
+        title="Alternar tema"
+        className={className}
+      >
+        <span className="grid place-items-center">
+          <span className="h-4 w-4 inline-block" />
+        </span>
+      </Button>
+    );
+  }
+
   const isDark = theme === "dark";
   return (
     <Button

@@ -178,10 +178,9 @@ async function callOpenAICompatible(
   return json?.choices?.[0]?.message?.content ?? "{}";
 }
 
-/**
- * Normaliza e remapeia modelos legados ou variações do Gemini para versões ativas da API.
- */
-export function resolveGoogleModel(model: string): string {
+async function callGoogle(apiKey: string, model: string, system: string, user: string): Promise<string> {
+  const { GoogleGenAI } = await import("@google/genai");
+
   let chosenModel = model || "gemini-3.8-flash";
   if (
     chosenModel.includes("2.5-flash-lite") ||
@@ -192,13 +191,6 @@ export function resolveGoogleModel(model: string): string {
   } else if (chosenModel.includes("2.5-flash") || chosenModel.includes("pro")) {
     chosenModel = "gemini-3.8-flash";
   }
-  return chosenModel;
-}
-
-async function callGoogle(apiKey: string, model: string, system: string, user: string): Promise<string> {
-  const { GoogleGenAI } = await import("@google/genai");
-
-  const chosenModel = resolveGoogleModel(model);
 
   const ai = new GoogleGenAI({
     apiKey,
