@@ -105,19 +105,22 @@ export const createTeamInvite = createServerFn({ method: "POST" })
 
     // 5. Salvar/atualizar em team_contacts
     const activeClient = userClient ?? supabaseAdmin;
-    await activeClient
-      .from("team_contacts")
-      .upsert(
-        {
-          tenant_id: tenantId,
-          full_name: fullName,
-          email: cleanEmail,
-          phone: phone || null,
-          role,
-        },
-        { onConflict: "tenant_id,email" }
-      )
-      .catch(() => {});
+    try {
+      await activeClient
+        .from("team_contacts")
+        .upsert(
+          {
+            tenant_id: tenantId,
+            full_name: fullName,
+            email: cleanEmail,
+            phone: phone || null,
+            role,
+          },
+          { onConflict: "tenant_id,email" }
+        );
+    } catch {
+      // Ignora erro se faltar constraint única ou tabela opcional
+    }
 
     // 6. Verificar se já existe perfil cadastrado com esse e-mail
     const { data: existingProfile } = await activeClient
@@ -160,25 +163,19 @@ export const createTeamInvite = createServerFn({ method: "POST" })
 
       // Atualiza o current_tenant_id do usuário caso não tenha nenhum
       if (!existingProfile.current_tenant_id) {
-        await activeClient
-          .from("profiles")
-          .update({ current_tenant_id: tenantId })
-          .eq("id", existingProfile.id)
-          .catch(() => {});
+        try {
+          await activeClient
+            .from("profiles")
+            .update({ current_tenant_id: tenantId })
+            .eq("id", existingProfile.id);
+        } catch {
+          // Ignora se não puder atualizar perfil
+        }
       }
 
       // Registrar convite já aceito para rastreabilidade
-      await activeClient.from("tenant_invitations").insert({
-        tenant_id: tenantId,
-        email: cleanEmail,
-        role,
-        token,
-        invited_by: userId,
-        status: "accepted",
-        accepted_at: new Date().toISOString(),
-        accepted_by: existingProfile.id,
-      }).catch(async () => {
-        await supabaseAdmin.from("tenant_invitations").insert({
+      try {
+        const { error: insErr } = await activeClient.from("tenant_invitations").insert({
           tenant_id: tenantId,
           email: cleanEmail,
           role,
@@ -188,7 +185,23 @@ export const createTeamInvite = createServerFn({ method: "POST" })
           accepted_at: new Date().toISOString(),
           accepted_by: existingProfile.id,
         });
-      });
+        if (insErr) throw insErr;
+      } catch {
+        try {
+          await supabaseAdmin.from("tenant_invitations").insert({
+            tenant_id: tenantId,
+            email: cleanEmail,
+            role,
+            token,
+            invited_by: userId,
+            status: "accepted",
+            accepted_at: new Date().toISOString(),
+            accepted_by: existingProfile.id,
+          });
+        } catch {
+          // Ignora erro secundário de log
+        }
+      }
 
       return {
         success: true,
