@@ -82,26 +82,11 @@ function ReportsPage() {
   const evals = useQuery({
     queryKey: ["evals-report", tenantId, classId], enabled: !!tenantId,
     queryFn: async () => {
-      let studentIds: string[] | null = null;
-      if (classId !== "all") {
-        const { data: stList, error: stErr } = await supabase
-          .from("students")
-          .select("id")
-          .eq("class_id", classId);
-        if (stErr) throw stErr;
-        studentIds = (stList ?? []).map((s) => s.id);
-        if (studentIds.length === 0) return [];
-      }
-
       let q = supabase
         .from("evaluations")
         .select("id,evaluated_at,age_years,weight_kg,height_cm,classifications,student:students!inner(full_name,sex,birth_date,class_id)")
         .eq("tenant_id", tenantId!);
-
-      if (studentIds) {
-        q = q.in("student_id", studentIds);
-      }
-
+      if (classId !== "all") q = q.eq("student.class_id", classId);
       const { data, error } = await q.order("evaluated_at", { ascending: false });
       if (error) throw error;
       return data as unknown as EvalRow[];

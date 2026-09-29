@@ -2,7 +2,7 @@ import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import {
-  Activity, BarChart3, BookOpen, Building2, ChevronDown, ClipboardList, GraduationCap,
+  Activity, BarChart3, BookOpen, Building2, Check, ChevronDown, ClipboardList, GraduationCap,
   HeartPulse, LayoutDashboard, LogOut, Menu, Settings, Shield, ShieldAlert, Sparkles, TrendingUp,
   Users, UsersRound, X, Zap,
 } from "lucide-react";
@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTenant, useProfile } from "@/hooks/use-tenant";
+import { useCurrentTenant, useProfile, useSwitchTenant } from "@/hooks/use-tenant";
 import { useAuth } from "@/hooks/use-auth";
 import { useIsPlatformAdmin } from "@/hooks/use-admin";
 import { OnboardingDialog } from "@/components/onboarding-dialog";
@@ -126,11 +126,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="truncate font-medium">{tenant?.name ?? (isLoading ? "Carregando…" : "ProMetric")}</span>
+              <TenantSwitcher />
               {pageLabel && (
                 <>
                   <span className="text-muted-foreground/40">/</span>
-                  <span className="truncate text-foreground">{pageLabel}</span>
+                  <span className="truncate text-foreground font-medium">{pageLabel}</span>
                 </>
               )}
             </div>
@@ -216,6 +216,100 @@ function SidebarContent({
         </div>
       </div>
     </>
+  );
+}
+
+function TenantSwitcher() {
+  const { tenant, tenantId, role, memberships, isLoading } = useCurrentTenant();
+  const switchTenant = useSwitchTenant();
+  const [open, setOpen] = useState(false);
+
+  const displayName =
+    tenant?.display_name || tenant?.name || (isLoading ? "Carregando…" : "ProMetric");
+
+  if (memberships.length <= 1) {
+    return (
+      <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+        <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
+        <span className="truncate max-w-[180px] sm:max-w-[280px]">{displayName}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setOpen((o) => !o)}
+        className="h-7 gap-1.5 px-2 text-xs font-semibold text-foreground hover:bg-muted/60 rounded-lg"
+        title="Alternar organização / escola"
+      >
+        <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
+        <span className="truncate max-w-[140px] sm:max-w-[240px]">{displayName}</span>
+        <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+      </Button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.16 }}
+            className="absolute left-0 z-50 mt-1.5 w-72 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-pop"
+          >
+            <div className="border-b border-border/60 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Suas Escolas / Organizações ({memberships.length})
+            </div>
+            <div className="max-h-64 overflow-y-auto py-1">
+              {memberships.map((m) => {
+                const isActive = m.tenant_id === tenantId;
+                const mName = m.tenant?.display_name || m.tenant?.name || "Organização";
+                return (
+                  <button
+                    key={m.tenant_id}
+                    onClick={() => {
+                      setOpen(false);
+                      if (!isActive) switchTenant.mutate(m.tenant_id);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors",
+                      isActive
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "text-popover-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate">{mName}</div>
+                      <div className="text-[10px] text-muted-foreground font-normal">
+                        {m.role === "admin"
+                          ? "Administrador(a)"
+                          : m.role === "evaluator"
+                          ? "Avaliador(a)"
+                          : "Visualizador(a)"}
+                      </div>
+                    </div>
+                    {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+            {role === "admin" && (
+              <div className="border-t border-border/60 p-1">
+                <Link
+                  to="/team"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                >
+                  <Users className="h-3.5 w-3.5" /> Gerenciar equipe e convites
+                </Link>
+              </div>
+            )}
+          </motion.div>
+        </>
+      )}
+    </div>
   );
 }
 

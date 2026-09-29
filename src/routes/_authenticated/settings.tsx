@@ -19,6 +19,8 @@ function SettingsPage() {
   const { tenant, tenantId } = useCurrentTenant();
   const plans = useQuery({
     queryKey: ["plans"],
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase.from("plans").select("*").eq("is_active", true).order("sort_order");
       if (error) throw error;
@@ -27,7 +29,10 @@ function SettingsPage() {
   });
 
   const usage = useQuery({
-    queryKey: ["usage", tenantId], enabled: !!tenantId,
+    queryKey: ["usage", tenantId],
+    enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
     queryFn: async () => {
       const [students, members] = await Promise.all([
         supabase.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId!).eq("is_active", true),

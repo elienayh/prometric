@@ -1,4 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -26,10 +28,13 @@ export function useMyMemberships() {
   return useQuery({
     queryKey: ["my-memberships", user?.id],
     enabled: !!user && !loading,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenant_members")
-        .select("tenant_id, role, tenant:tenants(id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone)")
+        .select("tenant_id, role, tenant:tenants(id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone,owner_id)")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -38,12 +43,14 @@ export function useMyMemberships() {
   });
 }
 
-
 export function useProfile() {
   const { user, loading } = useAuth();
   return useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user && !loading,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -51,16 +58,50 @@ export function useProfile() {
         .eq("id", user!.id)
         .maybeSingle();
       if (error) throw error;
+
+      // Se o usuário não possui profile no banco, provisiona no server-side com service_role
+      if (!data && user?.id) {
+        try {
+          const { ensureUserProfile } = await import("@/lib/team-invitations.functions");
+          const created = await ensureUserProfile();
+          if (created) return created;
+        } catch (e) {
+          console.warn("[useProfile] Provisionando perfil no servidor:", e);
+        }
+      }
+
       return data;
     },
   });
 }
 
 export function useCurrentTenant() {
+  const { user } = useAuth();
   const profile = useProfile();
   const memberships = useMyMemberships();
   const currentTenantId = profile.data?.current_tenant_id ?? null;
   const impersonatingId = profile.data?.impersonating_tenant_id ?? null;
+  const qc = useQueryClient();
+
+  // Auto-heal: se o profile não tem current_tenant_id definido mas o usuário já tem memberships,
+  // salva automaticamente a primeira membership como ativa no perfil
+  useEffect(() => {
+    if (
+      profile.data &&
+      !profile.data.current_tenant_id &&
+      memberships.data &&
+      memberships.data.length > 0
+    ) {
+      const firstTenantId = memberships.data[0].tenant_id;
+      supabase
+        .from("profiles")
+        .update({ current_tenant_id: firstTenantId })
+        .eq("id", profile.data.id)
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ["profile"] });
+        });
+    }
+  }, [profile.data?.current_tenant_id, profile.data?.id, memberships.data, qc]);
 
   // When a platform admin impersonates a tenant they don't belong to,
   // memberships won't contain it. Fetch that tenant directly (RLS allows
@@ -72,10 +113,13 @@ export function useCurrentTenant() {
   const impersonatedTenantQ = useQuery({
     queryKey: ["impersonated-tenant", currentTenantId],
     enabled: needsDirectFetch,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants")
-        .select("id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
+        .select("id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone,owner_id")
         .eq("id", currentTenantId!)
         .maybeSingle();
       if (error) throw error;
@@ -93,23 +137,57 @@ export function useCurrentTenant() {
         }
       : memberships.data?.[0] ?? null);
 
+  const isOwner =
+    !!user &&
+    !!current?.tenant &&
+    (current.tenant as any).owner_id === user.id;
+
+  const effectiveRole = isOwner ? ("admin" as const) : current?.role ?? null;
+
   const isLoading =
-    profile.isLoading ||
-    memberships.isLoading ||
-    memberships.isFetching ||
-    (needsDirectFetch && impersonatedTenantQ.isLoading);
+    (profile.isLoading && !profile.data) ||
+    (memberships.isLoading && !memberships.data) ||
+    (needsDirectFetch && impersonatedTenantQ.isLoading && !impersonatedTenantQ.data);
 
   return {
     tenant: current?.tenant ?? null,
-    role: current?.role ?? null,
+    role: effectiveRole,
     tenantId: current?.tenant_id ?? null,
     isLoading,
     hasNoTenant:
       memberships.isSuccess &&
       !memberships.isFetching &&
       (memberships.data?.length ?? 0) === 0 &&
+      !currentTenantId &&
       !impersonatingId,
     memberships: memberships.data ?? [],
   };
 }
 
+export function useSwitchTenant() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (targetTenantId: string) => {
+      if (!user) throw new Error("Não autenticado");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ current_tenant_id: targetTenantId })
+        .eq("id", user.id);
+      if (error) throw error;
+      return targetTenantId;
+    },
+    onSuccess: async () => {
+      toast.success("Organização alterada com sucesso.");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["profile"] }),
+        qc.invalidateQueries({ queryKey: ["my-memberships"] }),
+        qc.invalidateQueries({ queryKey: ["current-tenant"] }),
+      ]);
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Erro ao alternar organização");
+    },
+  });
+}

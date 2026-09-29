@@ -94,12 +94,30 @@ export function BrandingForm({
         patch.email = form.email.trim() || null;
         patch.phone = form.phone.trim() || null;
       }
-      const { error } = await (supabase.from(table) as any).update(patch).eq("id", entity.id);
-      if (error) throw error;
+      if (table === "tenants") {
+        const { updateTenantBranding } = await import("@/lib/branding.functions");
+        await updateTenantBranding({
+          data: {
+            tenantId: entity.id,
+            displayName: (patch.display_name as string) ?? null,
+            primaryColor: (patch.primary_color as string) ?? null,
+            secondaryColor: (patch.secondary_color as string) ?? null,
+            description: (patch.description as string) ?? null,
+            logoUrl: (patch.logo_url as string) ?? null,
+            website: (patch.website as string) ?? null,
+            email: (patch.email as string) ?? null,
+            phone: (patch.phone as string) ?? null,
+          },
+        });
+      } else {
+        const { error } = await (supabase.from(table) as any).update(patch).eq("id", entity.id);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       toast.success("Identidade visual atualizada");
       qc.invalidateQueries({ queryKey: ["my-memberships"] });
+      qc.invalidateQueries({ queryKey: ["current-tenant"] });
       for (const k of invalidateKeys) qc.invalidateQueries({ queryKey: k });
     },
     onError: (e: any) => toast.error(e.message ?? "Erro ao salvar"),

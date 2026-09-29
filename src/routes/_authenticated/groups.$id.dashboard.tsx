@@ -9,17 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentTenant } from "@/hooks/use-tenant";
-import {
-  aggregateCohort,
-  peerDimensions,
-  topByIndicator,
-  fetchGroupCohortStats,
-  type CohortStudentLatest,
-  type CohortFirst,
-  type GroupStatsPayload,
-} from "@/lib/cohort-stats";
+import { aggregateCohort, peerDimensions, topByIndicator, type CohortStudentLatest, type CohortFirst } from "@/lib/cohort-stats";
 import { SummaryKPIs } from "@/components/analytics/summary-kpis";
-import { CohortSummaryBanner } from "@/components/analytics/cohort-summary-banner";
 import { DistributionChart } from "@/components/analytics/distribution-chart";
 import { AggregateRadar } from "@/components/analytics/aggregate-radar";
 import { RankingTable } from "@/components/analytics/ranking-table";
@@ -41,6 +32,17 @@ export const Route = createFileRoute("/_authenticated/groups/$id/dashboard")({
   notFoundComponent: () => <div className="p-6 text-sm">Grupo não encontrado.</div>,
 });
 
+type StatsPayload = {
+  header: {
+    id: string; name: string; description: string | null; color: string | null;
+    students_count: number; evaluations_count: number; last_evaluation_at: string | null;
+  };
+  students_latest: CohortStudentLatest[];
+  students_first: CohortFirst[];
+  origin_classes_latest: (Record<string, string> | null)[];
+  school_latest: (Record<string, string> | null)[];
+};
+
 function GroupDashboard() {
   const { id } = Route.useParams();
   const { tenant, tenantId } = useCurrentTenant();
@@ -48,8 +50,12 @@ function GroupDashboard() {
 
   const q = useQuery({
     queryKey: ["group-stats", id],
-    staleTime: 60 * 1000,
-    queryFn: async () => fetchGroupCohortStats(id),
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("group_stats", { _group: id });
+      if (error) throw error;
+      return data as unknown as StatsPayload | null;
+    },
   });
 
   const groupEntity = useQuery({
@@ -159,24 +165,6 @@ function GroupDashboard() {
         </div>
         <ActionBar actions={actions} />
       </div>
-
-      <CohortSummaryBanner
-        kind="grupo"
-        cohortName={brand.displayName === "ProMetric" ? header.name : brand.displayName}
-        subtitle={header.description ?? undefined}
-        totalMembers={header.students_count}
-        evaluatedCount={agg.evaluatedCount}
-        avgScore={agg.avgScore}
-        avgCategory={agg.avgCategory}
-        dimensions={agg.dimensions}
-        distribution={agg.distribution}
-        atRiskCount={agg.atRisk.length}
-        topGainsCount={agg.topGains.length}
-        lastEvaluationAt={header.last_evaluation_at}
-        onPrintSheets={handlePrintSheets}
-        onGeneratePDF={handlePDF}
-        quickEvalTo="/quick-eval"
-      />
 
       <SummaryKPIs
         items={[

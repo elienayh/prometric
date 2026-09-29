@@ -151,11 +151,35 @@ function RootComponent() {
   const router = useRouter();
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+    let lastUserId: string | null | undefined = undefined;
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUserId = session?.user?.id ?? null;
+
+      if (event === "SIGNED_OUT") {
+        lastUserId = null;
+        queryClient.clear();
+        router.invalidate();
+        return;
+      }
+
+      // Inicialização inicial: guarda o id do usuário sem invalidar todo o app
+      if (lastUserId === undefined) {
+        lastUserId = nextUserId;
+        return;
+      }
+
+      // Se o usuário logado for o mesmo (ex: refetch/token refresh ao focar aba), não faz nada
+      if (nextUserId === lastUserId) {
+        return;
+      }
+
+      // Somente se o usuário realmente trocou (ex: login de outra conta)
+      lastUserId = nextUserId;
       router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+      queryClient.invalidateQueries();
     });
+
     return () => sub.subscription.unsubscribe();
   }, [router, queryClient]);
 

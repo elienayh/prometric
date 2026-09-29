@@ -95,15 +95,7 @@ export function AiTab({ tenantId }: { tenantId: string | null }) {
   });
 
   const testMut = useMutation({
-    mutationFn: async () =>
-      testCred({
-        data: {
-          tenantId: tenantId!,
-          overrideApiKey: apiKey.trim().length > 0 ? apiKey.trim() : undefined,
-          provider,
-          model,
-        },
-      }),
+    mutationFn: async () => testCred({ data: { tenantId: tenantId! } }),
     onSuccess: (r) => {
       if (r.ok) toast.success(`Conexão OK em ${r.latencyMs}ms`);
       else toast.error(`Falhou: ${r.error}`);

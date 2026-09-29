@@ -1649,7 +1649,7 @@ BEGIN
   SELECT jsonb_build_object(
     'id', c.id, 'name', c.name, 'grade', c.grade, 'school_year', c.school_year,
     'shift', c.shift, 'school_id', c.school_id, 'school_name', sc.name,
-    'students_count', (SELECT count(*) FROM public.students s WHERE s.class_id = c.id AND COALESCE(s.is_active, true)),
+    'students_count', (SELECT count(*) FROM public.students s WHERE s.class_id = c.id AND s.is_active),
     'evaluations_count', (
       SELECT count(*) FROM public.evaluations e
         JOIN public.students s ON s.id = e.student_id
@@ -1673,7 +1673,7 @@ BEGIN
       e.horizontal_jump_cm, e.medicine_ball_m, e.square_test_s, e.sprint_20m_s, e.run_6min_m
     FROM public.students s
     JOIN public.evaluations e ON e.student_id = s.id
-    WHERE s.class_id = _class AND COALESCE(s.is_active, true)
+    WHERE s.class_id = _class AND s.is_active
     ORDER BY e.student_id, e.evaluated_at DESC
   )
   SELECT COALESCE(jsonb_agg(to_jsonb(latest)), '[]'::jsonb) INTO _latest FROM latest;
@@ -1684,7 +1684,7 @@ BEGIN
       e.student_id, e.evaluated_at, e.classifications
     FROM public.students s
     JOIN public.evaluations e ON e.student_id = s.id
-    WHERE s.class_id = _class AND COALESCE(s.is_active, true)
+    WHERE s.class_id = _class AND s.is_active
     ORDER BY e.student_id, e.evaluated_at ASC
   )
   SELECT COALESCE(jsonb_agg(to_jsonb(first_eval)), '[]'::jsonb) INTO _first FROM first_eval;
@@ -1695,7 +1695,7 @@ BEGIN
     FROM public.students s
     JOIN public.classes c2 ON c2.id = s.class_id
     JOIN public.evaluations e ON e.student_id = s.id
-    WHERE c2.school_id = _school AND COALESCE(s.is_active, true)
+    WHERE c2.school_id = _school AND s.is_active
     ORDER BY e.student_id, e.evaluated_at DESC
   )
   SELECT COALESCE(jsonb_agg(classifications), '[]'::jsonb) INTO _school_latest FROM school_latest;
@@ -1731,7 +1731,7 @@ BEGIN
 
   SELECT jsonb_build_object(
     'id', g.id, 'name', g.name, 'description', g.description, 'color', g.color,
-    'students_count', (SELECT count(*) FROM public.students s WHERE s.group_id = g.id AND COALESCE(s.is_active, true)),
+    'students_count', (SELECT count(*) FROM public.students s WHERE s.group_id = g.id AND s.is_active),
     'evaluations_count', (
       SELECT count(*) FROM public.evaluations e
         JOIN public.students s ON s.id = e.student_id
@@ -1755,7 +1755,7 @@ BEGIN
     FROM public.students s
     LEFT JOIN public.classes c ON c.id = s.class_id
     JOIN public.evaluations e ON e.student_id = s.id
-    WHERE s.group_id = _group AND COALESCE(s.is_active, true)
+    WHERE s.group_id = _group AND s.is_active
     ORDER BY e.student_id, e.evaluated_at DESC
   )
   SELECT COALESCE(jsonb_agg(to_jsonb(latest)), '[]'::jsonb) INTO _latest FROM latest;
@@ -1764,7 +1764,7 @@ BEGIN
     SELECT DISTINCT ON (e.student_id) e.student_id, e.evaluated_at, e.classifications
     FROM public.students s
     JOIN public.evaluations e ON e.student_id = s.id
-    WHERE s.group_id = _group AND COALESCE(s.is_active, true)
+    WHERE s.group_id = _group AND s.is_active
     ORDER BY e.student_id, e.evaluated_at ASC
   )
   SELECT COALESCE(jsonb_agg(to_jsonb(first_eval)), '[]'::jsonb) INTO _first FROM first_eval;
