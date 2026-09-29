@@ -7,15 +7,28 @@ export { supabaseAdmin };
  * Se o tenant tiver owner_id, o owner é cadastrado como admin.
  * Se ainda não houver admin, busca o perfil que utiliza o tenant e o promove a admin.
  */
-export async function ensureTenantAdminEnrolled(tenantId: string): Promise<string | null> {
+export async function ensureTenantAdminEnrolled(tenantId: string, userClient?: any): Promise<string | null> {
   try {
-    const { data: tenant, error: tenantErr } = await supabaseAdmin
+    const client = userClient ?? supabaseAdmin;
+    let tenant: any = null;
+    const { data: cTenant } = await client
       .from("tenants")
       .select("id, name, display_name, owner_id")
       .eq("id", tenantId)
       .maybeSingle();
 
-    if (tenantErr || !tenant) return null;
+    if (cTenant) {
+      tenant = cTenant;
+    } else {
+      const { data: aTenant } = await supabaseAdmin
+        .from("tenants")
+        .select("id, name, display_name, owner_id")
+        .eq("id", tenantId)
+        .maybeSingle();
+      if (aTenant) tenant = aTenant;
+    }
+
+    if (!tenant) return null;
 
     // 1. Se o tenant possui owner_id, garante que ele está em tenant_members como 'admin'
     if (tenant.owner_id) {
@@ -193,7 +206,7 @@ export async function checkTenantAdminPermission(
   if (profileRes.data?.impersonating_tenant_id === tenantId) return true;
 
   // 3. Fallback preventivo caso o tenant seja legado e não possua admin cadastrado
-  const autoEnrolledId = await ensureTenantAdminEnrolled(tenantId);
+  const autoEnrolledId = await ensureTenantAdminEnrolled(tenantId, caller);
   if (autoEnrolledId === userId) return true;
 
   return false;
