@@ -277,7 +277,7 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
               {mode === "signin" ? "Entrar no ProMetric" : "Criar sua conta grátis"}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {mode === "signin" ? "Acesse seu painel e suas turmas" : "Até 50 alunos grátis, sem cartão. Cancele quando quiser."}
+              {mode === "signin" ? "Acesse seu painel e suas turmas" : "Grátis para começar, sem cartão. Cancele quando quiser."}
             </p>
 
             <Button
