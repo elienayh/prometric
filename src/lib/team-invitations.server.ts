@@ -113,7 +113,59 @@ export async function ensureTenantAdminEnrolled(tenantId: string): Promise<strin
  * 3) Usuário é o owner_id do tenant
  * 4) Usuário está em tenant_members com cargo 'admin'
  */
-export async function checkTenantAdminPermission(userId: string, tenantId: string): Promise<boolean> {
+export async function checkTenantAdminPermission(
+  userId: string,
+  tenantId: string,
+  userClient?: any,
+): Promise<boolean> {
+  // Se o cliente do usuário foi fornecido, tenta validar diretamente com as permissões da sessão
+  if (userClient) {
+    try {
+      const { data: adminRole } = await userClient
+        .from("admin_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (adminRole) return true;
+    } catch (e) {}
+
+    try {
+      const { data: profile } = await userClient
+        .from("profiles")
+        .select("role, is_platform_admin, current_tenant_id, impersonating_tenant_id")
+        .eq("id", userId)
+        .maybeSingle();
+      if (
+        profile &&
+        (profile.role === "admin" ||
+          profile.is_platform_admin === true ||
+          profile.current_tenant_id === tenantId ||
+          profile.impersonating_tenant_id === tenantId)
+      ) {
+        return true;
+      }
+    } catch (e) {}
+
+    try {
+      const { data: tenant } = await userClient
+        .from("tenants")
+        .select("owner_id")
+        .eq("id", tenantId)
+        .maybeSingle();
+      if (tenant?.owner_id === userId) return true;
+    } catch (e) {}
+
+    try {
+      const { data: member } = await userClient
+        .from("tenant_members")
+        .select("role")
+        .eq("tenant_id", tenantId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (member?.role === "admin") return true;
+    } catch (e) {}
+  }
+
   try {
     // 1. Super admin da plataforma (ou qualquer cargo administrativo de plataforma)
     const { data: adminRole } = await supabaseAdmin
@@ -168,7 +220,7 @@ export async function checkTenantAdminPermission(userId: string, tenantId: strin
 
     return false;
   } catch (err) {
-    console.error("[checkTenantAdminPermission] Erro ao validar permissão:", err);
+    console.warn("[checkTenantAdminPermission] Erro no check via admin:", err);
     return false;
   }
 }

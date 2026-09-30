@@ -28,24 +28,44 @@ export async function resolveTenantModel(
     prompt_version: string | null;
   } | null = null;
 
-  try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: cred, error: credErr } = await supabaseAdmin
-      .from("tenant_ai_credentials" as never)
-      .select(
-        "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
-      )
-      .eq("tenant_id" as never, tenantId)
-      .maybeSingle();
+  // 1. Tenta buscar credenciais configuradas via cliente autenticado da requisição (se fornecido)
+  if (supabase) {
+    try {
+      const { data: cred, error: credErr } = await supabase
+        .from("tenant_ai_credentials" as never)
+        .select(
+          "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
+        )
+        .eq("tenant_id" as never, tenantId)
+        .maybeSingle();
 
-    if (!credErr && cred) {
-      row = cred as typeof row;
+      if (!credErr && cred) {
+        row = cred as typeof row;
+      }
+    } catch (e) {
+      console.warn("[unified-generate] Busca de credenciais via cliente do usuário:", e);
     }
-  } catch (dbErr) {
-    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant:", dbErr);
   }
 
-  void supabase; // mantido para futura validação cruzada
+  // 2. Se não encontrou, tenta buscar via supabaseAdmin (caso service_role esteja ativa)
+  if (!row) {
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: cred, error: credErr } = await supabaseAdmin
+        .from("tenant_ai_credentials" as never)
+        .select(
+          "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
+        )
+        .eq("tenant_id" as never, tenantId)
+        .maybeSingle();
+
+      if (!credErr && cred) {
+        row = cred as typeof row;
+      }
+    } catch (dbErr) {
+      console.warn("[unified-generate] Aviso ao buscar credenciais do tenant via admin:", dbErr);
+    }
+  }
 
   if (row?.is_active && row.api_key_ciphertext && row.api_key_iv && row.api_key_tag) {
     try {
