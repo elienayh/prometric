@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCurrentTenant } from "@/hooks/use-tenant";
+import { useAuth } from "@/hooks/use-auth";
 import { useIsPlatformAdmin } from "@/hooks/use-admin";
 import { useImpersonation } from "@/hooks/use-impersonation";
 import { PageHeader, EmptyState } from "@/components/layout/page-header";
@@ -75,6 +76,7 @@ const ROLE_DESCRIPTION: Record<Role, string> = {
 
 function TeamPage() {
   const { tenantId, tenant, role: myRole } = useCurrentTenant();
+  const { user } = useAuth();
   const { isAdmin: isPlatformAdmin } = useIsPlatformAdmin();
   const impersonation = useImpersonation();
   const qc = useQueryClient();
@@ -88,6 +90,9 @@ function TeamPage() {
   const teamQuery = useQuery({
     queryKey: ["team-members-invites", tenantId],
     enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const origin = typeof window !== "undefined" ? window.location.origin : undefined;
       return await listTeamMembersAndInvites({
@@ -103,7 +108,8 @@ function TeamPage() {
     myRole === "admin" ||
     !!teamQuery.data?.canAdmin ||
     isPlatformAdmin ||
-    !!impersonation;
+    !!impersonation ||
+    (!!tenant && (tenant as any).owner_id === user?.id);
 
   // Mutação para revogar convite
   const revokeMutation = useMutation({
@@ -182,7 +188,7 @@ function TeamPage() {
         }
       />
 
-      {teamQuery.isLoading ? (
+      {teamQuery.isLoading && !teamQuery.data ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
           <Loader2 className="h-4 w-4 animate-spin text-primary" /> Carregando equipe...
         </div>

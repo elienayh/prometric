@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { AuthScreen } from "./auth";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/auth/register")({
-  head: () => ({ meta: [{ title: "Criar Conta — ProMetric" }] }),
-  component: () => <AuthScreen initialMode="signup" />,
+  beforeLoad: () => {
+    throw redirect({ to: "/auth", search: { mode: "signup" } });
+  },
 });

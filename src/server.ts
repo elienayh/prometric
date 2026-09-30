@@ -40,25 +40,6 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      // Sincroniza variáveis de ambiente do Cloudflare com process.env
-      if (env && typeof env === "object") {
-        for (const [key, value] of Object.entries(env)) {
-          if (typeof value === "string" && !process.env[key]) {
-            process.env[key] = value;
-          }
-        }
-      }
-
-      // Endpoint bruto de webhook para Stripe (preserva payload exato para assinatura)
-      const url = new URL(request.url);
-      if (
-        (url.pathname === "/api/stripe/webhook" || url.pathname === "/api/stripe-webhook") &&
-        request.method === "POST"
-      ) {
-        const { handleStripeWebhook } = await import("./lib/stripe.server");
-        return await handleStripeWebhook(request);
-      }
-
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

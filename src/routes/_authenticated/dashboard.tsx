@@ -53,7 +53,10 @@ function Dashboard() {
   const { tenantId, tenant, isLoading: tLoading } = useCurrentTenant();
 
   const stats = useQuery({
-    queryKey: ["dash-stats", tenantId], enabled: !!tenantId,
+    queryKey: ["dash-stats", tenantId],
+    enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
     queryFn: async () => {
       const [students, classes, schools, groups, evalsCount] = await Promise.all([
         supabase.from("students").select("id, sex", { count: "exact" }).eq("tenant_id", tenantId!).eq("is_active", true),
@@ -73,7 +76,10 @@ function Dashboard() {
   });
 
   const evals = useQuery({
-    queryKey: ["dash-evals", tenantId], enabled: !!tenantId,
+    queryKey: ["dash-evals", tenantId],
+    enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("evaluations")

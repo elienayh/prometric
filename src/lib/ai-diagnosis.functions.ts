@@ -1,12 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
 import {
-  prometricIndex,
-  zoneToCategory,
-  PM_DIMENSIONS,
-} from "@/lib/prometric-method";
-import { TEST_META, type ClassificationKey, type Zone, type Classifications } from "@/lib/proesp";
+  PROMETRIC_PROMPT_VERSION,
+  buildSystemPrompt,
+} from "@/lib/ai/prometric-system-prompt";
 
 type DiagnosisInput = {
   evaluationId: string;
@@ -22,117 +19,97 @@ export const generateDiagnosis = createServerFn({ method: "POST" })
     const { supabase } = context;
 
     const { data: ev, error } = await supabase
-      .from("evaluations" as never)
-      .select("*, student:students(full_name,sex,birth_date)" as never)
-      .eq("id" as never, data.evaluationId)
+      .from("evaluations")
+      .select("*, student:students(full_name,sex,birth_date)")
+      .eq("id", data.evaluationId)
       .single();
-
     if (error || !ev) throw new Error("Avaliação não encontrada");
 
-    const row = ev as any;
-    const studentName = row.student?.full_name ?? "Aluno(a)";
-    const studentSex = row.student?.sex ?? "other";
-    const isFem = studentSex === "female";
-    const art = isFem ? "A aluna" : "O aluno";
-    const pron = isFem ? "ela" : "ele";
+    const studentName =
+      (ev as { student?: { full_name?: string } }).student?.full_name ?? "—";
+    const studentSex = (ev as { student?: { sex?: string } }).student?.sex ?? "—";
 
-    const classif: Classifications = (row.classifications ?? {}) as Classifications;
-    const pIndex = prometricIndex(classif);
-    const overallCategory = pIndex.category ?? "Em Desenvolvimento";
+    const userPrompt = `Gere uma resposta em JSON ESTRITO (sem markdown, sem texto fora do JSON) seguindo a estrutura:
+{
+  "technical": "Parecer técnico em linguagem profissional (até 220 palavras): perfil físico, pontos fortes, pontos a desenvolver e recomendações pedagógicas. Use as 5 categorias e 5 dimensões oficiais ProMetric®.",
+  "family": "Parecer para a família em linguagem simples e acolhedora (até 180 palavras): como está a saúde física do estudante, o que pode ser melhorado e como a família pode apoiar. Sem termos técnicos.",
+  "diagnosis": "Resumo curto (até 120 palavras) consolidando o diagnóstico geral no vocabulário ProMetric®.",
+  "goals": {
+    "30_days":  ["meta 1", "meta 2", "meta 3"],
+    "60_days":  ["meta 1", "meta 2", "meta 3"],
+    "90_days":  ["meta 1", "meta 2", "meta 3"]
+  }
+}
 
-    // Analisa testes e categorias
-    const testItems: { key: ClassificationKey; name: string; zone?: Zone; cat: string | null; val: number | null }[] = [
-      { key: "jump", name: "Salto Horizontal", zone: classif.jump, cat: zoneToCategory(classif.jump), val: row.horizontal_jump_cm },
-      { key: "mball", name: "Medicine Ball", zone: classif.mball, cat: zoneToCategory(classif.mball), val: row.medicine_ball_m },
-      { key: "abdo", name: "Abdominal 1min", zone: classif.abdo, cat: zoneToCategory(classif.abdo), val: row.abdominal_reps },
-      { key: "flex", name: "Flexibilidade", zone: classif.flex, cat: zoneToCategory(classif.flex), val: row.sit_and_reach_cm },
-      { key: "sprint", name: "Velocidade 20m", zone: classif.sprint, cat: zoneToCategory(classif.sprint), val: row.sprint_20m_s },
-      { key: "square", name: "Quadrado", zone: classif.square, cat: zoneToCategory(classif.square), val: row.square_test_s },
-      { key: "run6", name: "Corrida 6min", zone: classif.run6, cat: zoneToCategory(classif.run6), val: row.run_6min_m },
-    ];
+Dados do aluno (use APENAS estes valores — não invente):
+Nome: ${studentName} | Sexo: ${studentSex} | Idade: ${ev.age_years} anos
+Antropometria: peso ${ev.weight_kg}kg, estatura ${ev.height_cm}cm, IMC ${ev.imc}, RCE ${ev.rce}
+Testes:
+- Mobilidade (sentar/alcançar): ${ev.sit_and_reach_cm} cm
+- Resistência muscular (abdominal 1min): ${ev.abdominal_reps} reps
+- Potência inferior (salto horizontal): ${ev.horizontal_jump_cm} cm
+- Potência superior (medicine ball 2kg): ${ev.medicine_ball_m} m
+- Agilidade (quadrado): ${ev.square_test_s} s
+- Velocidade (20m): ${ev.sprint_20m_s} s
+- Resistência cardiorrespiratória (corrida 6min): ${ev.run_6min_m} m
+Classificações já calculadas pelo Modelo ProMetric® (fonte da verdade): ${JSON.stringify(ev.classifications)}`;
 
-    const strongTests = testItems.filter((t) => t.cat === "Excelente" || t.cat === "Bom");
-    const warnTests = testItems.filter((t) => t.cat === "Prioritário" || t.cat === "Atenção");
-    const devTests = testItems.filter((t) => t.cat === "Em Desenvolvimento");
+    // Resolve provedor: tenant > Lovable fallback
+    const { resolveTenantModel, generateJSON } = await import("@/lib/ai/unified-generate.server");
+    const resolved = await resolveTenantModel(supabase, (ev as { tenant_id: string }).tenant_id);
 
-    // 1. Parecer técnico
-    const technicalParts: string[] = [
-      `Avaliação física diagnóstica de ${studentName} (${row.age_years ?? "—"} anos). Índice ProMetric® registrado em ${pIndex.score}/100 pontos, perfil consolidado '${overallCategory}'.`,
-    ];
-    if (row.imc != null) {
-      technicalParts.push(`Antropometria: IMC ${row.imc.toFixed(1)} kg/m² (${zoneToCategory(classif.imc) ?? "—"}), RCE ${row.rce ? row.rce.toFixed(2) : "—"}.`);
+    let parsed: {
+      technical?: string;
+      family?: string;
+      diagnosis?: string;
+      goals?: Record<string, string[]>;
+    } = {};
+
+    try {
+      const raw = (await generateJSON(resolved, buildSystemPrompt(), userPrompt)) as typeof parsed;
+      parsed = raw ?? {};
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      throw new Error(message);
     }
-    if (strongTests.length > 0) {
-      technicalParts.push(`Capacidades em destaque: ${strongTests.map((t) => `${t.name} ('${t.cat}')`).join(", ")}.`);
-    }
-    if (warnTests.length > 0) {
-      technicalParts.push(`Valências prioritárias para intervenção: ${warnTests.map((t) => `${t.name} ('${t.cat}')`).join(", ")}.`);
-    } else if (devTests.length > 0) {
-      technicalParts.push(`Valências com margem para desenvolvimento: ${devTests.map((t) => `${t.name} ('${t.cat}')`).join(", ")}.`);
-    }
-    technicalParts.push(`Recomenda-se programa motor diversificado com ênfase nas valências deficitárias e nova bateria de controle em 90 a 120 dias.`);
 
-    const technical = technicalParts.join(" ");
+    // Aplica guardrails básicos de texto (Camada 4 simplificada para shape legado)
+    const sanitize = (s?: string) =>
+      (s ?? "")
+        .replace(/\bPROESP(?:-BR)?\b/gi, "")
+        .replace(/\bz[\s-]?score\b/gi, "")
+        .replace(/\bpercentil\b/gi, "")
+        .replace(/\bdesvio[\s-]?padr[ãa]o\b/gi, "")
+        .replace(/\bRegular\b/g, "Em Desenvolvimento")
+        .replace(/\bMédio\b/g, "Em Desenvolvimento")
+        .replace(/\bÓtimo\b/g, "Excelente")
+        .replace(/\bRuim\b/g, "Atenção")
+        .replace(/\s{2,}/g, " ")
+        .trim();
 
-    // 2. Parecer para a família
-    const familyParts: string[] = [
-      `${art} ${studentName} participou da avaliação física do ProMetric®. Seu resultado geral alcançou a categoria '${overallCategory}' (${pIndex.score}/100 pontos).`,
-      strongTests.length > 0
-        ? `Parabenizamos pelo ótimo desempenho observado em ${strongTests.map((t) => t.name.toLowerCase()).join(" e ")}, que mostram dedicação e boa aptidão física.`
-        : `Demonstrou excelente disposição e engajamento na execução dos testes propostos.`,
-      warnTests.length > 0
-        ? `Como oportunidade de melhoria, sugerimos brincadeiras e atividades ativas que estimulem ${warnTests.map((t) => t.name.toLowerCase()).join(" e ")}.`
-        : `O aluno mantém um perfil motor bastante harmônico e equilibrado.`,
-      `O apoio da família em incentivar o movimento diário e limitar o tempo de telas é fundamental para seu desenvolvimento contínuo.`,
-    ];
+    const technical = sanitize(parsed.technical);
+    const family = sanitize(parsed.family);
+    const diagnosis = sanitize(parsed.diagnosis ?? parsed.technical);
+    const signature = `\n\n_Gerado pelo Modelo ProMetric® ${PROMETRIC_PROMPT_VERSION} • via ${resolved.provider} (${resolved.source})_`;
 
-    const family = familyParts.join(" ");
-
-    // 3. Diagnóstico curto
-    const diagnosis = `${art} ${studentName} apresenta Índice ProMetric® de ${pIndex.score}/100 (${overallCategory}). ${strongTests.length > 0 ? `Pontos fortes: ${strongTests.map((t) => t.name).join(", ")}. ` : ""}${warnTests.length > 0 ? `Atenção: ${warnTests.map((t) => t.name).join(", ")}. ` : ""}Plano pedagógico focado em estímulos motores regulares e reavaliação periódica.`;
-
-    // 4. Metas progressivas
-    const focusNames = [...warnTests, ...devTests].map((t) => t.name);
-    const primFocus = focusNames[0] ?? "Capacidade aeróbica";
-    const secFocus = focusNames[1] ?? "Coordenação e força";
-
-    const goals = {
-      "30_days": [
-        "Consolidar participação ativa em ao menos 3 sessões semanais de Educação Física.",
-        `Iniciar rotina de estímulos específicos focados em ${primFocus.toLowerCase()}.`,
-        "Adotar rotina diária de hidratação regular e sono adequado (8-10h).",
-      ],
-      "60_days": [
-        `Evoluir a tolerância e o desempenho motor nas tarefas de ${secFocus.toLowerCase()}.`,
-        "Incorporar circuitos motores e jogos de agilidade nas práticas corporais.",
-        "Reduzir o tempo sedentário nos dias sem aula com atividades ao ar livre.",
-      ],
-      "90_days": [
-        "Realizar nova bateria de avaliação física ProMetric® para mensuração comparativa.",
-        "Consolidar o ganho de pontuação nas valências que estavam em atenção.",
-        "Manter o engajamento positivo e a autoestima corporal em novos esportes.",
-      ],
-    };
-
-    const signature = `\n\n_Gerado pelo Modelo ProMetric® ${PROMETRIC_PROMPT_VERSION} • Sistema Especialista_`;
-
-    await supabase
-      .from("evaluations" as never)
+    const { error: upErr } = await supabase
+      .from("evaluations")
       .update({
         ai_diagnosis: diagnosis + signature,
         ai_technical: technical + signature,
         ai_family: family + signature,
-        ai_goals: goals,
+        ai_goals: parsed.goals ?? null,
       } as never)
-      .eq("id" as never, data.evaluationId);
+      .eq("id", data.evaluationId);
+    if (upErr) throw upErr;
 
     return {
       diagnosis,
       technical,
       family,
-      goals,
-      provider: "ProMetric® Engine (Sistema Especialista)",
-      source: "algoritmo determinístico",
+      goals: parsed.goals ?? {},
+      provider: resolved.provider,
+      source: resolved.source,
       promptVersion: PROMETRIC_PROMPT_VERSION,
     };
   });

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const search = Route.useSearch();
+  const search = (useSearch({ strict: false, shouldThrow: false }) as any) || {};
   if (pathname === "/auth" || pathname === "/auth/") {
     return <AuthScreen initialMode={search.mode === "signup" ? "signup" : "signin"} />;
   }
@@ -66,7 +66,7 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
 
-  const search = Route.useSearch();
+  const search = (useSearch({ strict: false, shouldThrow: false }) as any) || {};
 
   useEffect(() => {
     setMode(initialMode);
@@ -277,7 +277,7 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
               {mode === "signin" ? "Entrar no ProMetric" : "Criar sua conta grátis"}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {mode === "signin" ? "Acesse seu painel e suas turmas" : "Grátis para começar, sem cartão. Cancele quando quiser."}
+              {mode === "signin" ? "Acesse seu painel e suas turmas" : "Até 50 alunos grátis, sem cartão. Cancele quando quiser."}
             </p>
 
             <Button
