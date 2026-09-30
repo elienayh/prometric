@@ -31,7 +31,7 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
   { q: "O sistema possui inteligência artificial?", a: "Sim. A IA gera parecer técnico, mensagem para a família e metas personalizadas de 30/60/90 dias por aluno." },
   { q: "Como funciona o histórico do aluno?", a: "Cada avaliação fica registrada cronologicamente, com Perfil de Desenvolvimento Físico ProMetric em cada momento." },
   { q: "Posso cadastrar turmas?", a: "Sim. Você organiza alunos por turma, série, escola ou clube, com filtros e permissões por professor." },
-  { q: "Existe versão gratuita?", a: "Sim. O plano Gratuito é para sempre, até 50 alunos, sem cartão de crédito e sem trial expirando." },
+  { q: "Existe versão gratuita?", a: "Sim. O plano Gratuito é para sempre, grátis para começar (até 30 alunos), sem cartão de crédito e sem trial expirando." },
 ];
 
 const STRUCTURED_DATA = [
@@ -156,10 +156,10 @@ function SiteHeader() {
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link to="/auth" search={{ mode: "signin" }}>Entrar</Link>
+            <Link to="/login">Entrar</Link>
           </Button>
           <Button asChild size="sm" className="bg-gradient-brand text-primary-foreground shadow-glow hover:opacity-90">
-            <Link to="/auth" search={{ mode: "signup" }}>Criar conta</Link>
+            <Link to="/register">Criar conta</Link>
           </Button>
         </div>
       </div>
@@ -193,7 +193,7 @@ function Hero() {
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="bg-gradient-brand text-primary-foreground shadow-glow hover:opacity-90">
-              <Link to="/auth" search={{ mode: "signup" }}>
+              <Link to="/register">
                 <Zap className="mr-2 h-4 w-4" /> Avaliar minha turma grátis
               </Link>
             </Button>
@@ -202,7 +202,7 @@ function Hero() {
             </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Grátis até 50 alunos · Sem cartão · Pronto para usar na próxima aula
+            Grátis para começar · Sem cartão · Pronto para usar na próxima aula
           </p>
         </motion.div>
 
@@ -513,25 +513,41 @@ function Pricing() {
   const plans = [
     {
       name: "Gratuito",
-      price: "R$ 0",
-      period: "/ para sempre",
-      features: ["Até 50 alunos", "Método ProMetric® completo", "Relatórios PDF individuais", "1 professor"],
+      price: "Grátis",
+      period: "para começar",
+      features: [
+        "Até 30 alunos ativos",
+        "Método ProMetric® completo",
+        "Relatórios PDF individuais",
+        "1 professor / avaliador",
+      ],
       cta: "Começar grátis agora",
       highlight: false,
     },
     {
       name: "Pro",
-      price: "R$ 79",
-      period: "/ mês",
-      features: ["Até 500 alunos", "IA diagnóstica ilimitada", "Relatórios institucionais", "Dashboard executivo", "Suporte prioritário em até 4h"],
+      price: "Ilimitado",
+      period: "para toda a escola",
+      features: [
+        "Alunos ilimitados",
+        "Até 10 professores e avaliadores",
+        "Parecer pedagógico completo com IA",
+        "Relatórios institucionais e por turma",
+        "Assinatura flexível mensal ou anual",
+      ],
       cta: "Quero o Pro",
       highlight: true,
     },
     {
-      name: "Instituição",
+      name: "Instituição & Redes",
       price: "Sob medida",
-      period: "",
-      features: ["Alunos ilimitados", "Multi-escola e multi-rede", "SSO e API de integração", "Onboarding e treinamento dedicados"],
+      period: "para municípios e redes",
+      features: [
+        "Secretarias de Educação e redes",
+        "Multi-escolas e turmas centralizadas",
+        "Onboarding e treinamento dedicados",
+        "Contratos institucionais e licitações",
+      ],
       cta: "Falar com especialista",
       highlight: false,
     },
@@ -542,7 +558,7 @@ function Pricing() {
         <SectionHeader
           eyebrow="Planos"
           title="Comece grátis hoje. Faça upgrade quando crescer."
-          description="Preço previsível, sem surpresa. Cancele quando quiser — seus dados são seus."
+          description="Comece gratuitamente e faça upgrade com alunos ilimitados quando sua escola ou turmas crescerem."
         />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {plans.map((p) => (
@@ -579,7 +595,7 @@ function Pricing() {
                 )}
                 variant={p.highlight ? "default" : "outline"}
               >
-                <Link to="/auth" search={{ mode: "signup" }}>{p.cta}</Link>
+                <Link to="/register">{p.cta}</Link>
               </Button>
             </div>
           ))}
@@ -643,7 +659,7 @@ function SiteFooter() {
           </div>
           <nav aria-label="Rodapé" className="flex items-center gap-5 text-xs text-muted-foreground">
             <Link to="/blog" className="hover:text-foreground">Blog</Link>
-            <Link to="/auth" search={{ mode: "signin" }} className="hover:text-foreground">Entrar</Link>
+            <Link to="/login" className="hover:text-foreground">Entrar</Link>
             <a href="#faq" className="hover:text-foreground">FAQ</a>
             <span>© {new Date().getFullYear()} ProMetric</span>
           </nav>

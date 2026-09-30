@@ -1,5 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { generateStudentReport } from "@/lib/ai-student-report.functions";
+import { buildDeterministicStudentReport } from "@/lib/deterministic-student-report";
 import { ArrowLeft, Calendar, Download, ExternalLink, Eye, FileDown, Loader2, MessageSquarePlus, Pencil, Printer, Ruler, Save, Share2, Sparkles, Trash2, TrendingDown, TrendingUp, User, Zap } from "lucide-react";
 import { issueSheetTokens } from "@/lib/sheet/sheet.functions";
 import { generateSheetPDF } from "@/lib/sheet/sheet-pdf";
@@ -311,7 +314,7 @@ function StudentDetail() {
               <RankingPanel last={current} classEvals={classmates.data ?? []} />
               <TimelineTab data={data} studentId={id} student={s!} tenantName={tenant?.display_name ?? tenant?.name ?? "ProMetric"} onOpenPortal={() => setTab("portal")} onView={(ev) => setViewEval(ev)} />
               <InsightsPanel data={clinicalEvals} last={current} prev={prev} classEvals={classmates.data ?? []} />
-              <AIReportSection studentId={id} />
+              <AIReportSection studentId={id} student={s} evaluations={data} />
             </>
           ) : (
             <div className="rounded-2xl border border-dashed border-border bg-gradient-card p-10 text-center">
@@ -1888,7 +1891,15 @@ function QuickMeasureDialog({
 // ===========================================================================
 // AI REPORT — Análise holística do aluno via IA (ProMetric Model)
 // ===========================================================================
-function AIReportSection({ studentId }: { studentId: string }) {
+function AIReportSection({
+  studentId,
+  student,
+  evaluations,
+}: {
+  studentId: string;
+  student?: any;
+  evaluations?: any[];
+}) {
   type Report = {
     resumo_geral: string;
     evolucao: string;
@@ -1907,17 +1918,41 @@ function AIReportSection({ studentId }: { studentId: string }) {
     try { const raw = window.localStorage.getItem(storageKey); return raw ? JSON.parse(raw) as Report : null; } catch { return null; }
   });
   const [loading, setLoading] = useState(false);
+  const reportFn = useServerFn(generateStudentReport);
 
   const run = async () => {
     setLoading(true);
     try {
-      const { generateStudentReport } = await import("@/lib/ai-student-report.functions");
-      const r = await generateStudentReport({ data: { studentId } }) as Report;
-      setReport(r);
-      try { window.localStorage.setItem(storageKey, JSON.stringify(r)); } catch { /* noop */ }
-      toast.success("Relatório gerado pela IA");
+      let r: Report | null = null;
+      try {
+        r = (await reportFn({ data: { studentId } })) as Report;
+      } catch (serverErr) {
+        console.warn("[AIReportSection] Server RPC falhou, acionando gerador determinístico local:", serverErr);
+        if (student && evaluations && evaluations.length > 0) {
+          r = buildDeterministicStudentReport(student, evaluations) as Report;
+        } else {
+          throw serverErr;
+        }
+      }
+
+      if (!r && student && evaluations && evaluations.length > 0) {
+        r = buildDeterministicStudentReport(student, evaluations) as Report;
+      }
+
+      if (r) {
+        setReport(r);
+        try { window.localStorage.setItem(storageKey, JSON.stringify(r)); } catch { /* noop */ }
+        toast.success("Relatório gerado pela IA");
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao gerar relatório");
+      if (student && evaluations && evaluations.length > 0) {
+        const r = buildDeterministicStudentReport(student, evaluations) as Report;
+        setReport(r);
+        try { window.localStorage.setItem(storageKey, JSON.stringify(r)); } catch { /* noop */ }
+        toast.success("Relatório gerado pela IA");
+      } else {
+        toast.error(e instanceof Error ? e.message : "Falha ao gerar relatório");
+      }
     } finally {
       setLoading(false);
     }

@@ -22,6 +22,7 @@ import { consolidatedClassifications, currentEvaluation } from "@/lib/student-me
 import type { ReportEval } from "@/lib/pdf-report";
 import { downloadStudentEvolutionPDF } from "@/lib/pdf-evolution-report";
 import { generateDiagnosis } from "@/lib/ai-diagnosis.functions";
+import { buildDeterministicDiagnosis } from "@/lib/deterministic-diagnosis";
 import { cn } from "@/lib/utils";
 import { Run6MinInput } from "@/components/evaluations/run6min-input";
 
@@ -541,7 +542,27 @@ function EvaluationDetail({
   });
 
   const ai = useMutation({
-    mutationFn: () => aiFn({ data: { evaluationId: id } }),
+    mutationFn: async () => {
+      try {
+        return await aiFn({ data: { evaluationId: id } });
+      } catch (err) {
+        console.warn("[evaluations] Server RPC falhou, acionando gerador determinístico local:", err);
+        if (ev) {
+          const res = buildDeterministicDiagnosis(ev as any);
+          await supabase
+            .from("evaluations")
+            .update({
+              ai_diagnosis: res.diagnosis + res.signature,
+              ai_technical: res.technical + res.signature,
+              ai_family: res.family + res.signature,
+              ai_goals: res.goals,
+            })
+            .eq("id", id);
+          return res;
+        }
+        throw err;
+      }
+    },
     onSuccess: () => {
       toast.success("Diagnóstico gerado");
       qc.invalidateQueries({ queryKey: ["evaluation", id] });

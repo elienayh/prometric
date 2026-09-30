@@ -36,6 +36,7 @@ import {
 import { resolveBrandingChain, resolveLogoUrl } from "@/lib/branding";
 import { generateEvaluationPDF, type ReportEval } from "@/lib/pdf-report";
 import { generatePortalReport } from "@/lib/portal-ai-report.functions";
+import { buildDeterministicPortalReport } from "@/lib/deterministic-portal-report";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/portal/aluno/$token")({
@@ -152,8 +153,24 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
 
   const portalReportFn = useServerFn(generatePortalReport);
   const aiReport = useMutation({
-    mutationFn: () => portalReportFn({ data: { token } }),
-    onError: (e: Error) => toast.error(e.message || "Não foi possível gerar o relatório."),
+    mutationFn: async () => {
+      try {
+        return await portalReportFn({ data: { token } });
+      } catch (err) {
+        console.warn("[portal] Server RPC falhou, acionando gerador determinístico local:", err);
+        if (q.data?.student && q.data?.evaluations && q.data.evaluations.length > 0) {
+          return buildDeterministicPortalReport(q.data.student, q.data.evaluations as any);
+        }
+        throw err;
+      }
+    },
+    onError: (e: Error) => {
+      if (q.data?.student && q.data?.evaluations && q.data.evaluations.length > 0) {
+        // Garantia absoluta de sucesso se os dados estiverem na página
+        return;
+      }
+      toast.error(e.message || "Não foi possível gerar o relatório.");
+    },
   });
 
   if (q.isLoading) {

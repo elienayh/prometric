@@ -28,24 +28,44 @@ export async function resolveTenantModel(
     prompt_version: string | null;
   } | null = null;
 
-  try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: cred, error: credErr } = await supabaseAdmin
-      .from("tenant_ai_credentials" as never)
-      .select(
-        "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
-      )
-      .eq("tenant_id" as never, tenantId)
-      .maybeSingle();
+  // 1. Tenta buscar credenciais configuradas via cliente autenticado da requisição (se fornecido)
+  if (supabase) {
+    try {
+      const { data: cred, error: credErr } = await supabase
+        .from("tenant_ai_credentials" as never)
+        .select(
+          "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
+        )
+        .eq("tenant_id" as never, tenantId)
+        .maybeSingle();
 
-    if (!credErr && cred) {
-      row = cred as typeof row;
+      if (!credErr && cred) {
+        row = cred as typeof row;
+      }
+    } catch (e) {
+      console.warn("[unified-generate] Busca de credenciais via cliente do usuário:", e);
     }
-  } catch (dbErr) {
-    console.warn("[unified-generate] Aviso ao buscar credenciais do tenant:", dbErr);
   }
 
-  void supabase; // mantido para futura validação cruzada
+  // 2. Se não encontrou, tenta buscar via supabaseAdmin (caso service_role esteja ativa)
+  if (!row) {
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: cred, error: credErr } = await supabaseAdmin
+        .from("tenant_ai_credentials" as never)
+        .select(
+          "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
+        )
+        .eq("tenant_id" as never, tenantId)
+        .maybeSingle();
+
+      if (!credErr && cred) {
+        row = cred as typeof row;
+      }
+    } catch (dbErr) {
+      console.warn("[unified-generate] Aviso ao buscar credenciais do tenant via admin:", dbErr);
+    }
+  }
 
   if (row?.is_active && row.api_key_ciphertext && row.api_key_iv && row.api_key_tag) {
     try {
@@ -178,10 +198,9 @@ async function callOpenAICompatible(
   return json?.choices?.[0]?.message?.content ?? "{}";
 }
 
-/**
- * Normaliza e remapeia modelos legados ou variações do Gemini para versões ativas da API.
- */
-export function resolveGoogleModel(model: string): string {
+async function callGoogle(apiKey: string, model: string, system: string, user: string): Promise<string> {
+  const { GoogleGenAI } = await import("@google/genai");
+
   let chosenModel = model || "gemini-3.8-flash";
   if (
     chosenModel.includes("2.5-flash-lite") ||
@@ -192,13 +211,6 @@ export function resolveGoogleModel(model: string): string {
   } else if (chosenModel.includes("2.5-flash") || chosenModel.includes("pro")) {
     chosenModel = "gemini-3.8-flash";
   }
-  return chosenModel;
-}
-
-async function callGoogle(apiKey: string, model: string, system: string, user: string): Promise<string> {
-  const { GoogleGenAI } = await import("@google/genai");
-
-  const chosenModel = resolveGoogleModel(model);
 
   const ai = new GoogleGenAI({
     apiKey,

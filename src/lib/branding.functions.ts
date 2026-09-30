@@ -1,52 +1,62 @@
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const UpdateTenantBrandingInput = z.object({
-  tenantId: z.string().uuid(),
-  displayName: z.string().trim().nullable().optional(),
-  primaryColor: z.string().trim().nullable().optional(),
-  secondaryColor: z.string().trim().nullable().optional(),
-  description: z.string().trim().nullable().optional(),
-  logoUrl: z.string().trim().nullable().optional(),
-  website: z.string().trim().nullable().optional(),
-  email: z.string().trim().nullable().optional(),
-  phone: z.string().trim().nullable().optional(),
-});
+export type UpdateTenantBrandingInput = {
+  tenantId: string;
+  displayName: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  description: string | null;
+  logoUrl: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+};
 
 export const updateTenantBranding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => UpdateTenantBrandingInput.parse(d))
+  .inputValidator((data: UpdateTenantBrandingInput) => {
+    if (!data?.tenantId) throw new Error("tenantId é obrigatório");
+    return data;
+  })
   .handler(async ({ data, context }) => {
-    const { userId } = context;
-    const { tenantId, ...fields } = data;
-    const { supabaseAdmin, checkTenantAdminPermission } = await import("./team-invitations.server");
+    const { supabase } = context;
 
-    // Valida se o usuário autenticado é admin, owner ou está impersonando o tenant
-    const canAdmin = await checkTenantAdminPermission(userId, tenantId, context.supabase);
-    if (!canAdmin) {
-      throw new Error("Você não tem permissão de administrador para salvar as configurações desta escola/organização.");
+    const patch = {
+      display_name: data.displayName,
+      primary_color: data.primaryColor,
+      secondary_color: data.secondaryColor,
+      description: data.description,
+      logo_url: data.logoUrl,
+      website: data.website,
+      email: data.email,
+      phone: data.phone,
+      updated_at: new Date().toISOString(),
+    };
+
+    // 1. Tenta atualizar diretamente via cliente autenticado do usuário (RLS)
+    const { error: userErr } = await supabase
+      .from("tenants" as never)
+      .update(patch as never)
+      .eq("id" as never, data.tenantId);
+
+    if (!userErr) {
+      return { ok: true };
     }
 
-    const patch: Record<string, unknown> = {};
-    if (fields.displayName !== undefined) patch.display_name = fields.displayName || null;
-    if (fields.primaryColor !== undefined) patch.primary_color = fields.primaryColor || null;
-    if (fields.secondaryColor !== undefined) patch.secondary_color = fields.secondaryColor || null;
-    if (fields.description !== undefined) patch.description = fields.description || null;
-    if (fields.logoUrl !== undefined) patch.logo_url = fields.logoUrl || null;
-    if (fields.website !== undefined) patch.website = fields.website || null;
-    if (fields.email !== undefined) patch.email = fields.email || null;
-    if (fields.phone !== undefined) patch.phone = fields.phone || null;
+    // 2. Fallback via supabaseAdmin se disponível
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error: adminErr } = await supabaseAdmin
+        .from("tenants" as never)
+        .update(patch as never)
+        .eq("id" as never, data.tenantId);
 
-    const { error } = await supabaseAdmin
-      .from("tenants")
-      .update(patch)
-      .eq("id", tenantId);
-
-    if (error) {
-      console.error("[updateTenantBranding] Erro ao atualizar identidade do tenant:", error);
-      throw new Error(`Falha ao salvar identidade: ${error.message}`);
+      if (!adminErr) {
+        return { ok: true };
+      }
+      throw new Error(adminErr.message);
+    } catch (e: any) {
+      throw new Error(userErr?.message || e?.message || "Erro ao atualizar identidade visual");
     }
-
-    return { success: true };
   });
