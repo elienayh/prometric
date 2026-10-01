@@ -9,6 +9,7 @@ import { useCurrentTenant } from "@/hooks/use-tenant";
 import { PageHeader } from "@/components/layout/page-header";
 import { Label } from "@/components/ui/label";
 import { ZONES, type Zone, type Classifications } from "@/lib/proesp";
+import { ageInYears } from "@/lib/age";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/executive")({
@@ -99,7 +100,7 @@ function ExecutivePage() {
     const map: Record<number, number> = {};
     for (const e of latestByStudent) {
       if (!e.student?.birth_date) continue;
-      const age = Math.floor((Date.now() - new Date(e.student.birth_date).getTime()) / (365.25 * 86400_000));
+      const age = ageInYears(e.student.birth_date);
       map[age] = (map[age] ?? 0) + 1;
     }
     return Object.entries(map).sort(([a],[b]) => +a - +b).map(([age, total]) => ({ age: `${age}a`, total }));

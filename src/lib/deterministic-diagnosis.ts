@@ -1,10 +1,19 @@
 import { PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
 import { prometricIndex, zoneToCategory } from "@/lib/prometric-method";
-import { TEST_META, type ClassificationKey, type Zone, type Classifications } from "@/lib/proesp";
+import { TEST_META, type ClassificationKey, type Zone, type Classifications, type Sex } from "@/lib/proesp";
+import {
+  imcBand,
+  imcAdultBand,
+  IMC_BAND_LABEL,
+  imcFamilyGuidance,
+  IMC_CLINICAL_DISCLAIMER,
+  type ImcBand,
+} from "@/lib/imc-reference";
 
 export type EvaluationForDiagnosis = {
   id?: string;
   age_years?: number | null;
+  age_months?: number | null;
   weight_kg?: number | null;
   height_cm?: number | null;
   imc?: number | null;
@@ -66,12 +75,32 @@ export function buildDeterministicDiagnosis(
   const warnTests = testItems.filter((t) => t.cat === "Prioritário" || t.cat === "Atenção");
   const devTests = testItems.filter((t) => t.cat === "Em Desenvolvimento");
 
-  // 1. Parecer técnico
+  // Avaliação antropométrica clínica do IMC (OMS 2007)
+  let imcClinicalLabel: string | null = null;
+  let imcGuidanceText: string | null = null;
+  if (row.imc != null) {
+    const age = row.age_years ?? 10;
+    const months = row.age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    if (age < 5) {
+      imcClinicalLabel = "Sem referência para menores de 5 anos";
+    } else if (age >= 20) {
+      const b = imcAdultBand(row.imc);
+      imcClinicalLabel = IMC_BAND_LABEL[b];
+      imcGuidanceText = imcFamilyGuidance(b, studentName);
+    } else {
+      const sexKey: Sex = studentSex === "male" ? "male" : "female";
+      const b = imcBand(row.imc, sexKey, months);
+      imcClinicalLabel = IMC_BAND_LABEL[b];
+      imcGuidanceText = imcFamilyGuidance(b, studentName);
+    }
+  }
+
+  // 1. Parecer técnico (destinado a professores e coordenação escolar)
   const technicalParts: string[] = [
     `Avaliação física diagnóstica de ${studentName} (${row.age_years ?? "—"} anos). Índice ProMetric® registrado em ${pIndex.score}/100 pontos, perfil consolidado '${overallCategory}'.`,
   ];
   if (row.imc != null) {
-    technicalParts.push(`Antropometria: IMC ${row.imc.toFixed(1)} kg/m² (${zoneToCategory(classif.imc) ?? "—"}), RCE ${row.rce ? row.rce.toFixed(2) : "—"}.`);
+    technicalParts.push(`Antropometria: IMC ${row.imc.toFixed(1)} kg/m² (${imcClinicalLabel ?? "—"} — OMS 2007), RCE ${row.rce ? row.rce.toFixed(2) : "—"}.`);
   }
   if (strongTests.length > 0) {
     technicalParts.push(`Capacidades em destaque: ${strongTests.map((t) => `${t.name} ('${t.cat}')`).join(", ")}.`);
@@ -82,25 +111,33 @@ export function buildDeterministicDiagnosis(
     technicalParts.push(`Valências com margem para desenvolvimento: ${devTests.map((t) => `${t.name} ('${t.cat}')`).join(", ")}.`);
   }
   technicalParts.push(`Recomenda-se programa motor diversificado com ênfase nas valências deficitárias e nova bateria de controle em 90 a 120 dias.`);
+  technicalParts.push(`Nota clínica: ${IMC_CLINICAL_DISCLAIMER} Critérios de classificação do IMC alinhados às curvas da OMS 2007 e às diretrizes da Sociedade Brasileira de Pediatria (Manual nº 64/2023).`);
 
   const technical = technicalParts.join(" ");
 
-  // 2. Parecer para a família
+  // 2. Parecer para a família (linguagem acolhedora, encorajadora e sem termos patológicos)
   const familyParts: string[] = [
     `${art} ${studentName} participou da avaliação física do ProMetric®. Seu resultado geral alcançou a categoria '${overallCategory}' (${pIndex.score}/100 pontos).`,
     strongTests.length > 0
-      ? `Parabenizamos pelo ótimo desempenho observado em ${strongTests.map((t) => t.name.toLowerCase()).join(" e ")}, que mostram dedicação e boa aptidão física.`
+      ? `Parabenizamos pelo excelente desempenho observado em ${strongTests.map((t) => t.name.toLowerCase()).join(" e ")}, que mostram dedicação e boa aptidão física.`
       : `Demonstrou excelente disposição e engajamento na execução dos testes propostos.`,
     warnTests.length > 0
       ? `Como oportunidade de melhoria, sugerimos brincadeiras e atividades ativas que estimulem ${warnTests.map((t) => t.name.toLowerCase()).join(" e ")}.`
       : `O aluno mantém um perfil motor bastante harmônico e equilibrado.`,
-    `O apoio da família em incentivar o movimento diário e limitar o tempo de telas é fundamental para seu desenvolvimento contínuo.`,
   ];
+
+  if (imcGuidanceText) {
+    familyParts.push(imcGuidanceText);
+  }
+
+  familyParts.push(
+    `O apoio da família em incentivar o movimento diário e limitar o tempo de telas é fundamental para seu desenvolvimento contínuo.`
+  );
 
   const family = familyParts.join(" ");
 
   // 3. Diagnóstico curto
-  const diagnosis = `${art} ${studentName} apresenta Índice ProMetric® de ${pIndex.score}/100 (${overallCategory}). ${strongTests.length > 0 ? `Pontos fortes: ${strongTests.map((t) => t.name).join(", ")}. ` : ""}${warnTests.length > 0 ? `Atenção: ${warnTests.map((t) => t.name).join(", ")}. ` : ""}Plano pedagógico focado em estímulos motores regulares e reavaliação periódica.`;
+  const diagnosis = `${art} ${studentName} apresenta Índice ProMetric® de ${pIndex.score}/100 (${overallCategory}). ${strongTests.length > 0 ? `Pontos fortes: ${strongTests.map((t) => t.name).join(", ")}. ` : ""}${warnTests.length > 0 ? `Atenção: ${warnTests.map((t) => t.name).join(", ")}. ` : ""}${imcClinicalLabel ? `Estado nutricional: ${imcClinicalLabel}. ` : ""}Plano pedagógico focado em estímulos motores contínuos e reavaliação periódica.`;
 
   // 4. Metas progressivas
   const focusNames = [...warnTests, ...devTests].map((t) => t.name);
@@ -111,7 +148,7 @@ export function buildDeterministicDiagnosis(
     "30_days": [
       "Consolidar participação ativa em ao menos 3 sessões semanais de Educação Física.",
       `Iniciar rotina de estímulos específicos focados em ${primFocus.toLowerCase()}.`,
-      "Adotar rotina diária de hidratação regular e sono adequado (8-10h).",
+      "Adotar rotina diária de hidratação adequada e sono satisfatório (8-10h).",
     ],
     "60_days": [
       `Evoluir a tolerância e o desempenho motor nas tarefas de ${secFocus.toLowerCase()}.`,

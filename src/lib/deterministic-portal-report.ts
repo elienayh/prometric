@@ -6,6 +6,7 @@ import {
   type EvalLike,
 } from "@/lib/student-metrics";
 import { type Zone } from "@/lib/proesp";
+import { imcBand, imcAdultBand, imcFamilyGuidance, IMC_CLINICAL_DISCLAIMER } from "@/lib/imc-reference";
 
 export type PortalStudentData = {
   id?: string;
@@ -99,16 +100,28 @@ export function buildDeterministicPortalReport(
 
   if (attentionDims.length > 0) {
     parecerParts.push(
-      `Identificamos também ótimas oportunidades para estimular ${attentionDims.map((d) => d.dimension.toLowerCase()).join(" e ")}, que podem ser desenvolvidas de forma divertida através de brincadeiras ativas e jogos em família.`
+      `Identificamos também excelentes oportunidades para estimular ${attentionDims.map((d) => d.dimension.toLowerCase()).join(" e ")}, que podem ser desenvolvidas de forma divertida através de brincadeiras ativas e jogos em família.`
     );
   } else {
     parecerParts.push(
-      `Seu desenvolvimento motor encontra-se em ótimo equilíbrio em todas as dimensões avaliadas, refletindo um estilo de vida ativo e saudável.`
+      `Seu desenvolvimento motor encontra-se em excelente equilíbrio em todas as dimensões avaliadas, refletindo um estilo de vida ativo e saudável.`
     );
   }
 
+  if (lastEval.imc != null) {
+    const age = lastEval.age_years ?? 10;
+    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
+    const guidance = imcFamilyGuidance(band, firstName);
+    parecerParts.push(guidance);
+  }
+
   parecerParts.push(
-    `Lembramos que cada jovem possui seu próprio ritmo biológico de maturação e que a participação regular nas aulas de Educação Física e o incentivo familiar são os pilares essenciais para o seu crescimento saudável.`
+    `Lembramos que cada jovem possui seu próprio ritmo biológico de maturação e que a participação contínua nas aulas de Educação Física e o incentivo familiar são os pilares essenciais para o seu crescimento saudável.`
+  );
+
+  parecerParts.push(
+    `Nota informativa: ${IMC_CLINICAL_DISCLAIMER}`
   );
 
   const parecer = parecerParts.join(" ");
@@ -169,7 +182,7 @@ export function buildDeterministicPortalReport(
       `Entre a primeira avaliação (${firstDate}) e a mais recente (${lastDate}), ${artLow} ${firstName} apresentou ${indexDirection}.`,
       highlights.length > 0
         ? `Nesse intervalo, destacam-se avanços reais em: ${highlights.join(", ")}.`
-        : `Os parâmetros motores mantiveram consistência e regularidade em todas as baterias realizadas.`,
+        : `Os parâmetros motores mantiveram consistência e estabilidade em todas as baterias realizadas.`,
       `Essa evolução confirma adaptações biológicas positivas e a importância da constância nas atividades corporais.`,
     ].join(" ");
   }
@@ -179,7 +192,7 @@ export function buildDeterministicPortalReport(
   // ───────────────────────────────────────────────────────────────────────────
   const recomendacoes_familia: string[] = [
     `Incentive ao menos 60 minutos diários de movimento prazeroso (brincadeiras no quintal, passeios no parque, bicicleta ou esportes).`,
-    `Priorize noites regulares de sono reparador (de 8 a 10 horas) e garanta hidratação frequente com água ao longo do dia.`,
+    `Priorize noites completas de sono reparador (de 8 a 10 horas) e garanta hidratação frequente com água ao longo do dia.`,
     `Reduza o tempo sedentário diante de telas (celular, videogame e televisão), propondo momentos ativos em família nos fins de semana.`,
     `Valorize o esforço, a participação e a alegria de se movimentar, construindo uma autoestima corporal positiva para toda a vida.`,
   ];

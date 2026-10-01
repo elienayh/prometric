@@ -53,6 +53,11 @@ import { SHEET_FIELD_ROIS, DATE_ROI, isOutOfRange, roiInCrop } from "@/lib/sheet
 import { dataUrlToCanvas, cropROI, enhance } from "@/lib/sheet/image-preprocess";
 import { ocrField, ocrDate } from "@/lib/sheet/ocr-traditional";
 import { ageFromBirth, calcImc, calcRce, classifyAll, type Sex } from "@/lib/proesp";
+import { ageInYears, ageInMonths } from "@/lib/age";
+import {
+  validateField, validateEvaluation, normalizeHeight,
+  isAgeInProespRange, PROESP_AGE_WARNING,
+} from "@/lib/validation";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/evaluations/import")({
@@ -397,24 +402,40 @@ function ImportPage() {
         const raw = (entry.fields[k].value ?? "").trim();
         if (raw === "") numeric[k] = null;
         else {
-          const n = parseFloat(raw.replace(",", "."));
-          numeric[k] = Number.isFinite(n) ? n : null;
+          if (k === "height_cm") {
+            const hRes = normalizeHeight(raw);
+            numeric[k] = hRes.normalized;
+          } else {
+            const n = parseFloat(raw.replace(",", "."));
+            numeric[k] = Number.isFinite(n) ? n : null;
+          }
         }
       }
       const date = entry.evaluatedAt;
-      const age = ageFromBirth(entry.student.birthDate, new Date(date));
+      const age = ageInYears(entry.student.birthDate, date);
+      const ageMonths = ageInMonths(entry.student.birthDate, date);
       const payload: Record<string, unknown> = {
         tenant_id: tenantId,
         student_id: entry.student.studentId,
         evaluated_at: date,
         age_years: age,
+        age_months: ageMonths,
       };
       for (const k of OCR_FIELD_KEYS) payload[k] = numeric[k] ?? null;
+
+      // Validação de integridade fisiológica
+      const valRes = validateEvaluation(payload, age);
+      if (valRes.hasBlockingErrors) {
+        const firstErr = Object.values(valRes.errors)[0];
+        throw new Error(`${entry.student.studentName}: ${firstErr}`);
+      }
+
       payload.imc = calcImc(payload.weight_kg as number | null, payload.height_cm as number | null);
       payload.rce = calcRce(payload.waist_cm as number | null, payload.height_cm as number | null);
       payload.classifications = classifyAll({
         sex: entry.student.sex as Sex,
         age,
+        age_months: ageMonths,
         weight_kg: payload.weight_kg as number | null,
         height_cm: payload.height_cm as number | null,
         waist_cm: payload.waist_cm as number | null,
@@ -719,6 +740,12 @@ function SheetCard({
                 </Button>
               </div>
 
+              {entry.student.birthDate && !isAgeInProespRange(ageInYears(entry.student.birthDate, entry.evaluatedAt || new Date())) && (
+                <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">
+                  <p className="font-semibold">Faixa etária ({ageInYears(entry.student.birthDate, entry.evaluatedAt || new Date())} anos):</p>
+                  <p>{PROESP_AGE_WARNING}</p>
+                </div>
+              )}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
@@ -744,6 +771,7 @@ function SheetCard({
                   const low = f.confidence < OCR_CONFIDENCE_THRESHOLD;
                   const numeric = f.value === "" ? null : parseFloat(f.value.replace(",", "."));
                   const oor = isOutOfRange(k, Number.isFinite(numeric ?? NaN) ? numeric : null);
+                  const valResult = validateField(k, f.value);
                   const sourceBadge =
                     f.source === "ai" ? "IA" : f.source === "manual" ? "Manual" : "OCR";
                   return (
@@ -764,15 +792,30 @@ function SheetCard({
                         inputMode="decimal"
                         value={f.value}
                         onChange={(ev) => onChangeField(k, ev.target.value)}
+                        onBlur={() => {
+                          if (k === "height_cm" && f.value) {
+                            const hNorm = normalizeHeight(f.value);
+                            if (hNorm.convertedFromMeters && hNorm.normalized != null) {
+                              onChangeField(k, String(hNorm.normalized));
+                              toast.info(`Altura convertida para ${hNorm.normalized} cm`);
+                            }
+                          }
+                        }}
                         disabled={entry.status === "saved"}
                         className={cn(
-                          oor && "border-amber-400 bg-amber-50 dark:bg-amber-950/30",
-                          low && !oor && "border-amber-300",
+                          valResult.severity === "error" && "border-destructive bg-destructive/10",
+                          valResult.severity === "warning" && "border-amber-400 bg-amber-50 dark:bg-amber-950/30",
+                          oor && !valResult.message && "border-amber-400 bg-amber-50 dark:bg-amber-950/30",
+                          low && !oor && valResult.severity === "ok" && "border-amber-300",
                         )}
                       />
-                      {oor && (
+                      {valResult.message ? (
+                        <p className={cn("text-[10px]", valResult.severity === "error" ? "text-destructive font-medium" : "text-amber-600")}>
+                          {valResult.message}
+                        </p>
+                      ) : oor ? (
                         <p className="text-[10px] text-amber-600">Valor fora da faixa esperada — confirme.</p>
-                      )}
+                      ) : null}
                     </div>
                   );
                 })}

@@ -22,6 +22,8 @@ import {
   PM_DIMENSIONS,
 } from "./prometric-method";
 import { ZONES, type Classifications, type Zone } from "./proesp";
+import { ageInYears, ageInMonths } from "./age";
+import { imcBand, imcAdultBand, IMC_BAND_LABEL, IMC_CLINICAL_DISCLAIMER } from "./imc-reference";
 import {
   scoreToSituation,
   situationSentence,
@@ -85,6 +87,12 @@ function studentActions(
 type EvalLite = {
   id: string;
   evaluated_at: string;
+  age_years?: number | null;
+  age_months?: number | null;
+  weight_kg?: number | null;
+  height_cm?: number | null;
+  imc?: number | null;
+  rce?: number | null;
   classifications: Classifications | null;
 };
 
@@ -109,9 +117,7 @@ type StudentLite = {
 
 function ageFromBirthDate(bd: string | null): number | null {
   if (!bd) return null;
-  const d = new Date(bd);
-  const diff = Date.now() - d.getTime();
-  return Math.floor(diff / (365.25 * 24 * 3600 * 1000));
+  return ageInYears(bd);
 }
 
 function situationTone(s: ReturnType<typeof scoreToSituation>): [number, number, number] | undefined {
@@ -165,7 +171,7 @@ export async function downloadStudentEvolutionPDF(
       .maybeSingle(),
     supabase
       .from("evaluations")
-      .select("id, evaluated_at, classifications")
+      .select("id, evaluated_at, age_years, age_months, weight_kg, height_cm, imc, rce, classifications")
       .eq("student_id", studentId)
       .order("evaluated_at", { ascending: true }),
     supabase
@@ -404,13 +410,32 @@ export async function downloadStudentEvolutionPDF(
   doc.text(s.full_name, rightHeroX, y + 8, { maxWidth: W - M - rightHeroX });
   doc.setFont("helvetica", "normal").setFontSize(8);
   doc.setTextColor(80);
+  const ageY = last.age_years ?? (s.birth_date ? ageInYears(s.birth_date, last.evaluated_at) : null);
+  const ageM = last.age_months ?? (s.birth_date ? ageInMonths(s.birth_date, last.evaluated_at) : null);
+  const ageLabel = ageY !== null ? (ageM ? `${ageY} anos (${ageM} meses)` : `${ageY} anos`) : "";
+
+  let anthropoSubtext = "";
+  if (last.height_cm || last.weight_kg || last.imc) {
+    const parts: string[] = [];
+    if (last.height_cm) parts.push(`${last.height_cm} cm`);
+    if (last.weight_kg) parts.push(`${last.weight_kg} kg`);
+    if (last.imc != null) {
+      const a = ageY ?? 10;
+      const m = ageM ?? (a >= 20 ? 240 : a * 12 + 6);
+      const b = a >= 20 ? imcAdultBand(last.imc) : imcBand(last.imc, (s.sex === "male" ? "male" : "female"), m);
+      parts.push(`IMC ${last.imc.toFixed(1)} (${IMC_BAND_LABEL[b]})`);
+    }
+    anthropoSubtext = parts.join(" • ");
+  }
+
   const idLines = [
-    `${sexLabel}${age !== null ? ` • ${age} anos` : ""}`,
+    `${sexLabel}${ageLabel ? ` • ${ageLabel}` : ""}`,
+    anthropoSubtext || null,
     s.class?.name ? `Turma: ${s.class.name}` : null,
     schoolRow?.name ? `Escola: ${(schoolRow as any).name}` : null,
     s.group?.name ? `Grupo: ${s.group.name}` : null,
   ].filter(Boolean) as string[];
-  idLines.forEach((t, i) => doc.text(t, rightHeroX, y + 13 + i * 4));
+  idLines.slice(0, 4).forEach((t, i) => doc.text(t, rightHeroX, y + 12 + i * 3.8));
 
   // Evolution chip
   const chipY = y + heroH - 11;
@@ -735,6 +760,14 @@ export async function downloadStudentEvolutionPDF(
       const url = portalUrl.length > 55 ? portalUrl.slice(0, 52) + "..." : portalUrl;
       doc.text(url, M + 22, footerY + 13);
     }
+    doc.setFont("helvetica", "normal").setFontSize(6);
+    doc.setTextColor(130);
+    doc.text(
+      `Modelo ProMetric® • Antropometria conforme OMS 2007 e SBP (Manual nº 64/2023). ${IMC_CLINICAL_DISCLAIMER}`,
+      M + 22,
+      footerY + 17,
+      { maxWidth: W - 2 * M - 22 }
+    );
   } else {
     doc.setFont("helvetica", "italic").setFontSize(7);
     doc.setTextColor(120);

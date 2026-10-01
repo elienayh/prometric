@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { EmptyState } from "@/components/layout/page-header";
 import { useCurrentTenant } from "@/hooks/use-tenant";
+import { ageInYears } from "@/lib/age";
 
 export const Route = createFileRoute("/_authenticated/groups/$id/")({
   head: () => ({ meta: [{ title: "Participantes do Grupo — ProMetric" }] }),
@@ -22,12 +23,7 @@ type GroupInfo = { id: string; name: string; display_name: string | null; descri
 type StudentRow = { id: string; full_name: string; sex: "male" | "female"; birth_date: string; group_id: string | null };
 
 function ageFrom(birth: string) {
-  const b = new Date(birth);
-  const now = new Date();
-  let a = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
-  return a;
+  return ageInYears(birth);
 }
 
 function GroupMembersPage() {

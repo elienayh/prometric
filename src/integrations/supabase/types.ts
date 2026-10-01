@@ -181,6 +181,7 @@ export type Database = {
       evaluations: {
         Row: {
           abdominal_reps: number | null
+          age_months: number | null
           age_years: number | null
           ai_diagnosis: string | null
           ai_family: string | null
@@ -212,6 +213,7 @@ export type Database = {
         }
         Insert: {
           abdominal_reps?: number | null
+          age_months?: number | null
           age_years?: number | null
           ai_diagnosis?: string | null
           ai_family?: string | null
@@ -243,6 +245,7 @@ export type Database = {
         }
         Update: {
           abdominal_reps?: number | null
+          age_months?: number | null
           age_years?: number | null
           ai_diagnosis?: string | null
           ai_family?: string | null

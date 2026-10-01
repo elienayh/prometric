@@ -17,8 +17,13 @@ import {
   TEST_META, ageFromBirth, calcImc, calcRce, classifyAll, overallScore, zoneColor,
   type Classifications, type Sex,
 } from "@/lib/proesp";
+import { ageInYears, ageInMonths } from "@/lib/age";
 import { prometricIndex, categoryColor } from "@/lib/prometric-method";
 import { consolidatedClassifications, currentEvaluation } from "@/lib/student-metrics";
+import {
+  validateField, validateEvaluation, normalizeHeight, normalizeEvaluationValues,
+  isAgeInProespRange, PROESP_AGE_WARNING,
+} from "@/lib/validation";
 import type { ReportEval } from "@/lib/pdf-report";
 import { downloadStudentEvolutionPDF } from "@/lib/pdf-evolution-report";
 import { generateDiagnosis } from "@/lib/ai-diagnosis.functions";
@@ -342,6 +347,13 @@ function EvaluationDialog({
   const [values, setValues] = useState<Record<FieldKey, string>>({} as any);
   const [notes, setNotes] = useState("");
 
+  // Validações em tempo real e aviso de faixa etária PROESP
+  const selectedStudent = useMemo(() => students.find((x) => x.id === singleId), [students, singleId]);
+  const selectedStudentAge = useMemo(() => {
+    if (!selectedStudent) return null;
+    return ageInYears(selectedStudent.birth_date, evaluatedAt);
+  }, [selectedStudent, evaluatedAt]);
+
   const save = useMutation({
     mutationFn: async () => {
       if (!tenantId) throw new Error("Sem tenant");
@@ -350,21 +362,36 @@ function EvaluationDialog({
 
       const numeric = (k: FieldKey): number | null => {
         const v = values[k]; if (v == null || v === "") return null;
+        if (k === "height_cm") {
+          const norm = normalizeHeight(v);
+          return norm.normalized;
+        }
         const n = parseFloat(v.replace(",", ".")); return isNaN(n) ? null : n;
       };
 
       const rows = ids.map((sid) => {
         const s = students.find((x) => x.id === sid)!;
-        const age = ageFromBirth(s.birth_date, new Date(evaluatedAt));
+        const age = ageInYears(s.birth_date, evaluatedAt);
+        const ageMonths = ageInMonths(s.birth_date, evaluatedAt);
         const base: any = {
-          tenant_id: tenantId, student_id: sid, evaluated_at: evaluatedAt, age_years: age,
+          tenant_id: tenantId, student_id: sid, evaluated_at: evaluatedAt,
+          age_years: age,
+          age_months: ageMonths,
           notes: notes || null,
         };
         for (const f of FIELDS) base[f.key] = numeric(f.key);
+
+        // Validação estrita de integridade
+        const valRes = validateEvaluation(base, age);
+        if (valRes.hasBlockingErrors) {
+          const firstErr = Object.values(valRes.errors)[0];
+          throw new Error(`${s.full_name}: ${firstErr}`);
+        }
+
         base.imc = calcImc(base.weight_kg, base.height_cm);
         base.rce = calcRce(base.waist_cm, base.height_cm);
         base.classifications = classifyAll({
-          sex: s.sex, age,
+          sex: s.sex, age, age_months: ageMonths,
           weight_kg: base.weight_kg, height_cm: base.height_cm,
           waist_cm: base.waist_cm, hip_cm: base.hip_cm,
           sit_and_reach_cm: base.sit_and_reach_cm,
@@ -390,20 +417,21 @@ function EvaluationDialog({
 
       onClose();
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Erro"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Erro ao salvar avaliação"),
   });
 
   // Preview de classificação (single)
   const preview = useMemo(() => {
     const s = students.find((x) => x.id === singleId);
     if (!s || mode !== "single") return null;
-    const age = ageFromBirth(s.birth_date, new Date(evaluatedAt));
+    const age = ageInYears(s.birth_date, evaluatedAt);
+    const ageMonths = ageInMonths(s.birth_date, evaluatedAt);
     const n = (k: FieldKey) => {
       const v = values[k]; if (!v) return null;
       const p = parseFloat(v.replace(",", ".")); return isNaN(p) ? null : p;
     };
     return classifyAll({
-      sex: s.sex, age,
+      sex: s.sex, age, age_months: ageMonths,
       weight_kg: n("weight_kg"), height_cm: n("height_cm"),
       waist_cm: n("waist_cm"), hip_cm: n("hip_cm"),
       sit_and_reach_cm: n("sit_and_reach_cm"), abdominal_reps: n("abdominal_reps"),
@@ -447,6 +475,13 @@ function EvaluationDialog({
             )}
           </div>
 
+          {mode === "single" && selectedStudentAge != null && !isAgeInProespRange(selectedStudentAge) && (
+            <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">
+              <p className="font-semibold">Faixa etária ({selectedStudentAge} anos):</p>
+              <p>{PROESP_AGE_WARNING}</p>
+            </div>
+          )}
+
           {mode === "batch" && (
             <div className="max-h-48 overflow-auto rounded-lg border border-border p-2">
               <div className="mb-2 flex gap-2">
@@ -468,30 +503,51 @@ function EvaluationDialog({
           )}
 
           <div className="grid gap-3 sm:grid-cols-3">
-            {FIELDS.map((f) => (
-              <div key={f.key} className={cn("space-y-1.5", f.key === "run_6min_m" && "sm:col-span-2")}>
-                <Label className="text-xs">
-                  {f.label} <span className="text-muted-foreground">({f.unit})</span>
-                </Label>
-                {f.key === "run_6min_m" ? (
-                  <Run6MinInput
-                    value={values[f.key] ?? ""}
-                    onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))}
-                  />
-                ) : (
-                  <Input
-                    type="number" step={f.step ?? "1"} inputMode="decimal"
-                    value={values[f.key] ?? ""}
-                    onChange={(e) => setValues((p) => ({ ...p, [f.key]: e.target.value }))}
-                  />
-                )}
-                {mode === "single" && preview?.[mapKey(f.key)] && (
-                  <span className={cn("inline-block rounded-full border px-1.5 py-0.5 text-[10px]", zoneColor(preview[mapKey(f.key)]))}>
-                    {preview[mapKey(f.key)]}
-                  </span>
-                )}
-              </div>
-            ))}
+            {FIELDS.map((f) => {
+              const valResult = validateField(f.key, values[f.key]);
+              return (
+                <div key={f.key} className={cn("space-y-1.5", f.key === "run_6min_m" && "sm:col-span-2")}>
+                  <Label className="text-xs">
+                    {f.label} <span className="text-muted-foreground">({f.unit})</span>
+                  </Label>
+                  {f.key === "run_6min_m" ? (
+                    <Run6MinInput
+                      value={values[f.key] ?? ""}
+                      onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))}
+                    />
+                  ) : (
+                    <Input
+                      type="number" step={f.step ?? "1"} inputMode="decimal"
+                      value={values[f.key] ?? ""}
+                      onChange={(e) => setValues((p) => ({ ...p, [f.key]: e.target.value }))}
+                      onBlur={() => {
+                        if (f.key === "height_cm" && values[f.key]) {
+                          const hRes = normalizeHeight(values[f.key]);
+                          if (hRes.convertedFromMeters && hRes.normalized != null) {
+                            setValues((p) => ({ ...p, height_cm: String(hRes.normalized) }));
+                            toast.info(`Altura convertida para ${hRes.normalized} cm`);
+                          }
+                        }
+                      }}
+                      className={cn(
+                        valResult.severity === "error" && "border-destructive focus-visible:ring-destructive",
+                        valResult.severity === "warning" && "border-warning focus-visible:ring-warning",
+                      )}
+                    />
+                  )}
+                  {valResult.message && (
+                    <p className={cn("text-[10px]", valResult.severity === "error" ? "text-destructive font-medium" : "text-warning")}>
+                      {valResult.message}
+                    </p>
+                  )}
+                  {mode === "single" && preview?.[mapKey(f.key)] && (
+                    <span className={cn("inline-block rounded-full border px-1.5 py-0.5 text-[10px]", zoneColor(preview[mapKey(f.key)]))}>
+                      {preview[mapKey(f.key)]}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="space-y-1.5">
@@ -528,6 +584,8 @@ function EvaluationDetail({
   const qc = useQueryClient();
   const navigate = useNavigate();
   const aiFn = useServerFn(generateDiagnosis);
+  const [activeTab, setActiveTab] = useState<"diagnosis" | "technical" | "family" | "goals">("diagnosis");
+  const [copied, setCopied] = useState(false);
 
   const detail = useQuery({
     queryKey: ["evaluation", id],
@@ -564,7 +622,7 @@ function EvaluationDetail({
       }
     },
     onSuccess: () => {
-      toast.success("Diagnóstico gerado");
+      toast.success("Diagnóstico gerado pelo Modelo ProMetric®");
       qc.invalidateQueries({ queryKey: ["evaluation", id] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Erro IA"),
@@ -572,6 +630,28 @@ function EvaluationDetail({
 
   const ev = detail.data;
   const overall = ev ? overallScore(ev.classifications ?? {}) : null;
+
+  const copyCurrentText = () => {
+    if (!ev) return;
+    let text = "";
+    if (activeTab === "diagnosis") text = ev.ai_diagnosis ?? "";
+    else if (activeTab === "technical") text = ev.ai_technical ?? ev.ai_diagnosis ?? "";
+    else if (activeTab === "family") text = ev.ai_family ?? ev.ai_diagnosis ?? "";
+    else if (activeTab === "goals") {
+      const g = ev.ai_goals;
+      if (g) {
+        text = `Metas 30 dias:\n${g["30_days"]?.join("\n") || "—"}\n\nMetas 60 dias:\n${g["60_days"]?.join("\n") || "—"}\n\nMetas 90 dias:\n${g["90_days"]?.join("\n") || "—"}`;
+      } else {
+        text = ev.ai_diagnosis ?? "";
+      }
+    }
+    if (text) {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success("Copiado para a área de transferência");
+    }
+  };
 
   return (
     <Dialog open onOpenChange={(b) => !b && onClose()}>
@@ -609,20 +689,130 @@ function EvaluationDetail({
               })}
             </div>
 
-            <div className="rounded-xl border border-border bg-gradient-card p-3">
-              <div className="mb-2 flex items-center justify-between">
+            <div className="rounded-xl border border-border bg-gradient-card p-3.5 shadow-soft">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 font-display text-sm font-semibold">
-                  <Brain className="h-4 w-4 text-accent" /> Diagnóstico (IA)
+                  <Brain className="h-4 w-4 text-accent" /> Diagnóstico e Pareceres (Modelo ProMetric®)
                 </div>
-                <Button size="sm" variant="outline" onClick={() => ai.mutate()} disabled={ai.isPending}>
-                  {ai.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  <span className="ml-1">{ev.ai_diagnosis ? "Regenerar" : "Gerar"}</span>
-                </Button>
+                <div className="flex items-center gap-2">
+                  {(ev.ai_diagnosis || ev.ai_technical || ev.ai_family) && (
+                    <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={copyCurrentText}>
+                      <span className="text-xs">{copied ? "✓ Copiado" : "Copiar"}</span>
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => ai.mutate()} disabled={ai.isPending}>
+                    {ai.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    <span className="ml-1">{ev.ai_diagnosis ? "Regenerar" : "Gerar com IA / Especialista"}</span>
+                  </Button>
+                </div>
               </div>
-              {ev.ai_diagnosis ? (
-                <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{ev.ai_diagnosis}</p>
+
+              {ev.ai_diagnosis || ev.ai_technical || ev.ai_family ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-1.5 border-b border-border/60 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("diagnosis")}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+                        activeTab === "diagnosis"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      Diagnóstico Geral
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("technical")}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+                        activeTab === "technical"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      Parecer Técnico (Coordenação)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("family")}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+                        activeTab === "family"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      Parecer para Família
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("goals")}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+                        activeTab === "goals"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      Metas 30/60/90d
+                    </button>
+                  </div>
+
+                  {activeTab === "diagnosis" && (
+                    <div className="rounded-lg bg-background/50 p-2.5">
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">{ev.ai_diagnosis}</p>
+                    </div>
+                  )}
+
+                  {activeTab === "technical" && (
+                    <div className="rounded-lg bg-background/50 p-2.5">
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
+                        {ev.ai_technical || ev.ai_diagnosis || "Parecer técnico não gerado nesta avaliação. Clique em Regenerar."}
+                      </p>
+                    </div>
+                  )}
+
+                  {activeTab === "family" && (
+                    <div className="rounded-lg bg-background/50 p-2.5">
+                      <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/90">
+                        {ev.ai_family || ev.ai_diagnosis || "Parecer para a família não gerado nesta avaliação. Clique em Regenerar."}
+                      </p>
+                    </div>
+                  )}
+
+                  {activeTab === "goals" && (
+                    <div className="space-y-2 rounded-lg bg-background/50 p-2.5 text-xs">
+                      {ev.ai_goals ? (
+                        <>
+                          <div>
+                            <div className="font-semibold text-primary">Plano 30 dias</div>
+                            <ul className="ml-4 list-disc space-y-0.5 text-muted-foreground">
+                              {ev.ai_goals["30_days"]?.map((g: string, i: number) => <li key={i}>{g}</li>)}
+                            </ul>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-primary">Plano 60 dias</div>
+                            <ul className="ml-4 list-disc space-y-0.5 text-muted-foreground">
+                              {ev.ai_goals["60_days"]?.map((g: string, i: number) => <li key={i}>{g}</li>)}
+                            </ul>
+                          </div>
+                          <div>
+                            <div className="font-semibold text-primary">Plano 90 dias</div>
+                            <ul className="ml-4 list-disc space-y-0.5 text-muted-foreground">
+                              {ev.ai_goals["90_days"]?.map((g: string, i: number) => <li key={i}>{g}</li>)}
+                            </ul>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-muted-foreground">Metas estruturadas disponíveis ao clicar em Regenerar.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Gere um diagnóstico técnico personalizado com base nos resultados.</p>
+                <p className="text-xs text-muted-foreground">Gere pareceres técnicos e orientações para os pais com base na metodologia ProMetric®.</p>
               )}
             </div>
 

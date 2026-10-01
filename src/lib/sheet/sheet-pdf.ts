@@ -5,18 +5,14 @@
 import { jsPDF } from "jspdf";
 import QRCode from "qrcode";
 import type { SheetBundle, SheetStudent } from "./sheet.functions";
+import { ageInYears } from "../age";
 
 const PAGE_W = 210; // A4 mm
 const PAGE_H = 297;
 const MARGIN = 12;
 
 function ageFromBirth(birth: string): number {
-  const b = new Date(birth);
-  const n = new Date();
-  let a = n.getFullYear() - b.getFullYear();
-  const m = n.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--;
-  return a;
+  return ageInYears(birth);
 }
 
 async function toDataURL(url: string): Promise<string | null> {

@@ -1,7 +1,10 @@
-// PROESP-BR – Cálculos e classificações simplificadas.
-// Tabelas referenciais para idades 6–17 anos. Valores embutidos com base nos
-// pontos de corte públicos do PROESP-BR (versão simplificada – podem ser
-// ajustados pela coordenação técnica).
+import { IMC_BAND_TO_ZONE, imcBand, imcCutsForAge } from "./imc-reference";
+import { ageInYears, ageInMonths } from "./age";
+import { PROESP_MIN_AGE, PROESP_MAX_AGE, PROESP_AGE_WARNING } from "./validation";
+export { ageInYears, ageInMonths, PROESP_MIN_AGE, PROESP_MAX_AGE, PROESP_AGE_WARNING };
+// PROESP-BR – Cálculos e classificações do sistema ProMetric.
+// Tabelas referenciais motoras para idades 6–17 anos baseadas nos pontos de corte do PROESP-BR.
+// Classificação de IMC baseada nas curvas da OMS 2007 (5–19 anos) e critérios do Manual SBP nº 64 (2023).
 
 export type Sex = "male" | "female";
 export type Zone = "Muito Fraco" | "Fraco" | "Razoável" | "Bom" | "Muito Bom" | "Excelente";
@@ -22,9 +25,7 @@ export function zoneColor(z: Zone | null | undefined) {
 }
 
 export function ageFromBirth(birth: string, ref = new Date()): number {
-  const b = new Date(birth);
-  const d = ref.getTime() - b.getTime();
-  return Math.max(0, Math.floor(d / (365.25 * 24 * 3600 * 1000)));
+  return ageInYears(birth, ref);
 }
 
 export function calcImc(weightKg?: number | null, heightCm?: number | null): number | null {
@@ -38,28 +39,21 @@ export function calcRce(waistCm?: number | null, heightCm?: number | null): numb
   return +(waistCm / heightCm).toFixed(3);
 }
 
-// IMC zonas (saúde): <Baixo peso | Saudável | Sobrepeso | Obesidade>
-export function imcZone(imc: number | null, age: number, sex: Sex): Zone | null {
+// IMC zonas (saúde) — referência OMS 2007 (5–19 anos) por idade e sexo, critério SBP (Manual nº 64/2023):
+// < P3 magreza · P3–P85 eutrofia · > P85–P97 sobrepeso · > P97 obesidade. Adultos (20+): faixas de adulto.
+// `ageMonths` (opcional) usa a idade exata em meses; sem ele, a idade em anos inteiros vale como meio do ano.
+export function imcZone(imc: number | null, age: number, sex: Sex, ageMonths?: number): Zone | null {
   if (imc == null) return null;
-  // Faixas simplificadas baseadas em CDC/IOTF para 6-17.
-  // Adulto: <18.5 baixo; 18.5-24.9 saudável; 25-29.9 sobrepeso; ≥30 obeso.
-  if (age >= 18) {
+  if (age >= 20) {
     if (imc < 16) return "Muito Fraco";
     if (imc < 18.5) return "Fraco";
     if (imc < 25) return "Excelente";
     if (imc < 30) return "Razoável";
     return "Muito Fraco";
   }
-  // Crianças/jovens – aproximação
-  const base = sex === "male"
-    ? [14, 15.5, 22.5, 25, 28]
-    : [13.5, 15, 22.5, 25.5, 28.5];
-  if (imc < base[0]) return "Muito Fraco";
-  if (imc < base[1]) return "Fraco";
-  if (imc < base[2]) return "Excelente";
-  if (imc < base[3]) return "Razoável";
-  if (imc < base[4]) return "Fraco";
-  return "Muito Fraco";
+  if (age < 5) return null; // sem referência nesta tabela (OMS usa outras curvas de 0 a 5 anos)
+  const months = ageMonths ?? age * 12 + 6;
+  return IMC_BAND_TO_ZONE[imcBand(imc, sex, months)];
 }
 
 export function rceZone(rce: number | null): Zone | null {
@@ -96,9 +90,9 @@ function classifyLower(val: number, cuts: [number, number, number, number, numbe
 }
 
 function pickCut(table: SexCuts, sex: Sex, age: number): [number, number, number, number, number] | null {
+  if (age < PROESP_MIN_AGE || age > PROESP_MAX_AGE) return null;
   const t = table[sex];
-  const a = Math.max(6, Math.min(17, age));
-  return (t[a] ?? t[Math.min(...Object.keys(t).map(Number))]) ?? null;
+  return t[age] ?? null;
 }
 
 // ----- Flexibilidade (sentar e alcançar, cm) – MAIOR melhor -----
@@ -215,6 +209,7 @@ const RUN6: SexCuts = {
 
 export type EvaluationInput = {
   sex: Sex; age: number;
+  age_months?: number | null;
   weight_kg?: number | null; height_cm?: number | null;
   waist_cm?: number | null; hip_cm?: number | null;
   sit_and_reach_cm?: number | null;
@@ -258,7 +253,7 @@ export function classifyAll(e: EvaluationInput): Classifications {
   const imc = calcImc(e.weight_kg, e.height_cm);
   const rce = calcRce(e.waist_cm, e.height_cm);
   return {
-    imc:    imcZone(imc, e.age, e.sex) ?? undefined,
+    imc:    imcZone(imc, e.age, e.sex, e.age_months ?? undefined) ?? undefined,
     rce:    rceZone(rce) ?? undefined,
     flex:   classifyHigherTable(e.sit_and_reach_cm, FLEX, e.sex, e.age) ?? undefined,
     abdo:   classifyHigherTable(e.abdominal_reps, ABDO, e.sex, e.age) ?? undefined,
@@ -324,15 +319,16 @@ export function expectedRangeFor(
   sex: Sex,
 ): ExpectedRange | null {
   if (key === "imc") {
-    if (age >= 18) return { min: 18.5, max: 24.9, domainMin: 14, domainMax: 32, higherBetter: false };
-    const base = sex === "male" ? [15.5, 22.5] : [15, 22.5];
-    return { min: base[0], max: base[1], domainMin: 12, domainMax: 30, higherBetter: false };
+    if (age < 5) return null;
+    if (age >= 20) return { min: 18.5, max: 24.9, domainMin: 14, domainMax: 32, higherBetter: false };
+    const [p3, , , p85] = imcCutsForAge(sex, age * 12 + 6);
+    return { min: +p3.toFixed(1), max: +p85.toFixed(1), domainMin: 12, domainMax: 32, higherBetter: false };
   }
   if (key === "rce") {
     return { min: 0.40, max: 0.50, domainMin: 0.30, domainMax: 0.70, higherBetter: false };
   }
   const table = TABLE_BY_KEY[key as Exclude<ClassificationKey, "imc" | "rce">];
-  const cuts = pickCut(table, sex, Math.floor(Math.max(6, Math.min(17, age))));
+  const cuts = pickCut(table, sex, Math.floor(age));
   if (!cuts) return null;
   const higherBetter = !(key === "square" || key === "sprint");
   const min = Math.min(cuts[1], cuts[4]);
@@ -342,4 +338,3 @@ export function expectedRangeFor(
   const pad = (hi - lo) * 0.15;
   return { min, max, domainMin: lo - pad, domainMax: hi + pad, higherBetter };
 }
-

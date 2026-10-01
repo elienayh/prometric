@@ -1,11 +1,13 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { TEST_META, ZONES, type Classifications, type Zone, overallScore } from "./proesp";
+import { TEST_META, ZONES, type Classifications, type Zone, type Sex, overallScore } from "./proesp";
+import { imcBand, imcAdultBand, IMC_BAND_LABEL, IMC_CLINICAL_DISCLAIMER } from "./imc-reference";
 
 export type ReportEval = {
   id: string;
   evaluated_at: string;
   age_years: number | null;
+  age_months?: number | null;
   weight_kg: number | null; height_cm: number | null;
   waist_cm: number | null; hip_cm: number | null; wingspan_cm: number | null;
   imc: number | null; rce: number | null;
@@ -18,6 +20,9 @@ export type ReportEval = {
   run_6min_m: number | null;
   classifications: Classifications;
   ai_diagnosis: string | null;
+  ai_technical?: string | null;
+  ai_family?: string | null;
+  ai_goals?: { "30_days": string[]; "60_days": string[]; "90_days": string[] } | null;
   notes: string | null;
   student: { full_name: string; sex: string; birth_date: string };
 };
@@ -44,23 +49,33 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
   doc.setFont("helvetica", "normal").setFontSize(10);
   doc.setTextColor(80);
   const sexLabel = ev.student.sex === "male" ? "Masculino" : "Feminino";
+  const ageLabel = ev.age_years != null ? `${ev.age_years} anos${ev.age_months ? ` (${ev.age_months} meses)` : ""}` : "—";
   doc.text(
-    `Sexo: ${sexLabel}  •  Idade: ${ev.age_years ?? "—"} anos  •  Data: ${new Date(ev.evaluated_at).toLocaleDateString("pt-BR")}`,
+    `Sexo: ${sexLabel}  •  Idade: ${ageLabel}  •  Data: ${new Date(ev.evaluated_at).toLocaleDateString("pt-BR")}`,
     12, 42,
   );
+
+  let imcText = "—";
+  if (ev.imc != null) {
+    const age = ev.age_years ?? 10;
+    const months = ev.age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    const band = age >= 20 ? imcAdultBand(ev.imc) : imcBand(ev.imc, (ev.student.sex === "male" ? "male" : "female") as Sex, months);
+    const label = IMC_BAND_LABEL[band];
+    imcText = `${ev.imc.toFixed(1)} kg/m² (${label} — OMS 2007)`;
+  }
 
   // Antropometria
   autoTable(doc, {
     startY: 50,
     head: [["Antropometria", "Valor"]],
     body: [
-      ["Peso (kg)", ev.weight_kg ?? "—"],
-      ["Estatura (cm)", ev.height_cm ?? "—"],
-      ["Envergadura (cm)", ev.wingspan_cm ?? "—"],
-      ["Cintura (cm)", ev.waist_cm ?? "—"],
-      ["Quadril (cm)", ev.hip_cm ?? "—"],
-      ["IMC", ev.imc ?? "—"],
-      ["RCE", ev.rce ?? "—"],
+      ["Peso (kg)", ev.weight_kg != null ? `${ev.weight_kg} kg` : "—"],
+      ["Estatura (cm)", ev.height_cm != null ? `${ev.height_cm} cm` : "—"],
+      ["Envergadura (cm)", ev.wingspan_cm != null ? `${ev.wingspan_cm} cm` : "—"],
+      ["Cintura (cm)", ev.waist_cm != null ? `${ev.waist_cm} cm` : "—"],
+      ["Quadril (cm)", ev.hip_cm != null ? `${ev.hip_cm} cm` : "—"],
+      ["IMC", imcText],
+      ["RCE", ev.rce != null ? ev.rce.toFixed(2) : "—"],
     ],
     theme: "striped",
     headStyles: { fillColor: PRIMARY, textColor: 255, fontStyle: "bold" },
@@ -118,12 +133,16 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
 
   // Footer
   const PH = doc.internal.pageSize.getHeight();
-  doc.setFontSize(8).setTextColor(140);
+  doc.setFontSize(7.5).setTextColor(130);
   doc.text(
-    `Gerado por ProMetric em ${new Date().toLocaleString("pt-BR")} • Classificações com base em Método ProMetric® (referenciais).`,
-    12, PH - 12,
+    `Gerado por ProMetric em ${new Date().toLocaleString("pt-BR")} • Modelo ProMetric® • Antropometria conforme OMS 2007 e SBP (Manual nº 64/2023).`,
+    12, PH - 11,
   );
-  doc.text("Consulte a Central de Conhecimento em ProMetric → Central de Conhecimento para entender cálculos e classificações.", 12, PH - 7);
+  doc.setFontSize(7).setTextColor(150);
+  doc.text(
+    `Nota clínica: ${IMC_CLINICAL_DISCLAIMER}`,
+    12, PH - 6,
+  );
 
   doc.save(`avaliacao-${ev.student.full_name.replace(/\s+/g, "_")}-${ev.evaluated_at}.pdf`);
 }
@@ -453,17 +472,26 @@ export function generateEvaluationPDFComplete(
   // ---------- Página 2 — Antropometria + Testes ----------
   doc.addPage();
   header(doc, "Antropometria e Testes Físicos", ev.student.full_name, BR, logo);
+  let imcReportText = "—";
+  if (ev.imc != null) {
+    const age = ev.age_years ?? 10;
+    const months = ev.age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    const band = age >= 20 ? imcAdultBand(ev.imc) : imcBand(ev.imc, (ev.student.sex === "male" ? "male" : "female") as Sex, months);
+    const label = IMC_BAND_LABEL[band];
+    imcReportText = `${ev.imc.toFixed(1)} kg/m² (${label} — OMS 2007)`;
+  }
+
   autoTable(doc, {
     startY: 28,
     head: [["Antropometria", "Valor"]],
     body: [
-      ["Peso (kg)", ev.weight_kg ?? "—"],
-      ["Estatura (cm)", ev.height_cm ?? "—"],
-      ["Envergadura (cm)", ev.wingspan_cm ?? "—"],
-      ["Cintura (cm)", ev.waist_cm ?? "—"],
-      ["Quadril (cm)", ev.hip_cm ?? "—"],
-      ["IMC", ev.imc ?? "—"],
-      ["RCE", ev.rce ?? "—"],
+      ["Peso (kg)", ev.weight_kg != null ? `${ev.weight_kg} kg` : "—"],
+      ["Estatura (cm)", ev.height_cm != null ? `${ev.height_cm} cm` : "—"],
+      ["Envergadura (cm)", ev.wingspan_cm != null ? `${ev.wingspan_cm} cm` : "—"],
+      ["Cintura (cm)", ev.waist_cm != null ? `${ev.waist_cm} cm` : "—"],
+      ["Quadril (cm)", ev.hip_cm != null ? `${ev.hip_cm} cm` : "—"],
+      ["IMC", imcReportText],
+      ["RCE", ev.rce != null ? ev.rce.toFixed(2) : "—"],
     ],
     theme: "striped",
     headStyles: { fillColor: BR, textColor: 255, fontStyle: "bold" },
@@ -485,6 +513,15 @@ export function generateEvaluationPDFComplete(
     styles: { fontSize: 9 },
     margin: { left: 12, right: 12 },
   });
+
+  const finalYPage2 = (doc as any).lastAutoTable.finalY;
+  doc.setFontSize(7).setTextColor(130);
+  doc.text(
+    `Antropometria: Curvas de IMC da OMS 2007 (5–19 anos) e Sociedade Brasileira de Pediatria (Manual nº 64/2023). ${IMC_CLINICAL_DISCLAIMER}`,
+    12,
+    Math.min(PH - 20, finalYPage2 + 6),
+    { maxWidth: W - 24 }
+  );
 
   // ---------- Página 3 — Perfil Físico / Radar completo ----------
   doc.addPage();

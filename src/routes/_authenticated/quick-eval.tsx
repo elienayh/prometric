@@ -12,6 +12,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTenant } from "@/hooks/use-tenant";
 import { PageHeader, EmptyState } from "@/components/layout/page-header";
 import { ageFromBirth, calcImc, calcRce, classifyAll, type Sex } from "@/lib/proesp";
+import { ageInYears, ageInMonths } from "@/lib/age";
+import {
+  validateField, validateEvaluation, normalizeHeight,
+  isAgeInProespRange, PROESP_AGE_WARNING,
+} from "@/lib/validation";
 import { cn } from "@/lib/utils";
 import { Run6MinInput } from "@/components/evaluations/run6min-input";
 
@@ -344,20 +349,35 @@ function buildEvaluationPayload(
   values: Partial<Record<FieldKey, number | null>>,
   existing?: Record<string, unknown> | null,
 ) {
-  const age = ageFromBirth(student.birth_date, new Date(date));
+  const age = ageInYears(student.birth_date, date);
+  const ageMonths = ageInMonths(student.birth_date, date);
   const payload: Record<string, unknown> = {
-    tenant_id: tenantId, student_id: student.id, evaluated_at: date, age_years: age,
+    tenant_id: tenantId, student_id: student.id, evaluated_at: date,
+    age_years: age,
+    age_months: ageMonths,
   };
   // Merge with existing values (so saving one field doesn't wipe others)
   for (const f of FIELDS) {
-    const next = values[f.key];
+    let next = values[f.key];
+    if (f.key === "height_cm" && next != null) {
+      const hNorm = normalizeHeight(next);
+      if (hNorm.normalized != null) next = hNorm.normalized;
+    }
     const prev = existing ? (existing[f.key] as number | null | undefined) : undefined;
     payload[f.key] = next !== undefined ? next : (prev ?? null);
   }
+
+  // Validação estrita de integridade fisiológica
+  const valRes = validateEvaluation(payload, age);
+  if (valRes.hasBlockingErrors) {
+    const firstErr = Object.values(valRes.errors)[0];
+    throw new Error(firstErr);
+  }
+
   payload.imc = calcImc(payload.weight_kg as number | null, payload.height_cm as number | null);
   payload.rce = calcRce(payload.waist_cm as number | null, payload.height_cm as number | null);
   payload.classifications = classifyAll({
-    sex: student.sex, age,
+    sex: student.sex, age, age_months: ageMonths,
     weight_kg: payload.weight_kg as number | null, height_cm: payload.height_cm as number | null,
     waist_cm: payload.waist_cm as number | null,
     sit_and_reach_cm: payload.sit_and_reach_cm as number | null,
@@ -416,13 +436,32 @@ function StationMode({ scope, tenantId }: { scope: Scope; tenantId: string }) {
 
   const persist = (student: StudentLite, raw: string) => {
     const sid = student.id;
+    if (raw && raw.trim() !== "") {
+      const vRes = validateField(field, raw);
+      if (!vRes.valid) {
+        toast.error(`${student.full_name}: ${vRes.message}`);
+        return;
+      }
+      if (vRes.severity === "warning" && vRes.message) {
+        toast.warning(`${student.full_name}: ${vRes.message}`);
+      }
+    }
+
     setSaving((p) => ({ ...p, [sid]: "pending" }));
     clearTimeout(timers.current[sid]);
     timers.current[sid] = setTimeout(async () => {
       try {
+        let valToSave = parseNum(raw);
+        if (field === "height_cm" && valToSave != null) {
+          const hNorm = normalizeHeight(valToSave);
+          if (hNorm.convertedFromMeters && hNorm.normalized != null) {
+            valToSave = hNorm.normalized;
+            setValues((p) => ({ ...p, [sid]: String(hNorm.normalized) }));
+          }
+        }
         const payload = buildEvaluationPayload(
           student, tenantId, date,
-          { [field]: parseNum(raw) } as Partial<Record<FieldKey, number | null>>,
+          { [field]: valToSave } as Partial<Record<FieldKey, number | null>>,
           evalByStudent[sid] ?? null,
         );
         const { error } = await supabase.from("evaluations").upsert(payload as never, { onConflict: "student_id,evaluated_at" });
@@ -810,27 +849,55 @@ function StudentEvalForm({
           </div>
         )}
 
+        {!isAgeInProespRange(ageInYears(student.birth_date, formDate)) && (
+          <div className="mb-3 rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">
+            <p className="font-semibold">Faixa etária ({ageInYears(student.birth_date, formDate)} anos):</p>
+            <p>{PROESP_AGE_WARNING}</p>
+          </div>
+        )}
+
         <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {FIELDS.map((f) => (
-              <div key={f.key} className={cn("space-y-1", f.key === "run_6min_m" && "col-span-2 sm:col-span-3")}>
-                <Label className="text-[11px] font-medium">{f.label}<span className="ml-1 text-muted-foreground">({f.unit})</span></Label>
-                {f.key === "run_6min_m" ? (
-                  <Run6MinInput
-                    compact
-                    value={values[f.key] ?? ""}
-                    onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))}
-                  />
-                ) : (
-                  <Input
-                    type="number" step={f.step ?? "1"} inputMode="decimal"
-                    value={values[f.key] ?? ""}
-                    onChange={(ev) => setValues((p) => ({ ...p, [f.key]: ev.target.value }))}
-                    className="h-11 text-base"
-                  />
-                )}
-              </div>
-            ))}
+            {FIELDS.map((f) => {
+              const valRes = validateField(f.key, values[f.key]);
+              return (
+                <div key={f.key} className={cn("space-y-1", f.key === "run_6min_m" && "col-span-2 sm:col-span-3")}>
+                  <Label className="text-[11px] font-medium">{f.label}<span className="ml-1 text-muted-foreground">({f.unit})</span></Label>
+                  {f.key === "run_6min_m" ? (
+                    <Run6MinInput
+                      compact
+                      value={values[f.key] ?? ""}
+                      onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))}
+                    />
+                  ) : (
+                    <Input
+                      type="number" step={f.step ?? "1"} inputMode="decimal"
+                      value={values[f.key] ?? ""}
+                      onChange={(ev) => setValues((p) => ({ ...p, [f.key]: ev.target.value }))}
+                      onBlur={() => {
+                        if (f.key === "height_cm" && values[f.key]) {
+                          const hRes = normalizeHeight(values[f.key]);
+                          if (hRes.convertedFromMeters && hRes.normalized != null) {
+                            setValues((p) => ({ ...p, height_cm: String(hRes.normalized) }));
+                            toast.info(`Altura convertida para ${hRes.normalized} cm`);
+                          }
+                        }
+                      }}
+                      className={cn(
+                        "h-11 text-base",
+                        valRes.severity === "error" && "border-destructive focus-visible:ring-destructive",
+                        valRes.severity === "warning" && "border-warning focus-visible:ring-warning",
+                      )}
+                    />
+                  )}
+                  {valRes.message && (
+                    <p className={cn("text-[10px]", valRes.severity === "error" ? "text-destructive font-medium" : "text-warning")}>
+                      {valRes.message}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex gap-2 pt-2">
@@ -899,7 +966,16 @@ function SpreadsheetMode({ scope, tenantId }: { scope: Scope; tenantId: string }
       try {
         const v = cells[sid] ?? {};
         const numeric: Partial<Record<FieldKey, number | null>> = {};
-        for (const f of FIELDS) numeric[f.key] = parseNum(v[f.key]);
+        for (const f of FIELDS) {
+          let val = parseNum(v[f.key]);
+          if (f.key === "height_cm" && val != null) {
+            const hNorm = normalizeHeight(val);
+            if (hNorm.convertedFromMeters && hNorm.normalized != null) {
+              val = hNorm.normalized;
+            }
+          }
+          numeric[f.key] = val;
+        }
         const payload = buildEvaluationPayload(student, tenantId, date, numeric, existingByStudent[sid] ?? null);
         const { error } = await supabase.from("evaluations").upsert(payload as never, { onConflict: "student_id,evaluated_at" });
         if (error) throw error;

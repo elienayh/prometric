@@ -11,6 +11,8 @@ import {
   type PMCategory,
 } from "@/lib/prometric-method";
 import { TEST_META, type ClassificationKey, type Zone } from "@/lib/proesp";
+import { ageInYears } from "@/lib/age";
+import { imcBand, imcAdultBand, IMC_BAND_LABEL, IMC_CLINICAL_DISCLAIMER } from "@/lib/imc-reference";
 
 export type StudentReportData = {
   id?: string;
@@ -82,9 +84,7 @@ export function buildDeterministicStudentReport(
   // Idade atual ou na última avaliação
   const currentAge = lastEval.age_years ?? (() => {
     if (!student.birth_date) return null;
-    const b = new Date(student.birth_date);
-    const d = new Date(lastEval.evaluated_at).getTime() - b.getTime();
-    return Math.max(0, Math.floor(d / (365.25 * 24 * 3600 * 1000)));
+    return ageInYears(student.birth_date, lastEval.evaluated_at);
   })();
 
   // Classificações consolidadas e Índice ProMetric atual
@@ -106,8 +106,11 @@ export function buildDeterministicStudentReport(
   if (lastEval.height_cm) antropoParts.push(`estatura de ${lastEval.height_cm} cm`);
   if (lastEval.weight_kg) antropoParts.push(`peso corporal de ${lastEval.weight_kg} kg`);
   if (lastEval.imc) {
-    const imcCat = zoneToCategory(consolidated.imc);
-    antropoParts.push(`IMC de ${lastEval.imc.toFixed(1)} kg/m²${imcCat ? ` (${imcCat})` : ""}`);
+    const age = lastEval.age_years ?? currentAge ?? 10;
+    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
+    const clinicalLabel = IMC_BAND_LABEL[band];
+    antropoParts.push(`IMC de ${lastEval.imc.toFixed(1)} kg/m² (${clinicalLabel} — OMS 2007)`);
   }
   if (lastEval.rce) {
     const rceCat = zoneToCategory(consolidated.rce);
@@ -211,7 +214,7 @@ export function buildDeterministicStudentReport(
         : "Os parâmetros motores mantiveram consistência ao longo das baterias de testes realizadas.",
       deltaIndex >= 0
         ? `A trajetória evolutiva reflete adaptação positiva aos estímulos motores e às práticas corporais propostas.`
-        : `A flutuação nos indicadores sugere a necessidade de reforçar a regularidade dos estímulos nas valências em declínio.`,
+        : `A flutuação nos indicadores sugere a necessidade de reforçar a frequência e constância dos estímulos nas valências em declínio.`,
     ].join(" ");
   }
 
@@ -250,7 +253,7 @@ export function buildDeterministicStudentReport(
       val: lastEval.medicine_ball_m,
       zone: consolidated.mball,
       category: zoneToCategory(consolidated.mball),
-      meaningGood: "ótimo recrutamento neuromuscular e transferência de força da cintura escapular",
+      meaningGood: "excelente recrutamento neuromuscular e transferência de força da cintura escapular",
       meaningWarn: "necessidade de fortalecimento da musculatura escapular e de membros superiores",
       rec: "Adicionar brincadeiras de arremessos com implementos leves, empurrar/puxar e apoios adaptados no solo.",
     },
@@ -321,12 +324,14 @@ export function buildDeterministicStudentReport(
     }
   }
 
-  // Verifica IMC se estiver saudável/excelente
+  // Verifica IMC se estiver eutrófico/saudável
   if (lastEval.imc != null) {
-    const imcCat = zoneToCategory(consolidated.imc);
-    if (imcCat === "Excelente" || imcCat === "Bom") {
+    const age = lastEval.age_years ?? currentAge ?? 10;
+    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
+    if (band === "eutrofia") {
       pontos_fortes.push(
-        `Composição Corporal (IMC ${lastEval.imc.toFixed(1)} kg/m²): Nível saudável e adequado para o desenvolvimento biológico na faixa etária.`
+        `Composição Corporal (IMC ${lastEval.imc.toFixed(1)} kg/m² — Eutrofia): Nível de massa corporal saudável e adequado para a faixa etária segundo os parâmetros da OMS 2007.`
       );
     }
   }
@@ -374,12 +379,14 @@ export function buildDeterministicStudentReport(
     }
   }
 
-  // Alerta antropométrico se houver
+  // Alerta antropométrico se houver desvio de eutrofia
   if (lastEval.imc != null) {
-    const imcCat = zoneToCategory(consolidated.imc);
-    if (imcCat === "Prioritário" || imcCat === "Atenção") {
+    const age = lastEval.age_years ?? currentAge ?? 10;
+    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
+    if (band === "sobrepeso" || band === "obesidade" || band === "magreza") {
       pontos_atencao.push(
-        `Índice de Massa Corporal (IMC ${lastEval.imc.toFixed(1)} kg/m²): Faixa classificada como '${imcCat}', recomendando-se monitoramento preventivo da composição corporal e estímulo a hábitos ativos.`
+        `Composição Corporal (IMC ${lastEval.imc.toFixed(1)} kg/m² — ${IMC_BAND_LABEL[band]}): Parâmetro OMS 2007 em faixa que demanda acompanhamento preventivo contínuo e incentivo ativo a práticas corporais saudáveis.`
       );
     }
   }
@@ -408,10 +415,19 @@ export function buildDeterministicStudentReport(
     }
   }
 
-  if (lastEval.imc != null && (zoneToCategory(consolidated.imc) === "Prioritário" || zoneToCategory(consolidated.imc) === "Atenção")) {
-    recomendacoes.push(
-      "Incentivar a ampliação do tempo diário em atividades físicas recreativas ativas (mínimo de 60 minutos diários) e redução do tempo sedentário de tela, em cooperação com a família."
-    );
+  if (lastEval.imc != null) {
+    const age = lastEval.age_years ?? currentAge ?? 10;
+    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
+    if (band === "sobrepeso" || band === "obesidade") {
+      recomendacoes.push(
+        "Incentivar a ampliação do tempo diário em atividades físicas recreativas ativas (mínimo de 60 minutos diários) e redução do tempo sedentário de tela, em cooperação com a família."
+      );
+    } else if (band === "magreza") {
+      recomendacoes.push(
+        "Orientar diálogo preventivo com a família e profissionais de saúde para adequação energética e acompanhamento do ganho saudável de peso."
+      );
+    }
   }
 
   if (recomendacoes.length < 3) {
@@ -435,7 +451,7 @@ export function buildDeterministicStudentReport(
       ? `um nível consistente e satisfatório de aptidão física geral (Índice ProMetric® de ${index.score}/100)`
       : `um perfil de desenvolvimento em construção, com Índice ProMetric® consolidado de ${index.score}/100`;
 
-  const conclusao = `${art} ${student.full_name} apresenta ${statusGeralTexto}. Os registros cronológicos armazenados no Método ProMetric® fornecem à coordenação pedagógica, aos professores e aos responsáveis subsídios objetivos para orientar as práticas de Educação Física de forma segura, motivadora e personalizada. A implementação contínua das orientações pedagógicas aqui estabelecidas promoverá tanto a consolidação dos pontos fortes quanto a superação das valências em desenvolvimento, contribuindo de forma decisiva para a saúde integral e o bem-estar do aluno.`;
+  const conclusao = `${art} ${student.full_name} apresenta ${statusGeralTexto}. Os registros cronológicos armazenados no Método ProMetric® fornecem à coordenação pedagógica, aos professores e aos responsáveis subsídios objetivos para orientar as práticas de Educação Física de forma segura, motivadora e personalizada. A implementação contínua das orientações pedagógicas aqui estabelecidas promoverá tanto a consolidação dos pontos fortes quanto a superação das valências em desenvolvimento, contribuindo de forma decisiva para a saúde integral e o bem-estar do aluno.\n\nNota técnica: ${IMC_CLINICAL_DISCLAIMER}`;
 
   return {
     resumo_geral,

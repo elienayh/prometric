@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { EmptyState } from "@/components/layout/page-header";
+import { ageInYears } from "@/lib/age";
 
 export const Route = createFileRoute("/_authenticated/classes/$id/")({
   head: () => ({ meta: [{ title: "Alunos da Turma — ProMetric" }] }),
@@ -21,12 +22,7 @@ type StudentRow = {
 };
 
 function ageFrom(birth: string) {
-  const b = new Date(birth);
-  const now = new Date();
-  let a = now.getFullYear() - b.getFullYear();
-  const m = now.getMonth() - b.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
-  return a;
+  return ageInYears(birth);
 }
 
 function ClassStudentsPage() {

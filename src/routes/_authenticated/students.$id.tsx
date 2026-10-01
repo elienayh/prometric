@@ -32,6 +32,9 @@ import {
   TEST_META, ageFromBirth, expectedRangeFor, overallScore, zoneColor, zoneScore,
   type Classifications, type ClassificationKey, type Zone,
 } from "@/lib/proesp";
+import { ageInYears, ageInMonths } from "@/lib/age";
+import { validateField, normalizeHeight } from "@/lib/validation";
+import { IMC_BAND_LABEL, imcBand, imcAdultBand, IMC_CLINICAL_DISCLAIMER } from "@/lib/imc-reference";
 import { prometricIndex, dimensionScores, categoryColor } from "@/lib/prometric-method";
 import { consolidatedClassifications, currentEvaluation, withConsolidatedView } from "@/lib/student-metrics";
 
@@ -249,7 +252,7 @@ function StudentDetail() {
           s
             ? [
                 s.sex === "male" ? "Masculino" : "Feminino",
-                `${ageFromBirth(s.birth_date)} anos`,
+                `${ageInYears(s.birth_date)} anos`,
                 s.class?.name,
                 s.class?.school?.name,
                 last ? `Última avaliação: ${new Date(last.evaluated_at).toLocaleDateString("pt-BR")}` : null,
@@ -479,6 +482,9 @@ function IndicatorsGrid({ last, first, data, sex, onSelectTest }: { last: EvalRo
           );
         })}
       </div>
+      <footer className="border-t border-border px-5 py-2.5 text-[11px] text-muted-foreground">
+        <p>{IMC_CLINICAL_DISCLAIMER}</p>
+      </footer>
     </section>
   );
 }
@@ -526,15 +532,34 @@ function ClinicalCard({
   const styles = STATUS_STYLE[status];
   const range = expectedRangeFor(ind.key, source.age_years ?? age, sex);
 
-  const rangeLabel = range
-    ? `${formatNumber(range.min, ind.unit)}–${formatNumber(range.max, ind.unit)}${ind.unit ? ` ${ind.unit}` : ""}`
-    : "—";
-
-  const interpretation =
+  let displayLabel = styles.label;
+  let displayInterpretation =
     status === "adequate"  ? "Dentro do esperado para idade e sexo."
     : status === "attention" ? "Abaixo do esperado — recomenda-se estímulo direcionado."
     : status === "critical" ? "Muito abaixo do esperado — atenção prioritária."
     : "Sem dado registrado nesta avaliação.";
+
+  if (ind.key === "imc") {
+    const evAge = source.age_years ?? age;
+    if (evAge < 5) {
+      displayLabel = "Sem referência";
+      displayInterpretation = "Sem referência OMS para menores de 5 anos.";
+    } else if (value != null) {
+      const months = (source as any).age_months ?? (evAge >= 20 ? 240 : evAge * 12 + 6);
+      const band = evAge >= 20 ? imcAdultBand(value) : imcBand(value, sex, months);
+      displayLabel = IMC_BAND_LABEL[band];
+      displayInterpretation =
+        band === "eutrofia" || band === "eutrofia_baixa"
+          ? "Eutrofia para idade e sexo. (IMC é triagem, não diagnóstico)"
+          : band === "magreza"
+          ? "IMC abaixo do percentil esperado. (IMC é triagem, não diagnóstico)"
+          : "IMC acima do percentil esperado. (IMC é triagem, não diagnóstico)";
+    }
+  }
+
+  const rangeLabel = range
+    ? `${formatNumber(range.min, ind.unit)}–${formatNumber(range.max, ind.unit)}${ind.unit ? ` ${ind.unit}` : ""}`
+    : "—";
 
   return (
     <button
@@ -590,8 +615,8 @@ function ClinicalCard({
       <div className="mt-3 flex items-start gap-2 border-t border-border pt-2.5">
         <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", styles.dot)} />
         <div className="min-w-0">
-          <div className={cn("text-[11px] font-semibold", styles.text)}>{styles.label}</div>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{interpretation}</p>
+          <div className={cn("text-[11px] font-semibold", styles.text)}>{displayLabel}</div>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{displayInterpretation}</p>
         </div>
       </div>
     </button>
@@ -687,6 +712,17 @@ function EvaluationDetailDialog({
             const status = zoneToClinical(zone);
             const styles = STATUS_STYLE[status];
             const range = expectedRangeFor(ind.key, age, sex);
+            let indLabel = styles.label;
+            if (ind.key === "imc") {
+              const evAge = ev.age_years ?? age;
+              if (evAge < 5) {
+                indLabel = "Sem referência";
+              } else if (value != null) {
+                const months = (ev as any).age_months ?? (evAge >= 20 ? 240 : evAge * 12 + 6);
+                const band = evAge >= 20 ? imcAdultBand(value) : imcBand(value, sex, months);
+                indLabel = IMC_BAND_LABEL[band];
+              }
+            }
             return (
               <button
                 key={ind.key}
@@ -698,7 +734,7 @@ function EvaluationDetailDialog({
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {ind.label}
                   </span>
-                  <span className={cn("text-[10px] font-semibold", styles.text)}>{styles.label}</span>
+                  <span className={cn("text-[10px] font-semibold", styles.text)}>{indLabel}</span>
                 </div>
                 <div className="mt-1 flex items-baseline gap-1.5">
                   <span className="font-display text-2xl font-bold tabular-nums">
@@ -735,7 +771,7 @@ function TestEvolutionDialog({
 }) {
   const ind = testKey ? INDICATORS.find((i) => i.key === testKey) ?? null : null;
   const rows = useMemo(() => {
-    if (!ind) return [] as { id: string; date: string; label: string; value: number | null; zone: Zone | undefined }[];
+    if (!ind) return [] as { id: string; date: string; label: string; value: number | null; zone: Zone | undefined; age_years?: number | null; age_months?: number | null }[];
     return data
       .filter((ev) => {
         const rec = ev.recorded_values;
@@ -751,6 +787,8 @@ function TestEvolutionDialog({
           label: new Date(ev.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }),
           value: v,
           zone: (ev.recorded_classifications ?? ev.classifications)?.[ind.key],
+          age_years: ev.age_years,
+          age_months: (ev as any).age_months,
         };
       });
   }, [data, ind]);
@@ -807,13 +845,24 @@ function TestEvolutionDialog({
           )}
           {[...rows].reverse().map((r) => {
             const styles = STATUS_STYLE[zoneToClinical(r.zone)];
+            let rowLabel = r.zone ?? styles.label;
+            if (ind.key === "imc" && r.value != null) {
+              const evAge = r.age_years ?? lastEv?.age_years ?? 0;
+              if (evAge < 5) {
+                rowLabel = "Sem referência";
+              } else {
+                const months = r.age_months ?? (evAge >= 20 ? 240 : evAge * 12 + 6);
+                const band = evAge >= 20 ? imcAdultBand(r.value) : imcBand(r.value, sex, months);
+                rowLabel = IMC_BAND_LABEL[band];
+              }
+            }
             return (
               <div key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
                 <span className="text-muted-foreground">{new Date(r.date).toLocaleDateString("pt-BR")}</span>
                 <span className="font-mono font-semibold tabular-nums">
                   {r.value != null ? formatNumber(r.value, ind.unit) : "—"} {ind.unit}
                 </span>
-                <span className={cn("text-[10px] font-semibold", styles.text)}>{r.zone ?? styles.label}</span>
+                <span className={cn("text-[10px] font-semibold", styles.text)}>{rowLabel}</span>
               </div>
             );
           })}
@@ -1822,18 +1871,45 @@ function QuickMeasureDialog({
 
   const save = async () => {
     if (!tenantId) { toast.error("Sem tenant"); return; }
-    const w = weight ? Number(weight) : null;
-    const h = height ? Number(height) : null;
-    const c = waist ? Number(waist) : null;
+    const parseVal = (s: string) => {
+      const n = parseFloat(s.replace(",", "."));
+      return isNaN(n) ? null : n;
+    };
+    const w = weight ? parseVal(weight) : null;
+    let h = height ? parseVal(height) : null;
+    const c = waist ? parseVal(waist) : null;
     if (w == null && h == null && c == null) { toast.error("Preencha ao menos um campo"); return; }
+
+    if (h != null) {
+      const hNorm = normalizeHeight(h);
+      if (hNorm.convertedFromMeters && hNorm.normalized != null) {
+        h = hNorm.normalized;
+      }
+    }
+
+    if (w != null) {
+      const v = validateField("weight_kg", w);
+      if (!v.valid) { toast.error(v.message); return; }
+    }
+    if (h != null) {
+      const v = validateField("height_cm", h);
+      if (!v.valid) { toast.error(v.message); return; }
+    }
+    if (c != null) {
+      const v = validateField("waist_cm", c);
+      if (!v.valid) { toast.error(v.message); return; }
+    }
+
     setSaving(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const age = ageFromBirth(student.birth_date, new Date(today));
+      const age = ageInYears(student.birth_date, today);
+      const ageMonths = ageInMonths(student.birth_date, today);
       const imc = w && h ? +(w / Math.pow(h / 100, 2)).toFixed(2) : null;
       const rce = c && h ? +(c / h).toFixed(3) : null;
       const payload: Record<string, unknown> = {
-        tenant_id: tenantId, student_id: studentId, evaluated_at: today, age_years: age, sex: student.sex,
+        tenant_id: tenantId, student_id: studentId, evaluated_at: today,
+        age_years: age, age_months: ageMonths, sex: student.sex,
       };
       if (w != null) payload.weight_kg = w;
       if (h != null) payload.height_cm = h;
@@ -1869,7 +1945,20 @@ function QuickMeasureDialog({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Altura (cm)</Label>
-              <Input type="number" step="0.1" inputMode="decimal" value={height} onChange={(e) => setHeight(e.target.value)} />
+              <Input
+                type="number" step="0.1" inputMode="decimal"
+                value={height}
+                onChange={(e) => setHeight(e.target.value)}
+                onBlur={() => {
+                  if (height) {
+                    const hNorm = normalizeHeight(height);
+                    if (hNorm.convertedFromMeters && hNorm.normalized != null) {
+                      setHeight(String(hNorm.normalized));
+                      toast.info(`Altura convertida para ${hNorm.normalized} cm`);
+                    }
+                  }
+                }}
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Cintura (cm)</Label>
