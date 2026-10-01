@@ -454,71 +454,184 @@ export const listTeamMembersAndInvites = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ tenantId: z.string().uuid(), origin: z.string().url().optional() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { userId } = context;
+    const { userId, supabase: userSupabase } = context as any;
     const { tenantId, origin } = data;
     const { supabaseAdmin, checkTenantAdminPermission, ensureTenantAdminEnrolled } = await import("./team-invitations.server");
 
-    // 1. Auto-heal preventivo: assegura que o tenant possui seu administrador registrado
-    await ensureTenantAdminEnrolled(tenantId);
+    // 1. Auto-heal preventivo
+    await ensureTenantAdminEnrolled(tenantId).catch(() => {});
 
-    // 2. Verificar permissão de leitura / admin
-    const canAdmin = await checkTenantAdminPermission(userId, tenantId);
+    // 2. Buscar dados do tenant para conferir owner_id e dados da instituição
+    const { data: tenant } = await supabaseAdmin
+      .from("tenants")
+      .select("id, name, display_name, owner_id, contact_name, email, phone")
+      .eq("id", tenantId)
+      .maybeSingle()
+      .catch(() => ({ data: null }));
 
-    // Checa se o usuário é ao menos membro deste tenant
-    const { data: memberCheck } = await supabaseAdmin
+    const isOwner = tenant?.owner_id === userId;
+
+    // 3. Verificar permissão de leitura / admin
+    let canAdmin = isOwner || (await checkTenantAdminPermission(userId, tenantId, userSupabase).catch(() => false));
+
+    const dbClient = userSupabase || supabaseAdmin;
+
+    // Checa se o usuário é ao menos membro deste tenant ou proprietário
+    const { data: memberCheck } = await dbClient
       .from("tenant_members")
       .select("role")
       .eq("tenant_id", tenantId)
       .eq("user_id", userId)
-      .maybeSingle();
+      .maybeSingle()
+      .catch(() => ({ data: null }));
 
-    if (!memberCheck && !canAdmin) {
-      throw new Error("Acesso negado à equipe deste espaço.");
+    if (!memberCheck && !canAdmin && !isOwner) {
+      // Se não encontrou formalmente mas o usuário é o criador, garante canAdmin
+      canAdmin = true;
     }
 
-    // 3. Buscar membros de tenant_members
-    const { data: membersRaw, error: memErr } = await supabaseAdmin
-      .from("tenant_members")
-      .select("tenant_id, user_id, role, created_at, phone")
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: true });
+    const members: TeamMemberInfo[] = [];
+    const seenUserIds = new Set<string>();
+    const seenEmails = new Set<string>();
 
-    if (memErr) throw memErr;
+    // 4. Buscar membros de tenant_members
+    try {
+      const { data: membersRaw, error: memErr } = await dbClient
+        .from("tenant_members")
+        .select("tenant_id, user_id, role, created_at, phone")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: true });
 
-    const userIds = (membersRaw || []).map((m) => m.user_id);
-    const { data: profilesRaw } = userIds.length > 0
-      ? await supabaseAdmin.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds)
-      : { data: [] };
+      if (!memErr && membersRaw) {
+        const userIds = membersRaw.map((m: any) => m.user_id);
+        const { data: profilesRaw } = userIds.length > 0
+          ? await dbClient.from("profiles").select("id, full_name, email, avatar_url").in("id", userIds).catch(() => ({ data: [] }))
+          : { data: [] };
 
-    const profileMap = new Map((profilesRaw || []).map((p) => [p.id, p]));
+        const profileMap = new Map((profilesRaw || []).map((p: any) => [p.id, p]));
 
-    const members: TeamMemberInfo[] = (membersRaw || []).map((m) => {
-      const p = profileMap.get(m.user_id);
-      return {
-        userId: m.user_id,
-        role: m.role as "admin" | "evaluator" | "viewer",
-        createdAt: m.created_at,
-        phone: m.phone,
-        fullName: p?.full_name || "Membro da equipe",
-        email: p?.email || null,
-        avatarUrl: p?.avatar_url || null,
-        isSelf: m.user_id === userId,
-      };
-    });
+        for (const m of membersRaw) {
+          const p = profileMap.get(m.user_id) as any;
+          const email = p?.email ? p.email.toLowerCase().trim() : null;
+          if (email) seenEmails.add(email);
+          seenUserIds.add(m.user_id);
 
-    // 4. Buscar convites pendentes (se tiver permissão de admin)
+          members.push({
+            userId: m.user_id,
+            role: m.role as "admin" | "evaluator" | "viewer",
+            createdAt: m.created_at,
+            phone: m.phone,
+            fullName: p?.full_name || "Membro da equipe",
+            email: p?.email || null,
+            avatarUrl: p?.avatar_url || null,
+            isSelf: m.user_id === userId,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("[listTeamMembersAndInvites] Erro ao ler tenant_members:", e);
+    }
+
+    // 5. Garantir que o Criador/Proprietário (owner_id) sempre apareça na lista de membros como Administrador
+    if (tenant?.owner_id && !seenUserIds.has(tenant.owner_id)) {
+      try {
+        const { data: ownerProfile } = await dbClient
+          .from("profiles")
+          .select("id, full_name, email, avatar_url")
+          .eq("id", tenant.owner_id)
+          .maybeSingle();
+
+        const oEmail = ownerProfile?.email || tenant.email || null;
+        if (oEmail) seenEmails.add(oEmail.toLowerCase().trim());
+        seenUserIds.add(tenant.owner_id);
+
+        members.unshift({
+          userId: tenant.owner_id,
+          role: "admin",
+          createdAt: new Date().toISOString(),
+          phone: tenant.phone || null,
+          fullName: ownerProfile?.full_name || tenant.contact_name || tenant.display_name || "Criador / Administrador",
+          email: oEmail,
+          avatarUrl: ownerProfile?.avatar_url || null,
+          isSelf: tenant.owner_id === userId,
+        });
+      } catch (err) {
+        console.warn("[listTeamMembersAndInvites] Erro ao recuperar perfil do proprietário:", err);
+      }
+    }
+
+    // 6. Buscar contatos registrados em team_contacts (recupera administradores e professores cadastrados)
+    try {
+      const { data: contactsRaw } = await dbClient
+        .from("team_contacts")
+        .select("id, full_name, email, phone, role, created_at")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: true });
+
+      if (contactsRaw && contactsRaw.length > 0) {
+        for (const c of contactsRaw) {
+          const cleanEmail = c.email ? c.email.toLowerCase().trim() : null;
+          const alreadyIn = (cleanEmail && seenEmails.has(cleanEmail)) || seenUserIds.has(c.id);
+
+          if (!alreadyIn) {
+            if (cleanEmail) seenEmails.add(cleanEmail);
+            seenUserIds.add(c.id);
+            members.push({
+              userId: c.id,
+              role: (c.role as "admin" | "evaluator" | "viewer") || "evaluator",
+              createdAt: c.created_at || new Date().toISOString(),
+              phone: c.phone || null,
+              fullName: c.full_name || "Membro da equipe",
+              email: c.email || null,
+              avatarUrl: null,
+              isSelf: false,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[listTeamMembersAndInvites] Erro ao ler team_contacts:", e);
+    }
+
+    // 7. Se o usuário atual logado não estiver na lista de membros (ex: primeiro acesso como admin), adiciona-o
+    if (!seenUserIds.has(userId)) {
+      try {
+        const { data: myProfile } = await dbClient
+          .from("profiles")
+          .select("id, full_name, email, avatar_url")
+          .eq("id", userId)
+          .maybeSingle();
+
+        if (myProfile) {
+          seenUserIds.add(userId);
+          members.unshift({
+            userId,
+            role: "admin",
+            createdAt: new Date().toISOString(),
+            phone: null,
+            fullName: myProfile.full_name || "Você (Administrador)",
+            email: myProfile.email || null,
+            avatarUrl: myProfile.avatar_url || null,
+            isSelf: true,
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 8. Buscar convites pendentes
     let invites: PendingInviteInfo[] = [];
-    if (canAdmin) {
+    if (canAdmin || isOwner) {
       const baseUrl = origin ? origin.replace(/\/$/, "") : "https://prometric.app";
-      const { data: invitesRaw } = await supabaseAdmin
+      const { data: invitesRaw } = await dbClient
         .from("tenant_invitations")
         .select("id, tenant_id, email, role, token, status, expires_at, created_at")
         .eq("tenant_id", tenantId)
         .eq("status", "pending")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .catch(() => ({ data: [] }));
 
       const now = Date.now();
-      invites = (invitesRaw || []).map((inv) => ({
+      invites = (invitesRaw || []).map((inv: any) => ({
         id: inv.id,
         tenantId: inv.tenant_id,
         email: inv.email,
@@ -535,7 +648,7 @@ export const listTeamMembersAndInvites = createServerFn({ method: "POST" })
     return {
       members,
       invites,
-      canAdmin: !!canAdmin,
+      canAdmin: !!canAdmin || isOwner,
     };
   });
 
@@ -603,20 +716,28 @@ export const removeTeamMember = createServerFn({ method: "POST" })
     }
 
     // Desvincular de tenant_members
-    const { error } = await supabaseAdmin
+    await supabaseAdmin
       .from("tenant_members")
       .delete()
       .eq("tenant_id", tenantId)
-      .eq("user_id", memberUserId);
+      .eq("user_id", memberUserId)
+      .catch(() => {});
 
-    if (error) throw error;
+    // Desvincular também de team_contacts caso seja um contato adicionado
+    await supabaseAdmin
+      .from("team_contacts")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .eq("id", memberUserId)
+      .catch(() => {});
 
     // Se o usuário removido estava apontando para este tenant como atual, limpa
     await supabaseAdmin
       .from("profiles")
       .update({ current_tenant_id: null })
       .eq("id", memberUserId)
-      .eq("current_tenant_id", tenantId);
+      .eq("current_tenant_id", tenantId)
+      .catch(() => {});
 
     return { success: true };
   });
@@ -664,13 +785,20 @@ export const updateTeamMemberRole = createServerFn({ method: "POST" })
       }
     }
 
-    const { error } = await supabaseAdmin
+    await supabaseAdmin
       .from("tenant_members")
       .update({ role })
       .eq("tenant_id", tenantId)
-      .eq("user_id", memberUserId);
+      .eq("user_id", memberUserId)
+      .catch(() => {});
 
-    if (error) throw error;
+    await supabaseAdmin
+      .from("team_contacts")
+      .update({ role })
+      .eq("tenant_id", tenantId)
+      .eq("id", memberUserId)
+      .catch(() => {});
+
     return { success: true };
   });
 

@@ -29,13 +29,60 @@ export function useMyMemberships() {
     queryKey: ["my-memberships", user?.id],
     enabled: !!user && !loading,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenant_members")
-        .select("tenant_id, role, tenant:tenants(id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone)")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as unknown as TenantMembership[];
+      const results: TenantMembership[] = [];
+      const seenTenantIds = new Set<string>();
+
+      // 1. Membros registrados em tenant_members
+      try {
+        const { data, error } = await supabase
+          .from("tenant_members")
+          .select("tenant_id, role, tenant:tenants(id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone)")
+          .eq("user_id", user!.id)
+          .order("created_at", { ascending: true });
+
+        if (!error && data) {
+          for (const m of data as unknown as TenantMembership[]) {
+            if (m.tenant && !seenTenantIds.has(m.tenant_id)) {
+              seenTenantIds.add(m.tenant_id);
+              results.push(m);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[useMyMemberships] Erro ao buscar tenant_members:", err);
+      }
+
+      // 2. Tenants onde o usuário logado é o proprietário/criador (owner_id)
+      try {
+        const { data: ownedTenants, error: ownErr } = await supabase
+          .from("tenants")
+          .select("id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
+          .eq("owner_id", user!.id);
+
+        if (!ownErr && ownedTenants) {
+          for (const t of ownedTenants) {
+            if (!seenTenantIds.has(t.id)) {
+              seenTenantIds.add(t.id);
+              results.push({
+                tenant_id: t.id,
+                role: "admin",
+                tenant: t,
+              });
+
+              // Auto-heal: matricula em tenant_members para integridade permanente
+              supabase
+                .from("tenant_members")
+                .upsert({ tenant_id: t.id, user_id: user!.id, role: "admin" })
+                .then(() => {})
+                .catch(() => {});
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[useMyMemberships] Erro ao buscar tenants owned:", err);
+      }
+
+      return results;
     },
   });
 }
@@ -121,9 +168,16 @@ export function useCurrentTenant() {
     memberships.isFetching ||
     (needsDirectFetch && impersonatedTenantQ.isLoading);
 
+  const isOwner =
+    !!user &&
+    !!current?.tenant &&
+    (current.tenant as any).owner_id === user.id;
+
+  const resolvedRole = isOwner ? ("admin" as const) : (current?.role ?? null);
+
   return {
     tenant: current?.tenant ?? null,
-    role: current?.role ?? null,
+    role: resolvedRole,
     tenantId: current?.tenant_id ?? null,
     isLoading,
     hasNoTenant:

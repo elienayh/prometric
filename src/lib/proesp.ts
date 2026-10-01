@@ -1,6 +1,7 @@
 import { IMC_BAND_TO_ZONE, imcBand, imcCutsForAge } from "./imc-reference";
 import { ageInYears, ageInMonths } from "./age";
 import { PROESP_MIN_AGE, PROESP_MAX_AGE, PROESP_AGE_WARNING } from "./validation";
+import { prometricIndex } from "./prometric-method";
 export { ageInYears, ageInMonths, PROESP_MIN_AGE, PROESP_MAX_AGE, PROESP_AGE_WARNING };
 // PROESP-BR – Cálculos e classificações do sistema ProMetric.
 // Tabelas referenciais motoras para idades 6–17 anos baseadas nos pontos de corte do PROESP-BR.
@@ -284,13 +285,33 @@ export function isPartialEvaluation(c: Classifications): boolean {
 }
 
 export function overallScore(c: Classifications): { score: number; label: Zone | null; filled: number; partial: boolean } {
-  const vals = Object.values(c).filter(Boolean) as Zone[];
-  const filled = vals.length;
-  const partial = filled < MIN_TESTS_FOR_CLASSIFICATION;
-  if (filled === 0) return { score: 0, label: null, filled, partial: true };
-  const avg = vals.reduce((a, z) => a + zoneScore(z), 0) / filled;
-  const idx = Math.min(5, Math.max(0, Math.round(avg) - 1));
-  return { score: +avg.toFixed(2), label: partial ? null : ZONES[idx], filled, partial };
+  const pm = prometricIndex(c);
+  let label: Zone | null = null;
+  if (!pm.partial && pm.category) {
+    switch (pm.category) {
+      case "Prioritário":
+        label = "Muito Fraco";
+        break;
+      case "Atenção":
+        label = "Fraco";
+        break;
+      case "Em Desenvolvimento":
+        label = "Razoável";
+        break;
+      case "Bom":
+        label = "Bom";
+        break;
+      case "Excelente":
+        label = pm.score >= 90 ? "Excelente" : "Muito Bom";
+        break;
+    }
+  }
+  return {
+    score: pm.score,
+    label,
+    filled: pm.filledTests,
+    partial: pm.partial,
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

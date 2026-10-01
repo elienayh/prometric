@@ -49,5 +49,26 @@ export const generateStudentReport = createServerFn({ method: "POST" })
     const evList = evals as unknown as StudentEvalData[];
 
     // 3. Gera parecer completo de forma determinística e imediata sem dependência de APIs externas
-    return buildDeterministicStudentReport(s, evList);
+    const report = buildDeterministicStudentReport(s, evList);
+
+    // 4. Persiste no banco de dados na tabela student_reports
+    try {
+      const latestEval = evList[evList.length - 1];
+      await supabase.from("student_reports" as never).insert({
+        tenant_id: (student as { tenant_id: string }).tenant_id,
+        student_id: data.studentId,
+        evaluation_id: latestEval?.id ?? null,
+        engine_version: "v1.0.0",
+        generated_at: report.generatedAt || new Date().toISOString(),
+        diagnosis: report.conclusao || report.resumoGeral || "",
+        technical: report.parecerTecnico || report.conclusao || "",
+        family: report.parecerFamilia || report.evolucao || "",
+        goals: report.metas || {},
+        full_report: report,
+      } as never);
+    } catch (saveErr) {
+      console.warn("[generateStudentReport] Erro ao persistir na tabela student_reports:", saveErr);
+    }
+
+    return report;
   });

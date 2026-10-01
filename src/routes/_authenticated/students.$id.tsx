@@ -1996,18 +1996,61 @@ function AIReportSection({
     pontos_atencao: string[];
     recomendacoes: string[];
     conclusao: string;
+    resumoGeral?: string;
+    parecerTecnico?: string;
+    parecerFamilia?: string;
+    metas?: Record<string, any>;
     provider: string;
     source: string;
     promptVersion: string;
     generatedAt: string;
   };
-  const storageKey = `ai-student-report:${studentId}`;
-  const [report, setReport] = useState<Report | null>(() => {
-    if (typeof window === "undefined") return null;
-    try { const raw = window.localStorage.getItem(storageKey); return raw ? JSON.parse(raw) as Report : null; } catch { return null; }
+
+  const qc = useQueryClient();
+  const dbReportQ = useQuery({
+    queryKey: ["student-report-db", studentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("student_reports" as never)
+        .select("full_report")
+        .eq("student_id" as never, studentId)
+        .order("generated_at" as never, { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        console.warn("[AIReportSection] Erro ao buscar relatório salvo no banco:", error);
+        return null;
+      }
+      return ((data as any)?.full_report ?? null) as Report | null;
+    },
   });
+
+  const [localReport, setLocalReport] = useState<Report | null>(null);
+  const report = localReport ?? dbReportQ.data ?? null;
   const [loading, setLoading] = useState(false);
   const reportFn = useServerFn(generateStudentReport);
+
+  const saveReportToDb = async (r: Report) => {
+    if (!student) return;
+    const latestEval = evaluations?.[evaluations.length - 1];
+    try {
+      await supabase.from("student_reports" as never).insert({
+        tenant_id: (student as any).tenant_id,
+        student_id: studentId,
+        evaluation_id: latestEval?.id ?? null,
+        engine_version: "v1.0.0",
+        generated_at: r.generatedAt || new Date().toISOString(),
+        diagnosis: r.conclusao || r.resumoGeral || "",
+        technical: r.parecerTecnico || r.conclusao || "",
+        family: r.parecerFamilia || r.evolucao || "",
+        goals: r.metas || {},
+        full_report: r,
+      } as never);
+      qc.invalidateQueries({ queryKey: ["student-report-db", studentId] });
+    } catch (dbErr) {
+      console.warn("[AIReportSection] Erro ao persistir parecer:", dbErr);
+    }
+  };
 
   const run = async () => {
     setLoading(true);
@@ -2029,16 +2072,16 @@ function AIReportSection({
       }
 
       if (r) {
-        setReport(r);
-        try { window.localStorage.setItem(storageKey, JSON.stringify(r)); } catch { /* noop */ }
-        toast.success("Relatório gerado pela IA");
+        setLocalReport(r);
+        await saveReportToDb(r);
+        toast.success("Relatório gerado e salvo");
       }
     } catch (e) {
       if (student && evaluations && evaluations.length > 0) {
         const r = buildDeterministicStudentReport(student, evaluations) as Report;
-        setReport(r);
-        try { window.localStorage.setItem(storageKey, JSON.stringify(r)); } catch { /* noop */ }
-        toast.success("Relatório gerado pela IA");
+        setLocalReport(r);
+        await saveReportToDb(r);
+        toast.success("Relatório gerado e salvo");
       } else {
         toast.error(e instanceof Error ? e.message : "Falha ao gerar relatório");
       }

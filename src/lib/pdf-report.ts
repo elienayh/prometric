@@ -110,7 +110,7 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
     doc.text(`Avaliação parcial — ${score.filled}/9 testes. Classificação geral indisponível.`, 12, yEnd);
     doc.setTextColor(20);
   } else {
-    doc.text(`Perfil geral: ${score.label ?? "—"} (score ${score.score}/6)`, 12, yEnd);
+    doc.text(`Perfil geral: ${score.label ?? "—"} (Índice ProMetric: ${score.score}/100)`, 12, yEnd);
   }
 
   // Diagnóstico IA
@@ -454,7 +454,7 @@ export function generateEvaluationPDFComplete(
   doc.setTextColor(80).setFont("helvetica", "normal").setFontSize(10);
   doc.text("Índice ProMetric", 24, 162);
   doc.setTextColor(BR[0], BR[1], BR[2]).setFont("helvetica", "bold").setFontSize(36);
-  doc.text(`${Math.round((score.score / 6) * 100)}`, 24, 186);
+  doc.text(`${score.score}`, 24, 186);
   doc.setFontSize(12).setTextColor(120);
   doc.text("/ 100", 60, 186);
   doc.setTextColor(40).setFont("helvetica", "bold").setFontSize(14);
@@ -579,13 +579,13 @@ export function generateEvaluationPDFComplete(
   const hist = (extras.history ?? []).slice().sort((a, b) => a.evaluated_at.localeCompare(b.evaluated_at));
   if (hist.length >= 2) {
     doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(40);
-    doc.text("Índice ProMetric ao longo do tempo (0–6)", 16, 32);
+    doc.text("Índice ProMetric ao longo do tempo (0–100)", 16, 32);
     drawLineChart(
       doc,
       24, 38, W - 36, 50,
       hist.map((h) => new Date(h.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })),
       hist.map((h) => overallScore(h.classifications ?? {}).score),
-      6,
+      100,
       BR,
     );
     const first = hist[0], last = hist[hist.length - 1];

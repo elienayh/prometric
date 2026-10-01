@@ -157,4 +157,4 @@ export function categoryDistribution(zones: (Zone | null | undefined)[]): Record
 
 // Mantém referência implícita aos tipos internos para evitar tree-shaking
 // inesperado e documentar a abstração.
-export const _internalRef = { ZONES };
+export const _internalRef = { get ZONES() { return ZONES; } };
