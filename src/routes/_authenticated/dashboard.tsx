@@ -16,27 +16,6 @@ import { dimensionScores, PM_DIMENSIONS } from "@/lib/prometric-method";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — ProMetric" }] }),
-  beforeLoad: async () => {
-    const { data: u } = await supabase.auth.getUser();
-    if (u.user) {
-      // Skip admin redirect when impersonating a client tenant
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("impersonating_tenant_id")
-        .eq("id", u.user.id)
-        .maybeSingle();
-      if (profile?.impersonating_tenant_id) return;
-
-      const { data: roles } = await supabase
-        .from("admin_roles")
-        .select("role")
-        .eq("user_id", u.user.id)
-        .limit(1);
-      if (roles && roles.length > 0) {
-        throw redirect({ to: "/admin" });
-      }
-    }
-  },
   component: Dashboard,
 });
 

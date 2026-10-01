@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState, redirect } from "@tanstack/react-router";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
@@ -26,6 +26,8 @@ const searchSchema = z
     email: z.string().optional(),
     token: z.string().optional(),
     inviteToken: z.string().optional(),
+    redirect: z.string().optional(),
+    next: z.string().optional(),
   })
   .passthrough();
 type AuthMode = "signin" | "signup";
@@ -39,6 +41,14 @@ const accountTypes = [
 export const Route = createFileRoute("/auth")({
   validateSearch: searchSchema,
   head: () => ({ meta: [{ title: "Entrar — ProMetric" }] }),
+  beforeLoad: async ({ search }) => {
+    if (typeof window === "undefined") return;
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) {
+      const dest = search.redirect || search.next || "/dashboard";
+      throw redirect({ to: dest as any });
+    }
+  },
   component: AuthLayout,
 });
 
@@ -123,7 +133,8 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
   async function redirectAfterAuth() {
     try {
       const { data: u } = await supabase.auth.getUser();
-      if (u.user) {
+      const user = u?.user;
+      if (user) {
         // 1. Se foi passado token explícito de convite na URL, aceita imediatamente
         const explicitToken = search.token || search.inviteToken;
         if (explicitToken) {
@@ -132,27 +143,52 @@ export function AuthScreen({ initialMode = "signin" }: { initialMode?: AuthMode 
           } catch (e) {
             console.warn("[Auth] Erro ao aceitar convite por token:", e);
           }
-        } else {
-          // 2. Reivindica automaticamente convites enviados para o e-mail deste usuário
+        }
+
+        // 2. Reivindica convites pendentes diretamente no Supabase com resiliência
+        if (user.email) {
           try {
-            const claimRes = await claimPendingInvitesForUser();
-            if (claimRes.claimedCount > 0) {
-              toast.success("Você foi adicionado à equipe da organização que te convidou!");
+            const { data: pending } = await supabase
+              .from("tenant_invitations")
+              .select("id, tenant_id, role")
+              .eq("email", user.email.toLowerCase().trim())
+              .eq("status", "pending");
+
+            if (pending && pending.length > 0) {
+              for (const inv of pending) {
+                await supabase.from("tenant_members").upsert(
+                  { tenant_id: inv.tenant_id, user_id: user.id, role: inv.role },
+                  { onConflict: "tenant_id,user_id" }
+                );
+                await supabase
+                  .from("tenant_invitations")
+                  .update({ status: "accepted", accepted_at: new Date().toISOString(), accepted_by: user.id })
+                  .eq("id", inv.id);
+              }
+              toast.success("Você foi vinculado à equipe da organização que te convidou!");
             }
           } catch (e) {
-            console.warn("[Auth] Erro ao reivindicar convites:", e);
+            console.warn("[Auth] Fallback de convites:", e);
           }
         }
 
+        // 3. Se houver destino explícito na URL
+        const target = search.redirect || search.next;
+        if (target && target !== "/auth" && target !== "/login") {
+          navigate({ to: target as any });
+          return;
+        }
+
+        // 4. Se for super admin e não especificou destino, verifica se tem preferência
         const { data: roles } = await supabase
           .from("admin_roles")
           .select("role")
-          .eq("user_id", u.user.id)
+          .eq("user_id", user.id)
           .limit(1);
-        if (roles && roles.length > 0) {
-          navigate({ to: "/admin" });
-          return;
-        }
+
+        // Se for admin da plataforma mas tiver tenant regular ativo, vai para o dashboard
+        navigate({ to: "/dashboard" });
+        return;
       }
     } catch {
       /* fall through */
