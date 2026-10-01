@@ -69,8 +69,19 @@ function useCurrentPageLabel() {
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const { tenant, role, hasNoTenant, isLoading } = useCurrentTenant();
+  const { user } = useAuth();
   const { isAdmin: isPlatformAdmin, isLoading: isAdminLoading } = useIsPlatformAdmin();
   const pageLabel = useCurrentPageLabel();
+
+  const isOwner =
+    !!user &&
+    !!tenant &&
+    ((tenant as any).owner_id === user.id ||
+      ((tenant as any).email &&
+        user.email &&
+        (tenant as any).email.toLowerCase().trim() === user.email.toLowerCase().trim()));
+
+  const effectiveRole = isOwner ? "admin" : role;
 
   return (
     <div className="flex min-h-dvh bg-background">
@@ -79,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Desktop sidebar */}
       <aside className="relative z-10 hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar/95 backdrop-blur lg:flex lg:flex-col">
-        <SidebarContent tenantName={tenant?.name} role={role} isPlatformAdmin={isPlatformAdmin} />
+        <SidebarContent tenantName={tenant?.name} role={effectiveRole} isPlatformAdmin={isPlatformAdmin} />
       </aside>
 
       {/* Mobile drawer */}
@@ -106,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <SidebarContent tenantName={tenant?.name} role={role} isPlatformAdmin={isPlatformAdmin} onNavigate={() => setOpen(false)} />
+              <SidebarContent tenantName={tenant?.name} role={effectiveRole} isPlatformAdmin={isPlatformAdmin} onNavigate={() => setOpen(false)} />
             </motion.aside>
           </>
         )}

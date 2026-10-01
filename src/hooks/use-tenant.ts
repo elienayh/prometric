@@ -52,11 +52,11 @@ export function useMyMemberships() {
         console.warn("[useMyMemberships] Erro ao buscar tenant_members:", err);
       }
 
-      // 2. Tenants onde o usuário logado é o proprietário/criador (owner_id)
+      // 2. Tenants onde o usuário logado é o proprietário/criador (owner_id ou email)
       try {
         const { data: ownedTenants, error: ownErr } = await supabase
           .from("tenants")
-          .select("id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
+          .select("id,name,type,owner_id,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
           .eq("owner_id", user!.id);
 
         if (!ownErr && ownedTenants) {
@@ -73,8 +73,28 @@ export function useMyMemberships() {
               supabase
                 .from("tenant_members")
                 .upsert({ tenant_id: t.id, user_id: user!.id, role: "admin" })
-                .then(() => {})
-                .catch(() => {});
+                .then(() => {});
+            }
+          }
+        }
+
+        // Também busca se o tenant estiver cadastrado com o e-mail do usuário
+        if (user!.email) {
+          const { data: emailTenants } = await supabase
+            .from("tenants")
+            .select("id,name,type,owner_id,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
+            .eq("email", user!.email);
+
+          if (emailTenants) {
+            for (const t of emailTenants) {
+              if (!seenTenantIds.has(t.id)) {
+                seenTenantIds.add(t.id);
+                results.push({
+                  tenant_id: t.id,
+                  role: "admin",
+                  tenant: t,
+                });
+              }
             }
           }
         }
@@ -144,7 +164,7 @@ export function useCurrentTenant() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants")
-        .select("id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
+        .select("id,name,type,owner_id,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
         .eq("id", currentTenantId!)
         .maybeSingle();
       if (error) throw error;
@@ -171,7 +191,10 @@ export function useCurrentTenant() {
   const isOwner =
     !!user &&
     !!current?.tenant &&
-    (current.tenant as any).owner_id === user.id;
+    ((current.tenant as any).owner_id === user.id ||
+      ((current.tenant as any).email &&
+        user.email &&
+        (current.tenant as any).email.toLowerCase().trim() === user.email.toLowerCase().trim()));
 
   const resolvedRole = isOwner ? ("admin" as const) : (current?.role ?? null);
 
