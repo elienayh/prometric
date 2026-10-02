@@ -349,7 +349,7 @@ async function syncTenantSubscription(
   }
 
   if (Object.keys(tenantUpdates).length > 0) {
-    await supabaseAdmin.from("tenants").update(tenantUpdates as any).eq("id", tenantId);
+    await supabaseAdmin.from("tenants").update(tenantUpdates).eq("id", tenantId);
   }
 }
 

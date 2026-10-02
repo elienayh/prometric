@@ -1,10 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import {
-  buildDeterministicStudentReport,
-  type StudentReportData,
-  type StudentEvalData,
-} from "./deterministic-student-report";
+import { PROMETRIC_PROMPT_VERSION, buildSystemPrompt } from "@/lib/ai/prometric-system-prompt";
 
 type Input = { studentId: string };
 
@@ -17,58 +13,76 @@ export const generateStudentReport = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
 
-    // 1. Busca dados cadastrais do aluno respeitando RLS da tenant autenticada
     const { data: student, error: sErr } = await supabase
-      .from("students" as never)
+      .from("students")
       .select("id,tenant_id,full_name,sex,birth_date")
-      .eq("id" as never, data.studentId)
+      .eq("id", data.studentId)
       .single();
+    if (sErr || !student) throw new Error("Aluno não encontrado");
 
-    if (sErr || !student) {
-      throw new Error("Aluno não encontrado ou sem permissão de acesso");
-    }
-
-    // 2. Busca histórico completo de avaliações do aluno (ordenado cronologicamente)
     const { data: evals, error: eErr } = await supabase
-      .from("evaluations" as never)
+      .from("evaluations")
       .select(
         "id,evaluated_at,age_years,weight_kg,height_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications",
       )
-      .eq("student_id" as never, data.studentId)
-      .order("evaluated_at" as never, { ascending: true });
+      .eq("student_id", data.studentId)
+      .order("evaluated_at", { ascending: true });
+    if (eErr) throw eErr;
+    if (!evals || evals.length === 0) throw new Error("Nenhuma avaliação para analisar");
 
-    if (eErr) {
-      throw new Error(`Erro ao consultar avaliações: ${eErr.message}`);
-    }
+    const s = student as { id: string; tenant_id: string; full_name: string; sex: string; birth_date: string };
 
-    if (!evals || (evals as unknown[]).length === 0) {
-      throw new Error("Nenhuma avaliação registrada para este aluno. Realize ao menos uma avaliação para gerar o parecer.");
-    }
+    const userPrompt = `Gere um relatório completo do aluno em JSON ESTRITO (sem markdown):
+{
+  "resumo_geral": "Situação atual em até 180 palavras, vocabulário ProMetric®.",
+  "evolucao": "Evolução observada ao longo de todas as avaliações (até 200 palavras).",
+  "pontos_fortes": ["bullet 1", "bullet 2", "bullet 3"],
+  "pontos_atencao": ["bullet 1", "bullet 2", "bullet 3"],
+  "recomendacoes": ["recomendação prática 1", "recomendação prática 2", "recomendação prática 3", "recomendação prática 4"],
+  "conclusao": "Resumo executivo simples para professor e família (até 140 palavras)."
+}
 
-    const s = student as unknown as StudentReportData;
-    const evList = evals as unknown as StudentEvalData[];
+Dados do aluno (use APENAS estes valores):
+Nome: ${s.full_name} | Sexo: ${s.sex} | Nascimento: ${s.birth_date}
+Total de avaliações: ${evals.length}
+Avaliações (cronológicas): ${JSON.stringify(evals)}`;
 
-    // 3. Gera parecer completo de forma determinística e imediata sem dependência de APIs externas
-    const report = buildDeterministicStudentReport(s, evList);
+    const { resolveTenantModel, generateJSON } = await import("@/lib/ai/unified-generate.server");
+    const resolved = await resolveTenantModel(supabase, s.tenant_id);
 
-    // 4. Persiste no banco de dados na tabela student_reports
-    try {
-      const latestEval = evList[evList.length - 1];
-      await supabase.from("student_reports" as never).insert({
-        tenant_id: (student as { tenant_id: string }).tenant_id,
-        student_id: data.studentId,
-        evaluation_id: latestEval?.id ?? null,
-        engine_version: "v1.0.0",
-        generated_at: report.generatedAt || new Date().toISOString(),
-        diagnosis: report.conclusao || report.resumo_geral || "",
-        technical: report.conclusao || "",
-        family: report.evolucao || "",
-        goals: report.recomendacoes || [],
-        full_report: report,
-      } as never);
-    } catch (saveErr) {
-      console.warn("[generateStudentReport] Erro ao persistir na tabela student_reports:", saveErr);
-    }
+    const raw = (await generateJSON(resolved, buildSystemPrompt(), userPrompt)) as {
+      resumo_geral?: string;
+      evolucao?: string;
+      pontos_fortes?: string[];
+      pontos_atencao?: string[];
+      recomendacoes?: string[];
+      conclusao?: string;
+    };
 
-    return report;
+    const sanitize = (s?: string) =>
+      (s ?? "")
+        .replace(/\bPROESP(?:-BR)?\b/gi, "")
+        .replace(/\bz[\s-]?score\b/gi, "")
+        .replace(/\bpercentil\b/gi, "")
+        .replace(/\bdesvio[\s-]?padr[ãa]o\b/gi, "")
+        .replace(/\bRegular\b/g, "Em Desenvolvimento")
+        .replace(/\bMédio\b/g, "Em Desenvolvimento")
+        .replace(/\bÓtimo\b/g, "Excelente")
+        .replace(/\bRuim\b/g, "Atenção")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+    const sanArr = (a?: string[]) => (a ?? []).map(sanitize).filter(Boolean);
+
+    return {
+      resumo_geral: sanitize(raw.resumo_geral),
+      evolucao: sanitize(raw.evolucao),
+      pontos_fortes: sanArr(raw.pontos_fortes),
+      pontos_atencao: sanArr(raw.pontos_atencao),
+      recomendacoes: sanArr(raw.recomendacoes),
+      conclusao: sanitize(raw.conclusao),
+      provider: resolved.provider,
+      source: resolved.source,
+      promptVersion: PROMETRIC_PROMPT_VERSION,
+      generatedAt: new Date().toISOString(),
+    };
   });

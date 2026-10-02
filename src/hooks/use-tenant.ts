@@ -28,81 +28,17 @@ export function useMyMemberships() {
   return useQuery({
     queryKey: ["my-memberships", user?.id],
     enabled: !!user && !loading,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const results: TenantMembership[] = [];
-      const seenTenantIds = new Set<string>();
-
-      // 1. Membros registrados em tenant_members
-      try {
-        const { data, error } = await supabase
-          .from("tenant_members")
-          .select("tenant_id, role, tenant:tenants(id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone)")
-          .eq("user_id", user!.id)
-          .order("created_at", { ascending: true });
-
-        if (!error && data) {
-          for (const m of data as unknown as TenantMembership[]) {
-            if (m.tenant && !seenTenantIds.has(m.tenant_id)) {
-              seenTenantIds.add(m.tenant_id);
-              results.push(m);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("[useMyMemberships] Erro ao buscar tenant_members:", err);
-      }
-
-      // 2. Tenants onde o usuário logado é o proprietário/criador (owner_id ou email)
-      try {
-        const { data: ownedTenants, error: ownErr } = await supabase
-          .from("tenants")
-          .select("id,name,type,owner_id,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
-          .eq("owner_id", user!.id);
-
-        if (!ownErr && ownedTenants) {
-          for (const t of ownedTenants) {
-            if (!seenTenantIds.has(t.id)) {
-              seenTenantIds.add(t.id);
-              results.push({
-                tenant_id: t.id,
-                role: "admin",
-                tenant: t,
-              });
-
-              // Auto-heal: matricula em tenant_members para integridade permanente
-              supabase
-                .from("tenant_members")
-                .upsert({ tenant_id: t.id, user_id: user!.id, role: "admin" })
-                .then(() => {});
-            }
-          }
-        }
-
-        // Também busca se o tenant estiver cadastrado com o e-mail do usuário
-        if (user!.email) {
-          const { data: emailTenants } = await supabase
-            .from("tenants")
-            .select("id,name,type,owner_id,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
-            .eq("email", user!.email);
-
-          if (emailTenants) {
-            for (const t of emailTenants) {
-              if (!seenTenantIds.has(t.id)) {
-                seenTenantIds.add(t.id);
-                results.push({
-                  tenant_id: t.id,
-                  role: "admin",
-                  tenant: t,
-                });
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("[useMyMemberships] Erro ao buscar tenants owned:", err);
-      }
-
-      return results;
+      const { data, error } = await supabase
+        .from("tenant_members")
+        .select("tenant_id, role, tenant:tenants(id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone,owner_id)")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as TenantMembership[];
     },
   });
 }
@@ -112,6 +48,9 @@ export function useProfile() {
   return useQuery({
     queryKey: ["profile", user?.id],
     enabled: !!user && !loading,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -119,6 +58,18 @@ export function useProfile() {
         .eq("id", user!.id)
         .maybeSingle();
       if (error) throw error;
+
+      // Se o usuário não possui profile no banco, provisiona no server-side com service_role
+      if (!data && user?.id) {
+        try {
+          const { ensureUserProfile } = await import("@/lib/team-invitations.functions");
+          const created = await ensureUserProfile();
+          if (created) return created;
+        } catch (e) {
+          console.warn("[useProfile] Provisionando perfil no servidor:", e);
+        }
+      }
+
       return data;
     },
   });
@@ -162,10 +113,13 @@ export function useCurrentTenant() {
   const impersonatedTenantQ = useQuery({
     queryKey: ["impersonated-tenant", currentTenantId],
     enabled: needsDirectFetch,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tenants")
-        .select("id,name,type,owner_id,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone")
+        .select("id,name,type,logo_url,plan_id,display_name,primary_color,secondary_color,description,website,email,phone,owner_id")
         .eq("id", currentTenantId!)
         .maybeSingle();
       if (error) throw error;
@@ -183,31 +137,28 @@ export function useCurrentTenant() {
         }
       : memberships.data?.[0] ?? null);
 
-  const isLoading =
-    profile.isLoading ||
-    memberships.isLoading ||
-    memberships.isFetching ||
-    (needsDirectFetch && impersonatedTenantQ.isLoading);
-
   const isOwner =
     !!user &&
     !!current?.tenant &&
-    ((current.tenant as any).owner_id === user.id ||
-      ((current.tenant as any).email &&
-        user.email &&
-        (current.tenant as any).email.toLowerCase().trim() === user.email.toLowerCase().trim()));
+    (current.tenant as any).owner_id === user.id;
 
-  const resolvedRole = isOwner ? ("admin" as const) : (current?.role ?? null);
+  const effectiveRole = isOwner ? ("admin" as const) : current?.role ?? null;
+
+  const isLoading =
+    (profile.isLoading && !profile.data) ||
+    (memberships.isLoading && !memberships.data) ||
+    (needsDirectFetch && impersonatedTenantQ.isLoading && !impersonatedTenantQ.data);
 
   return {
     tenant: current?.tenant ?? null,
-    role: resolvedRole,
+    role: effectiveRole,
     tenantId: current?.tenant_id ?? null,
     isLoading,
     hasNoTenant:
       memberships.isSuccess &&
       !memberships.isFetching &&
       (memberships.data?.length ?? 0) === 0 &&
+      !currentTenantId &&
       !impersonatingId,
     memberships: memberships.data ?? [],
   };

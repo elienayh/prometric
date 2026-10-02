@@ -14,151 +14,65 @@ const VALID_PROVIDERS: ReadonlyArray<ProviderId> = [
 /**
  * Valida se o usuário tem permissão para gerenciar a IA do tenant.
  * Dá suporte nativo à impersonação por admins da plataforma e validação cruzada
- * em `tenants`, `profiles`, `tenant_members` e `admin_roles`, garantindo que
- * o owner do espaço ou admins sejam aceitos mesmo se a service role key do servidor estiver indisponível.
+ * em `profiles` e `tenant_members`, garantindo que ações de admin no tenant
+ * ou em modo impersonado sejam aceitas sem bloqueio indevido.
  */
 async function assertCanManageTenantAi(
   supabase: any,
   userId: string,
   tenantId: string,
 ) {
-  // 1. Tenta RPC padrão do Supabase
+  // 1. Tenta RPC padrão
   try {
-    const { data: isAdmin, error: rpcErr1 } = await supabase.rpc("is_tenant_admin" as never, {
+    const { data: isAdmin } = await supabase.rpc("is_tenant_admin" as never, {
       _tenant: tenantId,
     } as never);
-    if (!rpcErr1 && isAdmin) return true;
+    if (isAdmin) return true;
   } catch (e) {
-    console.warn("[tenant-ai] is_tenant_admin rpc check:", e);
+    console.warn("[tenant-ai] is_tenant_admin rpc check failed:", e);
   }
 
   try {
-    const { data: isPlatform, error: rpcErr2 } = await supabase.rpc("is_platform_admin" as never, {
+    const { data: isPlatform } = await supabase.rpc("is_platform_admin" as never, {
       _user: userId,
     } as never);
-    if (!rpcErr2 && isPlatform) return true;
+    if (isPlatform) return true;
   } catch (e) {
-    console.warn("[tenant-ai] is_platform_admin rpc check:", e);
+    console.warn("[tenant-ai] is_platform_admin rpc check failed:", e);
   }
 
-  // 2. Consulta direta usando o próprio cliente autenticado do usuário (respeitando RLS)
-  try {
-    // Verifica se o usuário é o criador/proprietário do tenant
-    const { data: tenant } = await supabase
-      .from("tenants" as never)
-      .select("owner_id")
-      .eq("id" as never, tenantId)
-      .maybeSingle();
+  // 2. Fallback resiliente via supabaseAdmin (impersonação, cargo admin, owner ou super admin)
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    if (tenant && (tenant as { owner_id: string | null }).owner_id === userId) {
-      return true;
-    }
-  } catch (e) {
-    console.warn("[tenant-ai] tenant owner check via user client:", e);
-  }
-
-  try {
-    // Verifica papel em tenant_members para este tenant
-    const { data: member } = await supabase
-      .from("tenant_members" as never)
-      .select("role")
-      .eq("tenant_id" as never, tenantId)
-      .eq("user_id" as never, userId)
-      .maybeSingle();
-
-    if (member && (member as { role: string }).role === "admin") {
-      return true;
-    }
-  } catch (e) {
-    console.warn("[tenant-ai] tenant_member check via user client:", e);
-  }
-
-  try {
-    // Verifica perfil do usuário (admin de plataforma, workspace atual ou impersonação)
-    const { data: profile } = await supabase
-      .from("profiles" as never)
-      .select("role, is_platform_admin, current_tenant_id, impersonating_tenant_id")
-      .eq("id" as never, userId)
-      .maybeSingle();
-
-    if (profile) {
-      const p = profile as {
-        role?: string;
-        is_platform_admin?: boolean;
-        current_tenant_id?: string;
-        impersonating_tenant_id?: string;
-      };
-      if (
-        p.role === "admin" ||
-        p.is_platform_admin === true ||
-        p.impersonating_tenant_id === tenantId ||
-        p.current_tenant_id === tenantId
-      ) {
-        return true;
-      }
-    }
-  } catch (e) {
-    console.warn("[tenant-ai] profile check via user client:", e);
-  }
-
-  try {
-    // Verifica tabela admin_roles
-    const { data: adminRole } = await supabase
-      .from("admin_roles" as never)
-      .select("role")
-      .eq("user_id" as never, userId)
-      .maybeSingle();
-
-    if (adminRole) return true;
-  } catch (e) {}
-
-  // 3. Fallback resiliente via supabaseAdmin (caso a chave service_role esteja configurada e válida)
-  try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-    const { data: profile, error: admProfErr } = await supabaseAdmin
+  const [profileRes, memberRes, tenantRes, adminRoleRes] = await Promise.all([
+    supabaseAdmin
       .from("profiles")
-      .select("current_tenant_id, impersonating_tenant_id")
+      .select("impersonating_tenant_id")
       .eq("id", userId)
-      .maybeSingle();
-
-    if (!admProfErr && profile) {
-      if (
-        profile.impersonating_tenant_id === tenantId ||
-        profile.current_tenant_id === tenantId
-      ) {
-        return true;
-      }
-    }
-
-    const { data: isPlatAdmin } = await supabaseAdmin.rpc("is_platform_admin", { _user: userId });
-    if (isPlatAdmin) {
-      return true;
-    }
-
-    const { data: member, error: admMemErr } = await supabaseAdmin
+      .maybeSingle(),
+    supabaseAdmin
       .from("tenant_members")
       .select("role")
       .eq("tenant_id", tenantId)
       .eq("user_id", userId)
-      .maybeSingle();
-
-    if (!admMemErr && member && member.role === "admin") {
-      return true;
-    }
-
-    const { data: tenant, error: admTenErr } = await supabaseAdmin
+      .maybeSingle(),
+    supabaseAdmin
       .from("tenants")
       .select("owner_id")
       .eq("id", tenantId)
-      .maybeSingle();
+      .maybeSingle(),
+    supabaseAdmin
+      .from("admin_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "super_admin")
+      .maybeSingle(),
+  ]);
 
-    if (!admTenErr && tenant && tenant.owner_id === userId) {
-      return true;
-    }
-  } catch (adminErr) {
-    console.warn("[tenant-ai] admin client fallback check failed:", adminErr);
-  }
+  if (profileRes.data?.impersonating_tenant_id === tenantId) return true;
+  if (memberRes.data?.role === "admin") return true;
+  if (tenantRes.data?.owner_id === userId) return true;
+  if (adminRoleRes.data) return true;
 
   throw new Error("Sem permissão para gerenciar IA deste espaço");
 }
@@ -178,38 +92,14 @@ export const getTenantAiConfig = createServerFn({ method: "POST" })
     // Garante autorização ampla incluindo impersonação
     await assertCanManageTenantAi(supabase, userId, data.tenantId);
 
-    // 1. Tenta carregar via supabase autenticado do usuário (RLS nativo)
-    let cred: any = null;
-    try {
-      const res = await supabase
-        .from("tenant_ai_credentials" as never)
-        .select("id, provider, model, is_active, api_key_ciphertext, api_key_fingerprint, last_tested_at, last_test_ok, last_test_error, last_test_latency_ms, prompt_version, updated_at")
-        .eq("tenant_id" as never, data.tenantId)
-        .maybeSingle();
-      if (!res.error && res.data) {
-        cred = res.data;
-      }
-    } catch (e) {
-      console.warn("[tenant-ai] Leitura via supabase do usuário:", e);
-    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: cred, error } = await supabaseAdmin
+      .from("tenant_ai_credentials" as never)
+      .select("id, provider, model, is_active, api_key_ciphertext, api_key_fingerprint, last_tested_at, last_test_ok, last_test_error, last_test_latency_ms, prompt_version, updated_at")
+      .eq("tenant_id" as never, data.tenantId)
+      .maybeSingle();
 
-    // 2. Se não retornou e supabaseAdmin estiver configurado, tenta supabaseAdmin
-    if (!cred) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const res = await supabaseAdmin
-          .from("tenant_ai_credentials" as never)
-          .select("id, provider, model, is_active, api_key_ciphertext, api_key_fingerprint, last_tested_at, last_test_ok, last_test_error, last_test_latency_ms, prompt_version, updated_at")
-          .eq("tenant_id" as never, data.tenantId)
-          .maybeSingle();
-        if (!res.error && res.data) {
-          cred = res.data;
-        }
-      } catch (adminErr) {
-        // supabaseAdmin indisponível ou service_role ausente
-      }
-    }
-
+    if (error) throw new Error(error.message);
     if (!cred) return null;
 
     const row = cred as {
@@ -278,39 +168,15 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
       encrypted = encryptApiKey(data.apiKey);
     }
 
-    // 1. Carrega existente (tenta via supabase do usuário, depois supabaseAdmin se necessário)
-    let existingId: string | null = null;
+    // Persiste usando supabaseAdmin para evitar falhas de RLS/service role no servidor
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    try {
-      const { data: userEx } = await supabase
-        .from("tenant_ai_credentials" as never)
-        .select("id")
-        .eq("tenant_id" as never, data.tenantId)
-        .maybeSingle();
-      const uEx = userEx as unknown as { id: string } | null;
-      if (uEx?.id) {
-        existingId = uEx.id;
-      }
-    } catch (e) {
-      console.warn("[tenant-ai] Busca existente via supabase:", e);
-    }
-
-    if (!existingId) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { data: admEx } = await supabaseAdmin
-          .from("tenant_ai_credentials" as never)
-          .select("id")
-          .eq("tenant_id" as never, data.tenantId)
-          .maybeSingle();
-        const aEx = admEx as unknown as { id: string } | null;
-        if (aEx?.id) {
-          existingId = aEx.id;
-        }
-      } catch (e) {
-        // supabaseAdmin não disponível
-      }
-    }
+    // Carrega existente
+    const { data: existing } = await supabaseAdmin
+      .from("tenant_ai_credentials" as never)
+      .select("id, api_key_ciphertext, api_key_iv, api_key_tag, api_key_fingerprint")
+      .eq("tenant_id" as never, data.tenantId)
+      .maybeSingle();
 
     const row = {
       tenant_id: data.tenantId,
@@ -329,52 +195,17 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
       created_by: userId,
     };
 
-    let saveSuccess = false;
-    let lastError: Error | null = null;
-
-    // 2. Persiste primeiro usando o cliente autenticado do usuário (RLS nativo)
-    if (existingId) {
-      const { error } = await supabase
+    if (existing) {
+      const { error } = await supabaseAdmin
         .from("tenant_ai_credentials" as never)
         .update(row as never)
-        .eq("id" as never, existingId);
-      if (!error) {
-        saveSuccess = true;
-      } else {
-        lastError = new Error(error.message);
-      }
+        .eq("id" as never, (existing as { id: string }).id);
+      if (error) throw new Error(error.message);
     } else {
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("tenant_ai_credentials" as never)
         .insert(row as never);
-      if (!error) {
-        saveSuccess = true;
-      } else {
-        lastError = new Error(error.message);
-      }
-    }
-
-    // 3. Fallback para supabaseAdmin caso RLS do cliente do usuário falhe
-    if (!saveSuccess) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        if (existingId) {
-          const { error } = await supabaseAdmin
-            .from("tenant_ai_credentials" as never)
-            .update(row as never)
-            .eq("id" as never, existingId);
-          if (error) throw new Error(error.message);
-          saveSuccess = true;
-        } else {
-          const { error } = await supabaseAdmin
-            .from("tenant_ai_credentials" as never)
-            .insert(row as never);
-          if (error) throw new Error(error.message);
-          saveSuccess = true;
-        }
-      } catch (adminErr: any) {
-        throw lastError || adminErr;
-      }
+      if (error) throw new Error(error.message);
     }
 
     return { ok: true };
@@ -393,29 +224,14 @@ export const testTenantAiCredential = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     await assertCanManageTenantAi(supabase, userId, data.tenantId);
 
-    // Lê a credencial para descriptografar (tenta supabase do usuário, depois supabaseAdmin)
-    let cred: any = null;
-    try {
-      const res = await supabase
-        .from("tenant_ai_credentials" as never)
-        .select("provider, model, api_key_ciphertext, api_key_iv, api_key_tag")
-        .eq("tenant_id" as never, data.tenantId)
-        .maybeSingle();
-      if (!res.error && res.data) cred = res.data;
-    } catch (e) {}
-
-    if (!cred) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const res = await supabaseAdmin
-          .from("tenant_ai_credentials" as never)
-          .select("provider, model, api_key_ciphertext, api_key_iv, api_key_tag")
-          .eq("tenant_id" as never, data.tenantId)
-          .maybeSingle();
-        if (!res.error && res.data) cred = res.data;
-      } catch (e) {}
-    }
-
+    // Server-side lê a credencial completa via service role para descriptografar
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: cred, error: credErr } = await supabaseAdmin
+      .from("tenant_ai_credentials" as never)
+      .select("provider, model, api_key_ciphertext, api_key_iv, api_key_tag")
+      .eq("tenant_id" as never, data.tenantId)
+      .maybeSingle();
+    if (credErr) throw new Error(credErr.message);
     if (!cred) throw new Error("Nenhuma credencial cadastrada — salve antes de testar");
 
     const row = cred as {
@@ -443,31 +259,15 @@ export const testTenantAiCredential = createServerFn({ method: "POST" })
     const result = await pingProvider(row.provider, apiKey, row.model);
 
     // Persiste resultado do teste
-    const testUpdate = {
-      last_tested_at: new Date().toISOString(),
-      last_test_ok: result.ok,
-      last_test_error: result.ok ? null : (result.error ?? "Erro desconhecido"),
-      last_test_latency_ms: result.latencyMs,
-    };
-
-    let updated = false;
-    try {
-      const { error } = await supabase
-        .from("tenant_ai_credentials" as never)
-        .update(testUpdate as never)
-        .eq("tenant_id" as never, data.tenantId);
-      if (!error) updated = true;
-    } catch (e) {}
-
-    if (!updated) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        await supabaseAdmin
-          .from("tenant_ai_credentials" as never)
-          .update(testUpdate as never)
-          .eq("tenant_id" as never, data.tenantId);
-      } catch (e) {}
-    }
+    await supabaseAdmin
+      .from("tenant_ai_credentials" as never)
+      .update({
+        last_tested_at: new Date().toISOString(),
+        last_test_ok: result.ok,
+        last_test_error: result.ok ? null : (result.error ?? "Erro desconhecido"),
+        last_test_latency_ms: result.latencyMs,
+      } as never)
+      .eq("tenant_id" as never, data.tenantId);
 
     return result;
   });
@@ -485,31 +285,11 @@ export const deleteTenantAiCredential = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     await assertCanManageTenantAi(supabase, userId, data.tenantId);
 
-    let deleted = false;
-    let delError: Error | null = null;
-
-    try {
-      const { error } = await supabase
-        .from("tenant_ai_credentials" as never)
-        .delete()
-        .eq("tenant_id" as never, data.tenantId);
-      if (!error) deleted = true;
-      else delError = new Error(error.message);
-    } catch (e) {}
-
-    if (!deleted) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { error } = await supabaseAdmin
-          .from("tenant_ai_credentials" as never)
-          .delete()
-          .eq("tenant_id" as never, data.tenantId);
-        if (error) throw new Error(error.message);
-        deleted = true;
-      } catch (adminErr: any) {
-        throw delError || adminErr;
-      }
-    }
-
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("tenant_ai_credentials" as never)
+      .delete()
+      .eq("tenant_id" as never, data.tenantId);
+    if (error) throw new Error(error.message);
     return { ok: true };
   });

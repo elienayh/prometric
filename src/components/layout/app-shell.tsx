@@ -54,8 +54,8 @@ const navSections: NavSection[] = [
   },
 ];
 
-function useVisibleSections(role?: string | null, isPlatformAdmin?: boolean) {
-  const isAdmin = role === "admin" || !!isPlatformAdmin;
+function useVisibleSections(role?: string | null) {
+  const isAdmin = role === "admin";
   return navSections.filter((s) => !s.adminOnly || isAdmin);
 }
 
@@ -69,19 +69,8 @@ function useCurrentPageLabel() {
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const { tenant, role, hasNoTenant, isLoading } = useCurrentTenant();
-  const { user } = useAuth();
   const { isAdmin: isPlatformAdmin, isLoading: isAdminLoading } = useIsPlatformAdmin();
   const pageLabel = useCurrentPageLabel();
-
-  const isOwner =
-    !!user &&
-    !!tenant &&
-    ((tenant as any).owner_id === user.id ||
-      ((tenant as any).email &&
-        user.email &&
-        (tenant as any).email.toLowerCase().trim() === user.email.toLowerCase().trim()));
-
-  const effectiveRole = isOwner ? "admin" : role;
 
   return (
     <div className="flex min-h-dvh bg-background">
@@ -90,7 +79,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Desktop sidebar */}
       <aside className="relative z-10 hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar/95 backdrop-blur lg:flex lg:flex-col">
-        <SidebarContent tenantName={tenant?.name} role={effectiveRole} isPlatformAdmin={isPlatformAdmin} />
+        <SidebarContent tenantName={tenant?.name} role={role} />
       </aside>
 
       {/* Mobile drawer */}
@@ -117,7 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <SidebarContent tenantName={tenant?.name} role={effectiveRole} isPlatformAdmin={isPlatformAdmin} onNavigate={() => setOpen(false)} />
+              <SidebarContent tenantName={tenant?.name} role={role} onNavigate={() => setOpen(false)} />
             </motion.aside>
           </>
         )}
@@ -162,10 +151,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function SidebarContent({
-  tenantName, role, isPlatformAdmin, onNavigate,
-}: { tenantName?: string; role?: string | null; isPlatformAdmin?: boolean; onNavigate?: () => void }) {
+  tenantName, role, onNavigate,
+}: { tenantName?: string; role?: string | null; onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const sections = useVisibleSections(role, isPlatformAdmin);
+  const sections = useVisibleSections(role);
   return (
     <>
       <Link to="/dashboard" onClick={onNavigate} className="flex items-center gap-2.5 px-5 py-5">
