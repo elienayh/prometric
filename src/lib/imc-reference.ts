@@ -360,6 +360,7 @@ export const IMC_REF: Record<Sex, ReadonlyArray<readonly [number, number, number
 } as never;
 
 export type ImcBand = "magreza" | "eutrofia_baixa" | "eutrofia" | "sobrepeso" | "obesidade";
+export type IMCBand = ImcBand;
 
 export const IMC_BAND_LABEL: Record<ImcBand, string> = {
   magreza: "Magreza",
@@ -382,7 +383,7 @@ export const IMC_BAND_TO_ZONE: Record<ImcBand, Zone> = {
  * Mensagem ética e acolhedora para famílias e alunos (portal e relatórios públicos).
  * Nunca expõe "obesidade" ou "magreza" como rótulo diagnóstico estigmatizante.
  */
-export function imcFamilyGuidance(band: ImcBand | null | undefined): string {
+export function imcFamilyGuidance(band: ImcBand | null | undefined, _studentName?: string): string {
   if (!band) return "Sem referência para esta idade.";
   switch (band) {
     case "eutrofia":

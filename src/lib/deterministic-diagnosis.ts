@@ -12,10 +12,13 @@ import {
 
 export type EvaluationForDiagnosis = {
   id?: string;
+  evaluated_at?: string | null;
   age_years?: number | null;
   age_months?: number | null;
   weight_kg?: number | null;
   height_cm?: number | null;
+  waist_cm?: number | null;
+  wingspan_cm?: number | null;
   imc?: number | null;
   rce?: number | null;
   sit_and_reach_cm?: number | null;

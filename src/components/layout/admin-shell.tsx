@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import {
   ArrowLeft, BarChart3, Building2, ChevronDown, DollarSign, FileText, FlaskConical,
-  LayoutDashboard, LifeBuoy, LogOut, Menu, Receipt, Shield, ShieldCheck, X,
+  LayoutDashboard, LayoutTemplate, LifeBuoy, LogOut, Menu, Receipt, Shield, ShieldCheck, X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; need?:
 const navItems: NavItem[] = [
   { to: "/admin/dashboard", label: "Dashboard SaaS", icon: LayoutDashboard },
   { to: "/admin/clients", label: "Clientes", icon: Building2 },
-  
+  { to: "/admin/homepage", label: "Página Inicial (CMS)", icon: LayoutTemplate, need: "super" },
   { to: "/admin/financial", label: "Financeiro", icon: DollarSign, need: "finance" },
   { to: "/admin/support", label: "Suporte", icon: LifeBuoy, need: "support" },
   { to: "/admin/administrators", label: "Administradores", icon: ShieldCheck, need: "super" },

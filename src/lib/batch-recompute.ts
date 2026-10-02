@@ -35,8 +35,9 @@ import {
 } from "./prometric-reference";
 import {
   validateEvaluation,
-  type EvaluationFormValues,
 } from "./validation";
+
+export type EvaluationFormValues = Record<string, unknown>;
 import {
   buildDeterministicDiagnosis,
   type EvaluationForDiagnosis,
@@ -99,7 +100,7 @@ export interface RecalculatedEvaluationResult {
   classifications: Classifications;
   prometric_score: number;
   prometric_category: PMCategory | null;
-  prometric_situation: string;
+  prometric_situation: string | null;
   ai_diagnosis: string;
   ai_technical: string;
   ai_family: string;

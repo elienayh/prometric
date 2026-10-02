@@ -14,19 +14,21 @@ export type ResolvedModel = {
   promptVersion: string;
 };
 
+type TenantCredRow = {
+  provider: ProviderId;
+  model: string;
+  is_active: boolean;
+  api_key_ciphertext: string | null;
+  api_key_iv: string | null;
+  api_key_tag: string | null;
+  prompt_version: string | null;
+};
+
 export async function resolveTenantModel(
   supabase: SupabaseClient,
   tenantId: string,
 ): Promise<ResolvedModel> {
-  let row: {
-    provider: ProviderId;
-    model: string;
-    is_active: boolean;
-    api_key_ciphertext: string | null;
-    api_key_iv: string | null;
-    api_key_tag: string | null;
-    prompt_version: string | null;
-  } | null = null;
+  let row: TenantCredRow | null = null;
 
   // 1. Tenta buscar credenciais configuradas via cliente autenticado da requisição (se fornecido)
   if (supabase) {
@@ -40,7 +42,7 @@ export async function resolveTenantModel(
         .maybeSingle();
 
       if (!credErr && cred) {
-        row = cred as typeof row;
+        row = cred as unknown as TenantCredRow;
       }
     } catch (e) {
       console.warn("[unified-generate] Busca de credenciais via cliente do usuário:", e);
@@ -60,7 +62,7 @@ export async function resolveTenantModel(
         .maybeSingle();
 
       if (!credErr && cred) {
-        row = cred as typeof row;
+        row = cred as unknown as TenantCredRow;
       }
     } catch (dbErr) {
       console.warn("[unified-generate] Aviso ao buscar credenciais do tenant via admin:", dbErr);

@@ -229,7 +229,7 @@ function SettingsPage() {
                 )}
                 <div>
                   <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Gratuito — até 30 alunos
+                    Gratuito — até 30 alunos / usuários
                   </div>
                   <h3 className="mt-1 font-display text-2xl font-bold">{freePlan.name}</h3>
                   <div className="mt-4 flex items-baseline gap-1">
@@ -300,7 +300,7 @@ function SettingsPage() {
 
                 <div>
                   <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary uppercase tracking-wider">
-                    <Sparkles className="h-3 w-3 text-accent" /> Pro — alunos ilimitados
+                    <Sparkles className="h-3 w-3 text-accent" /> Pro — a partir de 30 alunos (ilimitado)
                   </div>
                   <h3 className="mt-1 font-display text-2xl font-bold">{proPlan.name}</h3>
 

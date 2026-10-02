@@ -5,13 +5,15 @@ import { useState } from "react";
 import {
   Activity, ArrowRight, BarChart3, Brain, Check, ChevronDown,
   ClipboardCheck, FileText, GraduationCap, LineChart, ShieldCheck,
-  Sparkles, Users, Zap, Building2, Dumbbell, HeartPulse, Timer,
+  Sparkles, Users, Zap, Building2, Dumbbell, HeartPulse, Timer, Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PrometricIcon } from "@/components/brand/prometric-logo";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useHomePageConfig } from "@/hooks/use-homepage-config";
+import type { HomePageConfig } from "@/lib/homepage-cms";
 
 const SITE_URL = typeof window !== "undefined" ? window.location.origin : (process.env.APP_URL || "");
 const OG_IMAGE = "/og-cover.jpg";
@@ -31,7 +33,7 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
   { q: "O sistema possui inteligência artificial?", a: "Sim. A IA gera parecer técnico, mensagem para a família e metas personalizadas de 30/60/90 dias por aluno." },
   { q: "Como funciona o histórico do aluno?", a: "Cada avaliação fica registrada cronologicamente, com Perfil de Desenvolvimento Físico ProMetric em cada momento." },
   { q: "Posso cadastrar turmas?", a: "Sim. Você organiza alunos por turma, série, escola ou clube, com filtros e permissões por professor." },
-  { q: "Existe versão gratuita?", a: "Sim. O plano Gratuito é para sempre, grátis para começar (até 30 alunos), sem cartão de crédito e sem trial expirando." },
+  { q: "Existe versão gratuita e como funcionam os planos?", a: "Sim. O ProMetric é gratuito para sempre até 30 alunos/usuários, sem necessidade de cartão de crédito. A partir de 30 alunos, o plano Pro custa R$ 189,90/mês com alunos ilimitados, laudos com IA e suporte prioritário. Não existem outros planos nem taxas adicionais." },
 ];
 
 const STRUCTURED_DATA = [
@@ -113,21 +115,37 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
+  const { config } = useHomePageConfig();
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
+      {config.visibility.showAnnouncement && config.announcement.text && (
+        <div className="bg-primary px-3 py-2 text-center text-xs font-medium text-primary-foreground">
+          <span>{config.announcement.text} </span>
+          {config.announcement.linkText && (
+            <a href={config.announcement.linkUrl || "#"} className="ml-1 underline font-semibold hover:opacity-85">
+              {config.announcement.linkText} →
+            </a>
+          )}
+        </div>
+      )}
       <SiteHeader />
       <main>
-        <Hero />
-        <Benefits />
-        <WhatIsProMetric />
-        <Methodology />
-        <HowItWorks />
-        <ForSchools />
-        <ForTeachers />
-        <Pricing />
-        <Faq />
+        {config.visibility.showHero && <Hero hero={config.hero} stats={config.stats} />}
+        {config.visibility.showStats && <Benefits stats={config.stats} />}
+        {config.visibility.showWhatIs && <WhatIsProMetric whatIs={config.whatIs} />}
+        {config.visibility.showMethodology && <Methodology methodology={config.methodology} />}
+        {config.visibility.showHowItWorks && <HowItWorks />}
+        {config.visibility.showForSchools && <ForSchools forSchools={config.forSchools} />}
+        {config.visibility.showForTeachers && <ForTeachers forTeachers={config.forTeachers} />}
+        {config.visibility.showTestimonials && config.testimonials?.items?.length > 0 && (
+          <TestimonialsSection testimonials={config.testimonials} />
+        )}
+        {config.visibility.showPricing && <Pricing pricing={config.pricing} />}
+        {config.visibility.showFaq && <Faq faq={config.faq} />}
+        {config.visibility.showCtaBanner && <CtaBanner cta={config.ctaBanner} />}
       </main>
-      <SiteFooter />
+      {config.visibility.showFooter && <SiteFooter footer={config.footer} />}
     </div>
   );
 }
@@ -168,7 +186,25 @@ function SiteHeader() {
 }
 
 /* ---------- Hero ---------- */
-function Hero() {
+function Hero({ hero, stats }: { hero?: HomePageConfig["hero"]; stats?: HomePageConfig["stats"] }) {
+  const badge = hero?.badge || "Método ProMetric® · Avaliação Física Inteligente";
+  const headline = hero?.headline || "Avaliação Física Inteligente";
+  const headlineHighlight = hero?.headlineHighlight !== undefined ? hero.headlineHighlight : "com IA";
+  const subheadline =
+    hero?.subheadline ||
+    "O ProMetric é a plataforma de Avaliação Física Integrada para escolas, academias e clubes. Aplique o Método ProMetric®, gere relatórios automáticos com o Índice ProMetric® de 0 a 100 e acompanhe a evolução dos alunos em 5 dimensões físicas.";
+  const primaryCtaText = hero?.primaryCtaText || "Avaliar minha turma grátis";
+  const primaryCtaLink = hero?.primaryCtaLink || "/register";
+  const secondaryCtaText = hero?.secondaryCtaText || "Ver em 60 segundos";
+  const secondaryCtaLink = hero?.secondaryCtaLink || "#como-funciona";
+  const quickNote = hero?.quickNote || "Gratuito até 30 alunos/usuários · A partir de 30: R$ 189,90/mês · Sem cartão";
+
+  const kpis = [
+    { kpi: stats?.item1?.value || "−92%", label: stats?.item1?.label || "Tempo de tabulação" },
+    { kpi: stats?.item3?.value || "0–100", label: stats?.item3?.label || "Índice ProMetric® por aluno" },
+    { kpi: stats?.item4?.value || "<5 min", label: stats?.item4?.label || "Para gerar um relatório" },
+  ];
+
   return (
     <section className="relative overflow-hidden">
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-mesh opacity-90" />
@@ -179,31 +215,40 @@ function Hero() {
           transition={{ duration: 0.5 }}
           className="mx-auto max-w-3xl text-center"
         >
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground shadow-card">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Método ProMetric® · IA diagnóstica · LGPD
-          </div>
           <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight md:text-6xl">
-            <span className="text-gradient-brand">Avaliação Física Inteligente</span> com IA
+            {headline}{" "}
+            {headlineHighlight && <span className="text-gradient-brand">{headlineHighlight}</span>}
           </h1>
+
+          {badge && (
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-medium text-muted-foreground shadow-card">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              {badge}
+            </div>
+          )}
+
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-            O ProMetric é a plataforma de Avaliação Física Integrada para escolas, academias e clubes.
-            Aplique o Método ProMetric®, gere relatórios automáticos com o Índice ProMetric® de 0 a 100
-            e acompanhe a evolução dos alunos em 5 dimensões físicas.
+            {subheadline}
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="bg-gradient-brand text-primary-foreground shadow-glow hover:opacity-90">
-              <Link to="/register">
-                <Zap className="mr-2 h-4 w-4" /> Avaliar minha turma grátis
+              <Link to={primaryCtaLink}>
+                <Zap className="mr-2 h-4 w-4" /> {primaryCtaText}
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="border-border">
-              <a href="#como-funciona">Ver em 60 segundos <ArrowRight className="ml-2 h-4 w-4" /></a>
-            </Button>
+            {secondaryCtaText && (
+              <Button asChild size="lg" variant="outline" className="border-border">
+                <a href={secondaryCtaLink}>
+                  {secondaryCtaText} <ArrowRight className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            )}
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            Grátis para começar · Sem cartão · Pronto para usar na próxima aula
-          </p>
+          {quickNote && (
+            <p className="mt-4 text-xs text-muted-foreground">
+              {quickNote}
+            </p>
+          )}
         </motion.div>
 
         <motion.div
@@ -214,11 +259,7 @@ function Hero() {
         >
           <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-pop">
             <div className="grid grid-cols-3 divide-x divide-border">
-              {[
-                { kpi: "−92%", label: "Tempo de tabulação" },
-                { kpi: "0–100", label: "Índice ProMetric® por aluno" },
-                { kpi: "<5 min", label: "Para gerar um relatório" },
-              ].map((s) => (
+              {kpis.map((s) => (
                 <div key={s.label} className="px-6 py-7 text-center">
                   <div className="font-display text-2xl font-bold text-foreground md:text-3xl">{s.kpi}</div>
                   <div className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{s.label}</div>
@@ -233,12 +274,28 @@ function Hero() {
 }
 
 /* ---------- Benefits ---------- */
-function Benefits() {
+function Benefits({ stats }: { stats?: HomePageConfig["stats"] }) {
   const items = [
-    { icon: ClipboardCheck, title: "Avaliação Física Integrada", desc: "Bateria completa com classificação automática por idade e sexo. Zero cálculo manual, zero planilha." },
-    { icon: FileText, title: "Relatórios prontos para entregar", desc: "PDFs profissionais por aluno, turma e escola — gerados em segundos, com a sua identidade visual." },
-    { icon: Brain, title: "Diagnóstico por IA", desc: "Parecer técnico, mensagem para a família e metas de 30/60/90 dias personalizadas para cada aluno." },
-    { icon: BarChart3, title: "Visão de gestão", desc: "Indicadores de saúde e desempenho por turma, escola ou rede. Decisões pedagógicas com dado, não com achismo." },
+    {
+      icon: ClipboardCheck,
+      title: stats?.item1?.label ? `${stats.item1.value} ${stats.item1.label}` : "Avaliação Física Integrada",
+      desc: stats?.item1?.sublabel || "Bateria completa com classificação automática por idade e sexo. Zero cálculo manual, zero planilha.",
+    },
+    {
+      icon: FileText,
+      title: stats?.item2?.label ? `${stats.item2.value} ${stats.item2.label}` : "Relatórios prontos para entregar",
+      desc: stats?.item2?.sublabel || "PDFs profissionais por aluno, turma e escola — gerados em segundos, com a sua identidade visual.",
+    },
+    {
+      icon: Brain,
+      title: stats?.item3?.label ? `${stats.item3.value} ${stats.item3.label}` : "Diagnóstico por IA",
+      desc: stats?.item3?.sublabel || "Parecer técnico, mensagem para a família e metas de 30/60/90 dias personalizadas para cada aluno.",
+    },
+    {
+      icon: BarChart3,
+      title: stats?.item4?.label ? `${stats.item4.value} ${stats.item4.label}` : "Visão de gestão",
+      desc: stats?.item4?.sublabel || "Indicadores de saúde e desempenho por turma, escola ou rede. Decisões pedagógicas com dado, não com achismo.",
+    },
   ];
   return (
     <section id="beneficios" className="border-t border-border bg-secondary/40">
@@ -272,14 +329,18 @@ function Benefits() {
 }
 
 /* ---------- What is ProMetric ---------- */
-function WhatIsProMetric() {
+function WhatIsProMetric({ whatIs }: { whatIs?: HomePageConfig["whatIs"] }) {
+  const eyebrow = whatIs?.badge || "O que é o ProMetric";
+  const title = whatIs?.title || "A plataforma de avaliação física do professor moderno";
+  const description = whatIs?.description || "Tecnologia, ciência do esporte e gestão pedagógica em um só lugar.";
+
   return (
     <section id="o-que-e" className="border-t border-border">
       <div className="mx-auto max-w-4xl px-6 py-20 md:py-28">
         <SectionHeader
-          eyebrow="O que é o ProMetric"
-          title="A plataforma de avaliação física do professor moderno"
-          description="Tecnologia, ciência do esporte e gestão pedagógica em um só lugar."
+          eyebrow={eyebrow}
+          title={title}
+          description={description}
         />
         <div className="prose-custom mt-10 space-y-5 text-foreground/90 leading-relaxed">
           <p>
@@ -322,13 +383,19 @@ function WhatIsProMetric() {
 }
 
 /* ---------- Methodology — Método ProMetric® ---------- */
-function Methodology() {
+function Methodology({ methodology }: { methodology?: HomePageConfig["methodology"] }) {
+  const eyebrow = methodology?.badge || "Metodologia";
+  const title = methodology?.title || "Método ProMetric® de Avaliação Física";
+  const description =
+    methodology?.description ||
+    "Um sistema próprio que une ciência, tecnologia e inteligência artificial para entregar um diagnóstico claro e acionável em cada avaliação.";
+
   const dims = [
-    { icon: HeartPulse, title: "Saúde Corporal", desc: "Composição corporal, IMC e indicadores antropométricos por idade e sexo." },
-    { icon: Activity, title: "Resistência", desc: "Capacidade cardiorrespiratória e resistência muscular localizada." },
-    { icon: Sparkles, title: "Mobilidade", desc: "Flexibilidade e amplitude de movimento das principais cadeias musculares." },
-    { icon: Dumbbell, title: "Potência", desc: "Força explosiva de membros inferiores e superiores em testes padronizados." },
-    { icon: Timer, title: "Velocidade e Agilidade", desc: "Capacidade de aceleração, deslocamento e mudança de direção." },
+    { icon: HeartPulse, title: methodology?.dim1Title || "Saúde Corporal", desc: methodology?.dim1Desc || "Composição corporal, IMC e indicadores antropométricos por idade e sexo." },
+    { icon: Activity, title: methodology?.dim2Title || "Resistência", desc: methodology?.dim2Desc || "Capacidade cardiorrespiratória e resistência muscular localizada." },
+    { icon: Sparkles, title: methodology?.dim3Title || "Mobilidade", desc: methodology?.dim3Desc || "Flexibilidade e amplitude de movimento das principais cadeias musculares." },
+    { icon: Dumbbell, title: methodology?.dim4Title || "Potência", desc: methodology?.dim4Desc || "Força explosiva de membros inferiores e superiores em testes padronizados." },
+    { icon: Timer, title: methodology?.dim5Title || "Velocidade e Agilidade", desc: methodology?.dim5Desc || "Capacidade de aceleração, deslocamento e mudança de direção." },
   ];
   const cats = [
     { label: "Crítico",            range: "0–24",   tone: "bg-destructive/15 text-destructive border-destructive/30" },
@@ -341,9 +408,9 @@ function Methodology() {
     <section id="metodo" className="border-t border-border bg-secondary/40">
       <div className="mx-auto max-w-5xl px-6 py-20 md:py-28">
         <SectionHeader
-          eyebrow="Metodologia"
-          title="Método ProMetric® de Avaliação Física"
-          description="Um sistema próprio que une ciência, tecnologia e inteligência artificial para entregar um diagnóstico claro e acionável em cada avaliação."
+          eyebrow={eyebrow}
+          title={title}
+          description={description}
         />
 
         <div className="mt-10 grid gap-5 md:grid-cols-2">
@@ -443,20 +510,25 @@ function HowItWorks() {
 }
 
 /* ---------- For Schools ---------- */
-function ForSchools() {
+function ForSchools({ forSchools }: { forSchools?: HomePageConfig["forSchools"] }) {
+  const eyebrow = forSchools?.badge || "Para escolas";
+  const title = forSchools?.title || "Benefícios para escolas e coordenação";
+  const description = forSchools?.description || "Avaliação física como ativo estratégico: gestão, saúde e diferencial pedagógico.";
+  const bullets = forSchools?.bullets;
+
   const items = [
-    { icon: Building2, title: "Gestão centralizada", desc: "Visão multi-turma e multi-escola para coordenação e direção em um único painel." },
-    { icon: HeartPulse, title: "Indicadores de saúde", desc: "Identifique prevalência de sobrepeso, obesidade e baixa aptidão na comunidade escolar." },
-    { icon: FileText, title: "Relatórios institucionais", desc: "PDFs por turma, série ou escola, prontos para reuniões pedagógicas e prestação de contas." },
-    { icon: LineChart, title: "Acompanhamento contínuo", desc: "Compare diagnósticos semestrais e meça o impacto pedagógico real do seu programa." },
+    { icon: Building2, title: "Gestão centralizada", desc: bullets?.[0] || "Visão multi-turma e multi-escola para coordenação e direção em um único painel." },
+    { icon: HeartPulse, title: "Indicadores de saúde", desc: bullets?.[1] || "Identifique prevalência de sobrepeso, obesidade e baixa aptidão na comunidade escolar." },
+    { icon: FileText, title: "Relatórios institucionais", desc: bullets?.[2] || "PDFs por turma, série ou escola, prontos para reuniões pedagógicas e prestação de contas." },
+    { icon: LineChart, title: "Acompanhamento contínuo", desc: bullets?.[3] || "Compare diagnósticos semestrais e meça o impacto pedagógico real do seu programa." },
   ];
   return (
     <section className="border-t border-border bg-secondary/40">
       <div className="mx-auto max-w-7xl px-6 py-20 md:py-28">
         <SectionHeader
-          eyebrow="Para escolas"
-          title="Benefícios para escolas e coordenação"
-          description="Avaliação física como ativo estratégico: gestão, saúde e diferencial pedagógico."
+          eyebrow={eyebrow}
+          title={title}
+          description={description}
         />
         <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           {items.map((b) => (
@@ -475,22 +547,27 @@ function ForSchools() {
 }
 
 /* ---------- For Teachers ---------- */
-function ForTeachers() {
+function ForTeachers({ forTeachers }: { forTeachers?: HomePageConfig["forTeachers"] }) {
+  const eyebrow = forTeachers?.badge || "Para professores";
+  const title = forTeachers?.title || "Benefícios para o professor de Educação Física";
+  const description = forTeachers?.description || "Feito a partir da sua rotina: ganhe tempo, padronize e eleve o nível do seu trabalho.";
+  const bullets = forTeachers?.bullets;
+
   const items = [
-    { icon: Timer, title: "Economia de tempo", desc: "Reduza em até 92% o tempo gasto com tabulação e geração de relatórios." },
-    { icon: ClipboardCheck, title: "Correção automática", desc: "Classificação ProMetric® por idade e sexo aplicada na hora — sem planilhas, sem erro." },
-    { icon: FileText, title: "Relatórios profissionais", desc: "Entregue PDFs prontos para a família e a direção no mesmo dia da avaliação." },
-    { icon: Brain, title: "Inteligência artificial", desc: "Parecer técnico, mensagem para a família e metas de 30/60/90 dias por aluno." },
-    { icon: LineChart, title: "Histórico do aluno", desc: "Acompanhe a evolução cronológica de cada aluno com Radar ProMetric® comparativo." },
+    { icon: Timer, title: "Economia de tempo", desc: bullets?.[0] || "Reduza em até 92% o tempo gasto com tabulação e geração de relatórios." },
+    { icon: ClipboardCheck, title: "Correção automática", desc: bullets?.[1] || "Classificação ProMetric® por idade e sexo aplicada na hora — sem planilhas, sem erro." },
+    { icon: FileText, title: "Relatórios profissionais", desc: bullets?.[2] || "Entregue PDFs prontos para a família e a direção no mesmo dia da avaliação." },
+    { icon: Brain, title: "Inteligência artificial", desc: bullets?.[3] || "Parecer técnico, mensagem para a família e metas de 30/60/90 dias por aluno." },
+    { icon: LineChart, title: "Histórico do aluno", desc: bullets?.[4] || "Acompanhe a evolução cronológica de cada aluno com Radar ProMetric® comparativo." },
     { icon: Dumbbell, title: "Modo Quadra", desc: "Fluxo mobile otimizado para coletar com a turma toda em uma única aula." },
   ];
   return (
     <section className="border-t border-border">
       <div className="mx-auto max-w-7xl px-6 py-20 md:py-28">
         <SectionHeader
-          eyebrow="Para professores"
-          title="Benefícios para o professor de Educação Física"
-          description="Feito a partir da sua rotina: ganhe tempo, padronize e eleve o nível do seu trabalho."
+          eyebrow={eyebrow}
+          title={title}
+          description={description}
         />
         <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {items.map((b) => (
@@ -508,89 +585,125 @@ function ForTeachers() {
   );
 }
 
+/* ---------- Testimonials Section ---------- */
+function TestimonialsSection({ testimonials }: { testimonials: HomePageConfig["testimonials"] }) {
+  const items = testimonials?.items || [];
+  if (items.length === 0) return null;
+
+  return (
+    <section id="depoimentos" className="border-t border-border bg-secondary/30">
+      <div className="mx-auto max-w-7xl px-6 py-20 md:py-28">
+        <SectionHeader
+          eyebrow={testimonials.badge || "Depoimentos"}
+          title={testimonials.title || "Quem usa o ProMetric aprova"}
+          description={testimonials.description || "Professores, coordenadores e treinadores que transformaram sua rotina."}
+          align="center"
+        />
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          {items.map((t) => (
+            <div
+              key={t.id}
+              className="flex flex-col justify-between rounded-2xl border border-border bg-card p-6 shadow-card transition-all hover:shadow-pop"
+            >
+              <div>
+                <div className="flex items-center gap-1 text-amber-500 mb-3">
+                  {Array.from({ length: t.rating || 5 }).map((_, idx) => (
+                    <Star key={idx} className="h-4 w-4 fill-amber-500 text-amber-500" />
+                  ))}
+                </div>
+                <p className="text-sm leading-relaxed text-foreground/90 italic">"{t.quote}"</p>
+              </div>
+              <div className="mt-6 border-t border-border/60 pt-4">
+                <div className="font-display font-semibold text-foreground text-sm">{t.name}</div>
+                <div className="text-xs text-muted-foreground">{t.role} · {t.organization}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------- Pricing ---------- */
-function Pricing() {
+function Pricing({ pricing }: { pricing?: HomePageConfig["pricing"] }) {
+  const eyebrow = pricing?.badge || "Planos";
+  const title = pricing?.title || "Comece grátis hoje. Faça upgrade quando crescer.";
+  const description =
+    pricing?.description ||
+    "Comece gratuitamente e faça upgrade com alunos ilimitados quando sua escola ou turmas crescerem.";
+
   const plans = [
     {
-      name: "Gratuito",
-      price: "Grátis",
-      period: "para começar",
-      features: [
-        "Até 30 alunos ativos",
+      name: pricing?.freeTitle || "Gratuito",
+      price: pricing?.freePrice || "R$ 0",
+      period: "sempre gratuito",
+      features: pricing?.freeBullets || [
+        "Gratuito até 30 alunos / usuários",
         "Método ProMetric® completo",
         "Relatórios PDF individuais",
-        "1 professor / avaliador",
+        "Acesso completo no celular e Modo Quadra",
       ],
       cta: "Começar grátis agora",
       highlight: false,
     },
     {
-      name: "Pro",
-      price: "Ilimitado",
-      period: "para toda a escola",
-      features: [
-        "Alunos ilimitados",
-        "Até 10 professores e avaliadores",
+      name: pricing?.proTitle || "Pro",
+      price: pricing?.proPrice || "R$ 189,90",
+      period: "/mês",
+      features: pricing?.proBullets || [
+        "Alunos e turmas ilimitados (a partir de 30)",
+        "Professores e avaliadores ilimitados",
         "Parecer pedagógico completo com IA",
         "Relatórios institucionais e por turma",
-        "Assinatura flexível mensal ou anual",
+        "Personalização da marca e logo nos PDFs",
+        "Suporte prioritário via WhatsApp",
       ],
-      cta: "Quero o Pro",
+      cta: "Assinar plano Pro",
       highlight: true,
-    },
-    {
-      name: "Instituição & Redes",
-      price: "Sob medida",
-      period: "para municípios e redes",
-      features: [
-        "Secretarias de Educação e redes",
-        "Multi-escolas e turmas centralizadas",
-        "Onboarding e treinamento dedicados",
-        "Contratos institucionais e licitações",
-      ],
-      cta: "Falar com especialista",
-      highlight: false,
     },
   ];
   return (
     <section id="planos" className="border-t border-border bg-secondary/40">
       <div className="mx-auto max-w-7xl px-6 py-20 md:py-28">
         <SectionHeader
-          eyebrow="Planos"
-          title="Comece grátis hoje. Faça upgrade quando crescer."
-          description="Comece gratuitamente e faça upgrade com alunos ilimitados quando sua escola ou turmas crescerem."
+          eyebrow={eyebrow}
+          title={title}
+          description={description}
         />
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
+        <div className="mt-12 grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">
           {plans.map((p) => (
             <div
               key={p.name}
               className={cn(
-                "relative flex flex-col rounded-2xl border bg-card p-6 shadow-card",
-                p.highlight ? "border-primary/40 ring-1 ring-primary/30 shadow-pop" : "border-border",
+                "relative flex flex-col justify-between rounded-2xl border bg-card p-6 shadow-card",
+                p.highlight ? "border-primary/50 ring-1 ring-primary/40 shadow-pop" : "border-border",
               )}
             >
               {p.highlight && (
                 <div className="absolute -top-3 right-6 rounded-full bg-gradient-brand px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground shadow-glow">
-                  Mais popular
+                  {pricing?.proTag || "Recomendado"}
                 </div>
               )}
-              <div className="font-display text-base font-semibold">{p.name}</div>
-              <div className="mt-4 flex items-baseline gap-1">
-                <span className="font-display text-3xl font-bold">{p.price}</span>
-                {p.period && <span className="text-sm text-muted-foreground">{p.period}</span>}
+              <div>
+                <div className="font-display text-base font-semibold">{p.name}</div>
+                <div className="mt-4 flex items-baseline gap-1">
+                  <span className="font-display text-3xl font-bold">{p.price}</span>
+                  {p.period && <span className="text-sm text-muted-foreground">{p.period}</span>}
+                </div>
+                <ul className="mt-6 space-y-2.5 text-sm">
+                  {p.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-foreground/90">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="mt-6 flex-1 space-y-2.5 text-sm">
-                {p.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-foreground/90">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
               <Button
                 asChild
                 className={cn(
-                  "mt-6 w-full",
+                  "mt-8 w-full",
                   p.highlight ? "bg-gradient-brand text-primary-foreground shadow-glow hover:opacity-90" : "",
                 )}
                 variant={p.highlight ? "default" : "outline"}
@@ -606,19 +719,26 @@ function Pricing() {
 }
 
 /* ---------- FAQ ---------- */
-function Faq() {
+function Faq({ faq }: { faq?: HomePageConfig["faq"] }) {
+  const eyebrow = faq?.badge || "FAQ";
+  const title = faq?.title || "Perguntas frequentes sobre o ProMetric";
+  const description =
+    faq?.description ||
+    "Tire suas dúvidas sobre o Método ProMetric®, Avaliação Física Integrada e o uso da plataforma.";
+  const items = faq?.items?.length ? faq.items : FAQ_ITEMS.map((it, i) => ({ id: "f" + i, q: it.q, a: it.a }));
+
   return (
     <section id="faq" className="border-t border-border">
       <div className="mx-auto max-w-3xl px-6 py-20 md:py-28">
         <SectionHeader
-          eyebrow="FAQ"
-          title="Perguntas frequentes sobre o ProMetric"
-          description="Tire suas dúvidas sobre o Método ProMetric®, Avaliação Física Integrada e o uso da plataforma."
+          eyebrow={eyebrow}
+          title={title}
+          description={description}
           align="center"
         />
         <div className="mt-12 divide-y divide-border rounded-2xl border border-border bg-card shadow-card">
-          {FAQ_ITEMS.map((it, i) => (
-            <FaqItem key={i} q={it.q} a={it.a} />
+          {items.map((it) => (
+            <FaqItem key={it.id || it.q} q={it.q} a={it.a} />
           ))}
         </div>
         <div className="mt-10 flex items-center justify-center gap-3 rounded-2xl border border-border bg-card p-6 shadow-card">
@@ -647,21 +767,63 @@ function FaqItem({ q, a }: { q: string; a: string; key?: React.Key }) {
   );
 }
 
+/* ---------- CTA Banner ---------- */
+function CtaBanner({ cta }: { cta?: HomePageConfig["ctaBanner"] }) {
+  const title = cta?.title || "Transforme a Educação Física da sua instituição hoje mesmo";
+  const description =
+    cta?.description ||
+    "Crie sua conta gratuita em menos de 1 minuto e comece a avaliar seus alunos com relatórios profissionais que valorizam seu trabalho.";
+  const buttonText = cta?.buttonText || "Criar Conta Gratuita";
+  const buttonLink = cta?.buttonLink || "/register";
+  const secondaryButtonText = cta?.secondaryButtonText || "Conhecer o método";
+  const secondaryButtonLink = cta?.secondaryButtonLink || "#metodo";
+  const guaranteeText = cta?.guaranteeText || "Sem cartão de crédito · Ativação imediata · 100% online";
+
+  return (
+    <section className="relative overflow-hidden border-t border-border bg-gradient-mesh py-20 text-center">
+      <div className="relative mx-auto max-w-4xl px-6">
+        <h2 className="font-display text-3xl font-bold tracking-tight md:text-5xl text-foreground">
+          {title}
+        </h2>
+        <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground md:text-lg">
+          {description}
+        </p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+          <Button asChild size="lg" className="bg-gradient-brand text-primary-foreground shadow-glow hover:opacity-95">
+            <Link to={buttonLink}>{buttonText}</Link>
+          </Button>
+          {secondaryButtonText && (
+            <Button asChild size="lg" variant="outline">
+              <a href={secondaryButtonLink}>{secondaryButtonText}</a>
+            </Button>
+          )}
+        </div>
+        {guaranteeText && (
+          <p className="mt-4 text-xs text-muted-foreground">{guaranteeText}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* ---------- Footer ---------- */
-function SiteFooter() {
+function SiteFooter({ footer }: { footer?: HomePageConfig["footer"] }) {
+  const brandTagline = footer?.brandTagline || "ProMetric — Avaliação Física Inteligente com IA.";
+  const copyrightText = footer?.copyrightText || `© ${new Date().getFullYear()} ProMetric`;
+
   return (
     <footer className="border-t border-border bg-secondary/30">
       <div className="mx-auto max-w-7xl px-6 py-10">
         <div className="flex flex-col items-center justify-between gap-3 md:flex-row">
           <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
             <PrometricIcon className="h-5 w-5" />
-            <span>ProMetric — Avaliação Física Inteligente com IA.</span>
+            <span>{brandTagline}</span>
           </div>
           <nav aria-label="Rodapé" className="flex items-center gap-5 text-xs text-muted-foreground">
             <Link to="/blog" className="hover:text-foreground">Blog</Link>
             <Link to="/login" className="hover:text-foreground">Entrar</Link>
             <a href="#faq" className="hover:text-foreground">FAQ</a>
-            <span>© {new Date().getFullYear()} ProMetric</span>
+            <span>{copyrightText}</span>
           </nav>
         </div>
         <p className="mx-auto mt-6 max-w-3xl text-center text-[11px] leading-relaxed text-muted-foreground/80">

@@ -118,19 +118,22 @@ async function assertCanManageTenantAi(
 
     const { data: profile, error: admProfErr } = await supabaseAdmin
       .from("profiles")
-      .select("role, is_platform_admin, current_tenant_id, impersonating_tenant_id")
+      .select("current_tenant_id, impersonating_tenant_id")
       .eq("id", userId)
       .maybeSingle();
 
     if (!admProfErr && profile) {
       if (
-        profile.role === "admin" ||
-        profile.is_platform_admin === true ||
         profile.impersonating_tenant_id === tenantId ||
         profile.current_tenant_id === tenantId
       ) {
         return true;
       }
+    }
+
+    const { data: isPlatAdmin } = await supabaseAdmin.rpc("is_platform_admin", { _user: userId });
+    if (isPlatAdmin) {
+      return true;
     }
 
     const { data: member, error: admMemErr } = await supabaseAdmin
@@ -284,8 +287,9 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
         .select("id")
         .eq("tenant_id" as never, data.tenantId)
         .maybeSingle();
-      if ((userEx as { id?: string } | null)?.id) {
-        existingId = (userEx as { id: string }).id;
+      const uEx = userEx as unknown as { id: string } | null;
+      if (uEx?.id) {
+        existingId = uEx.id;
       }
     } catch (e) {
       console.warn("[tenant-ai] Busca existente via supabase:", e);
@@ -299,8 +303,9 @@ export const saveTenantAiCredential = createServerFn({ method: "POST" })
           .select("id")
           .eq("tenant_id" as never, data.tenantId)
           .maybeSingle();
-        if ((admEx as { id?: string } | null)?.id) {
-          existingId = (admEx as { id: string }).id;
+        const aEx = admEx as unknown as { id: string } | null;
+        if (aEx?.id) {
+          existingId = aEx.id;
         }
       } catch (e) {
         // supabaseAdmin não disponível

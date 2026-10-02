@@ -60,10 +60,10 @@ export const generateStudentReport = createServerFn({ method: "POST" })
         evaluation_id: latestEval?.id ?? null,
         engine_version: "v1.0.0",
         generated_at: report.generatedAt || new Date().toISOString(),
-        diagnosis: report.conclusao || report.resumoGeral || "",
-        technical: report.parecerTecnico || report.conclusao || "",
-        family: report.parecerFamilia || report.evolucao || "",
-        goals: report.metas || {},
+        diagnosis: report.conclusao || report.resumo_geral || "",
+        technical: report.conclusao || "",
+        family: report.evolucao || "",
+        goals: report.recomendacoes || [],
         full_report: report,
       } as never);
     } catch (saveErr) {

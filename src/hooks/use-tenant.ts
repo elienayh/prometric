@@ -125,6 +125,7 @@ export function useProfile() {
 }
 
 export function useCurrentTenant() {
+  const { user } = useAuth();
   const profile = useProfile();
   const memberships = useMyMemberships();
   const currentTenantId = profile.data?.current_tenant_id ?? null;
