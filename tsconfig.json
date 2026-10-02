@@ -18,6 +18,7 @@
     "jsxImportSource": "react",
     "strictNullChecks": true,
     "types": ["react", "react-dom", "node", "vite/client"],
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*",
