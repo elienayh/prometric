@@ -1,5 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { generateStudentReport } from "@/lib/ai-student-report.functions";
+import { buildDeterministicStudentReport } from "@/lib/deterministic-student-report";
 import { ArrowLeft, Calendar, Download, ExternalLink, Eye, FileDown, Loader2, MessageSquarePlus, Pencil, Printer, Ruler, Save, Share2, Sparkles, Trash2, TrendingDown, TrendingUp, User, Zap } from "lucide-react";
 import { issueSheetTokens } from "@/lib/sheet/sheet.functions";
 import { generateSheetPDF } from "@/lib/sheet/sheet-pdf";
@@ -29,6 +32,9 @@ import {
   TEST_META, ageFromBirth, expectedRangeFor, overallScore, zoneColor, zoneScore,
   type Classifications, type ClassificationKey, type Zone,
 } from "@/lib/proesp";
+import { ageInYears, ageInMonths } from "@/lib/age";
+import { validateField, normalizeHeight } from "@/lib/validation";
+import { IMC_BAND_LABEL, imcBand, imcAdultBand, IMC_CLINICAL_DISCLAIMER } from "@/lib/imc-reference";
 import { prometricIndex, dimensionScores, categoryColor } from "@/lib/prometric-method";
 import { consolidatedClassifications, currentEvaluation, withConsolidatedView } from "@/lib/student-metrics";
 
@@ -246,7 +252,7 @@ function StudentDetail() {
           s
             ? [
                 s.sex === "male" ? "Masculino" : "Feminino",
-                `${ageFromBirth(s.birth_date)} anos`,
+                `${ageInYears(s.birth_date)} anos`,
                 s.class?.name,
                 s.class?.school?.name,
                 last ? `Última avaliação: ${new Date(last.evaluated_at).toLocaleDateString("pt-BR")}` : null,
@@ -311,7 +317,7 @@ function StudentDetail() {
               <RankingPanel last={current} classEvals={classmates.data ?? []} />
               <TimelineTab data={data} studentId={id} student={s!} tenantName={tenant?.display_name ?? tenant?.name ?? "ProMetric"} onOpenPortal={() => setTab("portal")} onView={(ev) => setViewEval(ev)} />
               <InsightsPanel data={clinicalEvals} last={current} prev={prev} classEvals={classmates.data ?? []} />
-              <AIReportSection studentId={id} />
+              <AIReportSection studentId={id} student={s} evaluations={data} />
             </>
           ) : (
             <div className="rounded-2xl border border-dashed border-border bg-gradient-card p-10 text-center">
@@ -476,6 +482,9 @@ function IndicatorsGrid({ last, first, data, sex, onSelectTest }: { last: EvalRo
           );
         })}
       </div>
+      <footer className="border-t border-border px-5 py-2.5 text-[11px] text-muted-foreground">
+        <p>{IMC_CLINICAL_DISCLAIMER}</p>
+      </footer>
     </section>
   );
 }
@@ -523,15 +532,34 @@ function ClinicalCard({
   const styles = STATUS_STYLE[status];
   const range = expectedRangeFor(ind.key, source.age_years ?? age, sex);
 
-  const rangeLabel = range
-    ? `${formatNumber(range.min, ind.unit)}–${formatNumber(range.max, ind.unit)}${ind.unit ? ` ${ind.unit}` : ""}`
-    : "—";
-
-  const interpretation =
+  let displayLabel = styles.label;
+  let displayInterpretation =
     status === "adequate"  ? "Dentro do esperado para idade e sexo."
     : status === "attention" ? "Abaixo do esperado — recomenda-se estímulo direcionado."
     : status === "critical" ? "Muito abaixo do esperado — atenção prioritária."
     : "Sem dado registrado nesta avaliação.";
+
+  if (ind.key === "imc") {
+    const evAge = source.age_years ?? age;
+    if (evAge < 5) {
+      displayLabel = "Sem referência";
+      displayInterpretation = "Sem referência OMS para menores de 5 anos.";
+    } else if (value != null) {
+      const months = (source as any).age_months ?? (evAge >= 20 ? 240 : evAge * 12 + 6);
+      const band = evAge >= 20 ? imcAdultBand(value) : imcBand(value, sex, months);
+      displayLabel = IMC_BAND_LABEL[band];
+      displayInterpretation =
+        band === "eutrofia" || band === "eutrofia_baixa"
+          ? "Eutrofia para idade e sexo. (IMC é triagem, não diagnóstico)"
+          : band === "magreza"
+          ? "IMC abaixo do percentil esperado. (IMC é triagem, não diagnóstico)"
+          : "IMC acima do percentil esperado. (IMC é triagem, não diagnóstico)";
+    }
+  }
+
+  const rangeLabel = range
+    ? `${formatNumber(range.min, ind.unit)}–${formatNumber(range.max, ind.unit)}${ind.unit ? ` ${ind.unit}` : ""}`
+    : "—";
 
   return (
     <button
@@ -587,8 +615,8 @@ function ClinicalCard({
       <div className="mt-3 flex items-start gap-2 border-t border-border pt-2.5">
         <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", styles.dot)} />
         <div className="min-w-0">
-          <div className={cn("text-[11px] font-semibold", styles.text)}>{styles.label}</div>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{interpretation}</p>
+          <div className={cn("text-[11px] font-semibold", styles.text)}>{displayLabel}</div>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{displayInterpretation}</p>
         </div>
       </div>
     </button>
@@ -684,6 +712,17 @@ function EvaluationDetailDialog({
             const status = zoneToClinical(zone);
             const styles = STATUS_STYLE[status];
             const range = expectedRangeFor(ind.key, age, sex);
+            let indLabel = styles.label;
+            if (ind.key === "imc") {
+              const evAge = ev.age_years ?? age;
+              if (evAge < 5) {
+                indLabel = "Sem referência";
+              } else if (value != null) {
+                const months = (ev as any).age_months ?? (evAge >= 20 ? 240 : evAge * 12 + 6);
+                const band = evAge >= 20 ? imcAdultBand(value) : imcBand(value, sex, months);
+                indLabel = IMC_BAND_LABEL[band];
+              }
+            }
             return (
               <button
                 key={ind.key}
@@ -695,7 +734,7 @@ function EvaluationDetailDialog({
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {ind.label}
                   </span>
-                  <span className={cn("text-[10px] font-semibold", styles.text)}>{styles.label}</span>
+                  <span className={cn("text-[10px] font-semibold", styles.text)}>{indLabel}</span>
                 </div>
                 <div className="mt-1 flex items-baseline gap-1.5">
                   <span className="font-display text-2xl font-bold tabular-nums">
@@ -732,7 +771,7 @@ function TestEvolutionDialog({
 }) {
   const ind = testKey ? INDICATORS.find((i) => i.key === testKey) ?? null : null;
   const rows = useMemo(() => {
-    if (!ind) return [] as { id: string; date: string; label: string; value: number | null; zone: Zone | undefined }[];
+    if (!ind) return [] as { id: string; date: string; label: string; value: number | null; zone: Zone | undefined; age_years?: number | null; age_months?: number | null }[];
     return data
       .filter((ev) => {
         const rec = ev.recorded_values;
@@ -748,6 +787,8 @@ function TestEvolutionDialog({
           label: new Date(ev.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }),
           value: v,
           zone: (ev.recorded_classifications ?? ev.classifications)?.[ind.key],
+          age_years: ev.age_years,
+          age_months: (ev as any).age_months,
         };
       });
   }, [data, ind]);
@@ -804,13 +845,24 @@ function TestEvolutionDialog({
           )}
           {[...rows].reverse().map((r) => {
             const styles = STATUS_STYLE[zoneToClinical(r.zone)];
+            let rowLabel = r.zone ?? styles.label;
+            if (ind.key === "imc" && r.value != null) {
+              const evAge = r.age_years ?? lastEv?.age_years ?? 0;
+              if (evAge < 5) {
+                rowLabel = "Sem referência";
+              } else {
+                const months = r.age_months ?? (evAge >= 20 ? 240 : evAge * 12 + 6);
+                const band = evAge >= 20 ? imcAdultBand(r.value) : imcBand(r.value, sex, months);
+                rowLabel = IMC_BAND_LABEL[band];
+              }
+            }
             return (
               <div key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
                 <span className="text-muted-foreground">{new Date(r.date).toLocaleDateString("pt-BR")}</span>
                 <span className="font-mono font-semibold tabular-nums">
                   {r.value != null ? formatNumber(r.value, ind.unit) : "—"} {ind.unit}
                 </span>
-                <span className={cn("text-[10px] font-semibold", styles.text)}>{r.zone ?? styles.label}</span>
+                <span className={cn("text-[10px] font-semibold", styles.text)}>{rowLabel}</span>
               </div>
             );
           })}
@@ -1819,18 +1871,45 @@ function QuickMeasureDialog({
 
   const save = async () => {
     if (!tenantId) { toast.error("Sem tenant"); return; }
-    const w = weight ? Number(weight) : null;
-    const h = height ? Number(height) : null;
-    const c = waist ? Number(waist) : null;
+    const parseVal = (s: string) => {
+      const n = parseFloat(s.replace(",", "."));
+      return isNaN(n) ? null : n;
+    };
+    const w = weight ? parseVal(weight) : null;
+    let h = height ? parseVal(height) : null;
+    const c = waist ? parseVal(waist) : null;
     if (w == null && h == null && c == null) { toast.error("Preencha ao menos um campo"); return; }
+
+    if (h != null) {
+      const hNorm = normalizeHeight(h);
+      if (hNorm.convertedFromMeters && hNorm.normalized != null) {
+        h = hNorm.normalized;
+      }
+    }
+
+    if (w != null) {
+      const v = validateField("weight_kg", w);
+      if (!v.valid) { toast.error(v.message); return; }
+    }
+    if (h != null) {
+      const v = validateField("height_cm", h);
+      if (!v.valid) { toast.error(v.message); return; }
+    }
+    if (c != null) {
+      const v = validateField("waist_cm", c);
+      if (!v.valid) { toast.error(v.message); return; }
+    }
+
     setSaving(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const age = ageFromBirth(student.birth_date, new Date(today));
+      const age = ageInYears(student.birth_date, today);
+      const ageMonths = ageInMonths(student.birth_date, today);
       const imc = w && h ? +(w / Math.pow(h / 100, 2)).toFixed(2) : null;
       const rce = c && h ? +(c / h).toFixed(3) : null;
       const payload: Record<string, unknown> = {
-        tenant_id: tenantId, student_id: studentId, evaluated_at: today, age_years: age, sex: student.sex,
+        tenant_id: tenantId, student_id: studentId, evaluated_at: today,
+        age_years: age, age_months: ageMonths, sex: student.sex,
       };
       if (w != null) payload.weight_kg = w;
       if (h != null) payload.height_cm = h;
@@ -1866,7 +1945,20 @@ function QuickMeasureDialog({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Altura (cm)</Label>
-              <Input type="number" step="0.1" inputMode="decimal" value={height} onChange={(e) => setHeight(e.target.value)} />
+              <Input
+                type="number" step="0.1" inputMode="decimal"
+                value={height}
+                onChange={(e) => setHeight(e.target.value)}
+                onBlur={() => {
+                  if (height) {
+                    const hNorm = normalizeHeight(height);
+                    if (hNorm.convertedFromMeters && hNorm.normalized != null) {
+                      setHeight(String(hNorm.normalized));
+                      toast.info(`Altura convertida para ${hNorm.normalized} cm`);
+                    }
+                  }
+                }}
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Cintura (cm)</Label>
@@ -1888,7 +1980,15 @@ function QuickMeasureDialog({
 // ===========================================================================
 // AI REPORT — Análise holística do aluno via IA (ProMetric Model)
 // ===========================================================================
-function AIReportSection({ studentId }: { studentId: string }) {
+function AIReportSection({
+  studentId,
+  student,
+  evaluations,
+}: {
+  studentId: string;
+  student?: any;
+  evaluations?: any[];
+}) {
   type Report = {
     resumo_geral: string;
     evolucao: string;
@@ -1896,28 +1996,95 @@ function AIReportSection({ studentId }: { studentId: string }) {
     pontos_atencao: string[];
     recomendacoes: string[];
     conclusao: string;
+    resumoGeral?: string;
+    parecerTecnico?: string;
+    parecerFamilia?: string;
+    metas?: Record<string, any>;
     provider: string;
     source: string;
     promptVersion: string;
     generatedAt: string;
   };
-  const storageKey = `ai-student-report:${studentId}`;
-  const [report, setReport] = useState<Report | null>(() => {
-    if (typeof window === "undefined") return null;
-    try { const raw = window.localStorage.getItem(storageKey); return raw ? JSON.parse(raw) as Report : null; } catch { return null; }
+
+  const qc = useQueryClient();
+  const dbReportQ = useQuery({
+    queryKey: ["student-report-db", studentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("student_reports" as never)
+        .select("full_report")
+        .eq("student_id" as never, studentId)
+        .order("generated_at" as never, { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        console.warn("[AIReportSection] Erro ao buscar relatório salvo no banco:", error);
+        return null;
+      }
+      return ((data as any)?.full_report ?? null) as Report | null;
+    },
   });
+
+  const [localReport, setLocalReport] = useState<Report | null>(null);
+  const report = localReport ?? dbReportQ.data ?? null;
   const [loading, setLoading] = useState(false);
+  const reportFn = useServerFn(generateStudentReport);
+
+  const saveReportToDb = async (r: Report) => {
+    if (!student) return;
+    const latestEval = evaluations?.[evaluations.length - 1];
+    try {
+      await supabase.from("student_reports" as never).insert({
+        tenant_id: (student as any).tenant_id,
+        student_id: studentId,
+        evaluation_id: latestEval?.id ?? null,
+        engine_version: "v1.0.0",
+        generated_at: r.generatedAt || new Date().toISOString(),
+        diagnosis: r.conclusao || r.resumoGeral || "",
+        technical: r.parecerTecnico || r.conclusao || "",
+        family: r.parecerFamilia || r.evolucao || "",
+        goals: r.metas || {},
+        full_report: r,
+      } as never);
+      qc.invalidateQueries({ queryKey: ["student-report-db", studentId] });
+    } catch (dbErr) {
+      console.warn("[AIReportSection] Erro ao persistir parecer:", dbErr);
+    }
+  };
 
   const run = async () => {
     setLoading(true);
     try {
-      const { generateStudentReport } = await import("@/lib/ai-student-report.functions");
-      const r = await generateStudentReport({ data: { studentId } }) as Report;
-      setReport(r);
-      try { window.localStorage.setItem(storageKey, JSON.stringify(r)); } catch { /* noop */ }
-      toast.success("Relatório gerado pela IA");
+      let r: Report | null = null;
+      try {
+        r = (await reportFn({ data: { studentId } })) as Report;
+      } catch (serverErr) {
+        console.warn("[AIReportSection] Server RPC falhou, acionando gerador determinístico local:", serverErr);
+        if (student && evaluations && evaluations.length > 0) {
+          r = buildDeterministicStudentReport(student, evaluations) as Report;
+        } else {
+          throw serverErr;
+        }
+      }
+
+      if (!r && student && evaluations && evaluations.length > 0) {
+        r = buildDeterministicStudentReport(student, evaluations) as Report;
+      }
+
+      if (r) {
+        setLocalReport(r);
+        await saveReportToDb(r);
+        toast.success("Relatório gerado e salvo");
+      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao gerar relatório");
+      if (student && evaluations && evaluations.length > 0) {
+        const r = buildDeterministicStudentReport(student, evaluations) as Report;
+        setLocalReport(r);
+        await saveReportToDb(r);
+        toast.success("Relatório gerado e salvo");
+      } else {
+        toast.error(e instanceof Error ? e.message : "Falha ao gerar relatório");
+      }
     } finally {
       setLoading(false);
     }

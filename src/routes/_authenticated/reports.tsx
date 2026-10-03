@@ -9,26 +9,79 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTenant } from "@/hooks/use-tenant";
 import { PageHeader } from "@/components/layout/page-header";
 import { TEST_META, ZONES, type Classifications, type Zone, zoneColor, overallScore } from "@/lib/proesp";
+import { imcBand, imcAdultBand, IMC_BAND_LABEL } from "@/lib/imc-reference";
+import { prometricIndex } from "@/lib/prometric-method";
+import { scoreToSituation } from "@/lib/prometric-reference";
 import { downloadStudentEvolutionPDF } from "@/lib/pdf-evolution-report";
 import { cn } from "@/lib/utils";
 
-function buildExportRows(evals: { evaluated_at: string; age_years: number | null; weight_kg: number | null; height_cm: number | null; classifications: Classifications; student: { full_name: string; sex: "male" | "female" } }[]) {
+export type EvalReportItem = {
+  id: string;
+  evaluated_at: string;
+  age_years: number | null;
+  age_months?: number | null;
+  weight_kg: number | null;
+  height_cm: number | null;
+  waist_cm?: number | null;
+  imc?: number | null;
+  rce?: number | null;
+  sit_and_reach_cm?: number | null;
+  horizontal_jump_cm?: number | null;
+  medicine_ball_m?: number | null;
+  abdominal_reps?: number | null;
+  square_test_s?: number | null;
+  sprint_20m_s?: number | null;
+  run_6min_m?: number | null;
+  classifications: Classifications;
+  student: { full_name: string; sex: "male" | "female"; birth_date: string };
+};
+
+export function buildExportRows(evals: EvalReportItem[]) {
   return evals.map((e) => {
     const overall = overallScore(e.classifications ?? {});
-    const row: Record<string, any> = {
-      Aluno: e.student.full_name,
-      Sexo: e.student.sex === "male" ? "M" : "F",
-      Idade: e.age_years ?? "",
-      Data: new Date(e.evaluated_at).toLocaleDateString("pt-BR"),
-      Peso: e.weight_kg ?? "",
-      Altura: e.height_cm ?? "",
-    };
-    for (const [k, m] of Object.entries(TEST_META)) {
-      row[m.label] = e.classifications?.[k as keyof Classifications] ?? "";
+    const pm = prometricIndex(e.classifications ?? {});
+    const situation = scoreToSituation(pm.score, pm.partial);
+
+    const age = e.age_years ?? 10;
+    const months = e.age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+    let imcCategory = "";
+    if (e.imc != null) {
+      const band = age >= 20 ? imcAdultBand(e.imc) : imcBand(e.imc, e.student.sex, months);
+      imcCategory = IMC_BAND_LABEL[band] ?? "";
     }
-    row["Perfil geral"] = overall.label ?? "";
-    row["Score"] = overall.score;
-    return row;
+
+    return {
+      "Aluno": e.student.full_name,
+      "Sexo": e.student.sex === "male" ? "M" : "F",
+      "Idade (anos)": e.age_years ?? "",
+      "Idade (meses)": e.age_months ?? "",
+      "Data da Avaliação": new Date(e.evaluated_at).toLocaleDateString("pt-BR"),
+      "Peso (kg)": e.weight_kg ?? "",
+      "Estatura (cm)": e.height_cm ?? "",
+      "Cintura (cm)": e.waist_cm ?? "",
+      "IMC (kg/m²)": e.imc ?? "",
+      "Classificação IMC (OMS 2007)": imcCategory,
+      "RCE": e.rce ?? "",
+      "Classificação RCE": e.classifications?.rce ?? "",
+      "Flexibilidade (cm)": e.sit_and_reach_cm ?? "",
+      "Classificação Flexibilidade": e.classifications?.flex ?? "",
+      "Salto Horizontal (cm)": e.horizontal_jump_cm ?? "",
+      "Classificação Salto": e.classifications?.jump ?? "",
+      "Medicine Ball (m)": e.medicine_ball_m ?? "",
+      "Classificação Medicine Ball": e.classifications?.mball ?? "",
+      "Abdominal (reps)": e.abdominal_reps ?? "",
+      "Classificação Abdominal": e.classifications?.abdo ?? "",
+      "Agilidade Quadrado (s)": e.square_test_s ?? "",
+      "Classificação Agilidade": e.classifications?.square ?? "",
+      "Velocidade 20m (s)": e.sprint_20m_s ?? "",
+      "Classificação Velocidade": e.classifications?.sprint ?? "",
+      "Corrida 6min (m)": e.run_6min_m ?? "",
+      "Classificação Corrida": e.classifications?.run6 ?? "",
+      "Índice ProMetric (0-100)": pm.score,
+      "Categoria ProMetric": pm.category ?? "",
+      "Situação de Referência": situation ?? "",
+      "Perfil Geral": overall.label ?? "",
+    };
   });
 }
 
@@ -59,12 +112,7 @@ export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
 });
 
-type EvalRow = {
-  id: string; evaluated_at: string; age_years: number | null;
-  weight_kg: number | null; height_cm: number | null;
-  classifications: Classifications;
-  student: { full_name: string; sex: "male" | "female"; birth_date: string };
-};
+type EvalRow = EvalReportItem;
 
 function ReportsPage() {
   const { tenantId, tenant } = useCurrentTenant();
@@ -84,12 +132,12 @@ function ReportsPage() {
     queryFn: async () => {
       let q = supabase
         .from("evaluations")
-        .select("id,evaluated_at,age_years,weight_kg,height_cm,classifications,student:students!inner(full_name,sex,birth_date,class_id)")
+        .select("id,evaluated_at,age_years,age_months,weight_kg,height_cm,waist_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications,student:students!inner(full_name,sex,birth_date,class_id)")
         .eq("tenant_id", tenantId!);
       if (classId !== "all") q = q.eq("student.class_id", classId);
       const { data, error } = await q.order("evaluated_at", { ascending: false });
       if (error) throw error;
-      return data as unknown as EvalRow[];
+      return data as unknown as EvalReportItem[];
     },
   });
 
@@ -218,7 +266,7 @@ function ReportsPage() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{e.student.full_name}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {new Date(e.evaluated_at).toLocaleDateString("pt-BR")} • {e.age_years} anos
+                        {new Date(e.evaluated_at).toLocaleDateString("pt-BR")} • {e.age_years} anos{e.age_months ? ` (${e.age_months} meses)` : ""}
                       </div>
                     </div>
                     <span className={cn("rounded-full border px-2 py-0.5 text-[10px]", zoneColor(ov.label))}>{ov.label ?? "—"}</span>

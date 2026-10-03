@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTenant } from "@/hooks/use-tenant";
 import { PageHeader, EmptyState } from "@/components/layout/page-header";
+import { ageInYears } from "@/lib/age";
 
 export const Route = createFileRoute("/_authenticated/students/")({
   head: () => ({ meta: [{ title: "Alunos — ProMetric" }] }),
@@ -32,9 +33,7 @@ type StudentRow = {
 };
 
 function calcAge(birth: string) {
-  const b = new Date(birth);
-  const diff = Date.now() - b.getTime();
-  return Math.floor(diff / (365.25 * 24 * 3600 * 1000));
+  return ageInYears(birth);
 }
 
 function StudentsPage() {

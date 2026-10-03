@@ -216,7 +216,7 @@ function DemoEnvironmentPage() {
       <Card className="p-6 text-sm text-muted-foreground">
         <h3 className="mb-2 font-semibold text-foreground">O que é gerado</h3>
         <ul className="list-inside list-disc space-y-1">
-          <li>Tenant <strong>Colégio Modelo ProMetric</strong> (plano Rede)</li>
+          <li>Tenant <strong>Colégio Modelo ProMetric</strong> (plano Pro)</li>
           <li>3 escolas, 9 turmas e 10 grupos esportivos</li>
           <li>4 contatos de equipe (professores fictícios)</li>
           <li>200 alunos com nomes brasileiros realistas, distribuídos nas turmas</li>

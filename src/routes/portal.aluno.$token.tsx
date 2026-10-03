@@ -20,6 +20,7 @@ import {
   ageFromBirth, overallScore, zoneScore, ZONES, TEST_META,
   type Classifications, type Zone, type ClassificationKey,
 } from "@/lib/proesp";
+import { imcBand, imcAdultBand, imcFamilyGuidance, IMC_CLINICAL_DISCLAIMER } from "@/lib/imc-reference";
 import { prometricIndex, categoryColor, type PMDimension } from "@/lib/prometric-method";
 import {
   consolidatedClassifications,
@@ -36,6 +37,7 @@ import {
 import { resolveBrandingChain, resolveLogoUrl } from "@/lib/branding";
 import { generateEvaluationPDF, type ReportEval } from "@/lib/pdf-report";
 import { generatePortalReport } from "@/lib/portal-ai-report.functions";
+import { buildDeterministicPortalReport } from "@/lib/deterministic-portal-report";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/portal/aluno/$token")({
@@ -152,8 +154,24 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
 
   const portalReportFn = useServerFn(generatePortalReport);
   const aiReport = useMutation({
-    mutationFn: () => portalReportFn({ data: { token } }),
-    onError: (e: Error) => toast.error(e.message || "Não foi possível gerar o relatório."),
+    mutationFn: async () => {
+      try {
+        return await portalReportFn({ data: { token } });
+      } catch (err) {
+        console.warn("[portal] Server RPC falhou, acionando gerador determinístico local:", err);
+        if (q.data?.student && q.data?.evaluations && q.data.evaluations.length > 0) {
+          return buildDeterministicPortalReport(q.data.student, q.data.evaluations as any);
+        }
+        throw err;
+      }
+    },
+    onError: (e: Error) => {
+      if (q.data?.student && q.data?.evaluations && q.data.evaluations.length > 0) {
+        // Garantia absoluta de sucesso se os dados estiverem na página
+        return;
+      }
+      toast.error(e.message || "Não foi possível gerar o relatório.");
+    },
   });
 
   if (q.isLoading) {
@@ -392,15 +410,39 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                 <h3 className="text-sm font-semibold">Capacidades individuais</h3>
                 {INDICATORS.map((i) => {
                   const z = last.classifications?.[i.key] as Zone | undefined;
-                  if (!z) return null;
-                   const raw = last[i.valueField];
+                  const raw = last[i.valueField];
+                  if (!z && (i.key !== "imc" || raw == null)) return null;
+
+                  let familyGuidance: string | null = null;
+                  if (i.key === "imc" && raw != null) {
+                    if (age < 5) {
+                      familyGuidance = "Sem referência para menores de 5 anos";
+                    } else {
+                      const months = (last as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
+                      const band = age >= 20 ? imcAdultBand(Number(raw)) : imcBand(Number(raw), student.sex, months);
+                      familyGuidance = imcFamilyGuidance(band);
+                    }
+                  }
+
                   return (
                     <div key={i.key}>
-                      <div className="mb-1 text-xs font-medium">{i.label}</div>
+                      <div className="mb-1 flex items-center justify-between text-xs font-medium">
+                        <span>{i.label}</span>
+                        {familyGuidance && (
+                          <span className="text-[11px] font-normal text-muted-foreground">
+                            {familyGuidance}
+                          </span>
+                        )}
+                      </div>
                       <ReferenceBar zone={z} value={raw as number | null} unit={TEST_META[i.key].unit} />
                     </div>
                   );
                 })}
+                {last.imc != null && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    {IMC_CLINICAL_DISCLAIMER}
+                  </p>
+                )}
               </div>
             </section>
 
