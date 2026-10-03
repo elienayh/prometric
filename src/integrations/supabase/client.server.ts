@@ -11,16 +11,10 @@ function createSupabaseAdminClient() {
     process.env.VITE_SUPABASE_URL ||
     "https://salfzhrvbfxvtookfbuk.supabase.co";
 
-  const rawKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const pubKey =
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    "sb_publishable_nPkW_QcQk2Rki7BIeu9PCA_MfkcEnS4";
-
-  // Se a chave service_role não estiver presente ou for um segredo inválido/não registrado (formato sb_secret_ que gera Unregistered API key),
-  // faz fallback seguro para a chave pública válida para evitar que as funções do servidor quebrem.
-  const isInvalidSecret = !rawKey || rawKey.startsWith("sb_secret_");
-  const SUPABASE_KEY = isInvalidSecret ? pubKey : rawKey;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_KEY) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY ausente no servidor — operações admin não podem rodar com a chave pública");
+  }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
     auth: {

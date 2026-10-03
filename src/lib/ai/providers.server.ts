@@ -2,6 +2,7 @@
 // NUNCA importar deste arquivo a partir de código de browser.
 
 import type { ProviderId } from "./providers-catalog";
+import { resolveGoogleModel } from "./unified-generate.server";
 
 export type PingResult = {
   ok: boolean;
@@ -65,7 +66,8 @@ async function pingXai(apiKey: string, model: string) {
 }
 
 async function pingGoogle(apiKey: string, model: string) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const resolvedModel = resolveGoogleModel(model);
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(resolvedModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

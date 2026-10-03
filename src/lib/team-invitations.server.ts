@@ -121,6 +121,13 @@ export async function checkTenantAdminPermission(
   // Se o cliente do usuário foi fornecido, tenta validar diretamente com as permissões da sessão
   if (userClient) {
     try {
+      const { data: isRpcAdmin } = await userClient.rpc("is_tenant_admin", {
+        _tenant: tenantId,
+      });
+      if (isRpcAdmin === true) return true;
+    } catch (e) {}
+
+    try {
       const { data: adminRole } = await userClient
         .from("admin_roles")
         .select("role")
@@ -132,16 +139,10 @@ export async function checkTenantAdminPermission(
     try {
       const { data: profile } = await userClient
         .from("profiles")
-        .select("role, is_platform_admin, current_tenant_id, impersonating_tenant_id")
+        .select("impersonating_tenant_id")
         .eq("id", userId)
         .maybeSingle();
-      if (
-        profile &&
-        (profile.role === "admin" ||
-          profile.is_platform_admin === true ||
-          profile.current_tenant_id === tenantId ||
-          profile.impersonating_tenant_id === tenantId)
-      ) {
+      if (profile?.impersonating_tenant_id === tenantId) {
         return true;
       }
     } catch (e) {}
