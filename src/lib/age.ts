@@ -94,3 +94,41 @@ export function ageInMonths(birth: DateInput, ref: DateInput = new Date()): numb
 export function ageFromBirth(birth: string, ref = new Date()): number {
   return ageInYears(birth, ref);
 }
+
+export type ResolvedAge = {
+  years: number;
+  months: number;
+  isApproximated: boolean; // true se derivado de idade_em_anos * 12 + 6 por ausência de data de nascimento
+};
+
+/**
+ * Resolve a idade do aluno de forma centralizada:
+ * 1. Se houver data de nascimento, calcula os meses e anos exatos por calendário civil.
+ * 2. Se houver age_months registrado, usa-o diretamente.
+ * 3. Como último recurso, deriva os meses pela regra (anos * 12 + 6) e sinaliza `isApproximated = true`.
+ */
+export function resolveAge(
+  birthDate?: DateInput | null,
+  refDate: DateInput = new Date(),
+  fallbackAgeYears?: number | null,
+  fallbackAgeMonths?: number | null,
+): ResolvedAge {
+  if (birthDate) {
+    const years = ageInYears(birthDate, refDate);
+    const months = ageInMonths(birthDate, refDate);
+    return { years, months, isApproximated: false };
+  }
+
+  if (fallbackAgeMonths != null && fallbackAgeMonths > 0) {
+    const years = fallbackAgeYears ?? Math.floor(fallbackAgeMonths / 12);
+    return { years, months: fallbackAgeMonths, isApproximated: false };
+  }
+
+  const years = fallbackAgeYears != null && fallbackAgeYears > 0 ? fallbackAgeYears : 10;
+  return {
+    years,
+    months: years * 12 + 6,
+    isApproximated: true,
+  };
+}
+

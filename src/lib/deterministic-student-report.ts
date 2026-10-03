@@ -1,18 +1,15 @@
 import { PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
 import {
-  consolidatedClassifications,
-  currentIndex,
-  chronological,
   type EvalLike,
 } from "@/lib/student-metrics";
 import {
-  zoneToCategory,
-  PM_DIMENSIONS,
   type PMCategory,
 } from "@/lib/prometric-method";
 import { TEST_META, type ClassificationKey, type Zone } from "@/lib/proesp";
-import { ageInYears } from "@/lib/age";
-import { imcBand, imcAdultBand, IMC_BAND_LABEL, IMC_CLINICAL_DISCLAIMER } from "@/lib/imc-reference";
+import {
+  buildStudentConsolidatedPackage,
+  type StudentConsolidatedPackage,
+} from "./indicator-results";
 
 export type StudentReportData = {
   id?: string;
@@ -69,31 +66,31 @@ export function buildDeterministicStudentReport(
     throw new Error("Nenhuma avaliação registrada para este aluno.");
   }
 
-  const ordered = chronological(evals) as StudentEvalData[];
-  const firstEval = ordered[0];
-  const lastEval = ordered[ordered.length - 1];
+  const pkg = buildStudentConsolidatedPackage(
+    { id: student.id, fullName: student.full_name, sex: student.sex, birthDate: student.birth_date },
+    evals,
+  );
 
-  const isFem = student.sex === "female";
+  const isFem = pkg.student.sex === "female";
   const art = isFem ? "A aluna" : "O aluno";
   const pron = isFem ? "ela" : "ele";
 
-  const totalEvals = ordered.length;
-  const firstDate = new Date(firstEval.evaluated_at).toLocaleDateString("pt-BR");
-  const lastDate = new Date(lastEval.evaluated_at).toLocaleDateString("pt-BR");
+  const totalRegistered = pkg.counts.totalRegistered;
+  const classifiedCount = pkg.counts.classified;
+  const partialCount = pkg.counts.partial;
 
-  // Idade atual ou na última avaliação
-  const currentAge = lastEval.age_years ?? (() => {
-    if (!student.birth_date) return null;
-    return ageInYears(student.birth_date, lastEval.evaluated_at);
-  })();
+  const firstDate = pkg.evolution.firstRecord
+    ? new Date(pkg.evolution.firstRecord.evaluated_at).toLocaleDateString("pt-BR")
+    : "";
+  const lastDate = pkg.evolution.currentEvaluation
+    ? new Date(pkg.evolution.currentEvaluation.evaluated_at).toLocaleDateString("pt-BR")
+    : "";
 
-  // Classificações consolidadas e Índice ProMetric atual
-  const consolidated = consolidatedClassifications(ordered);
-  const index = currentIndex(ordered);
-  const overallCategory = index.category ?? "Em Desenvolvimento";
+  const currentAge = pkg.student.age.years;
+  const overallCategory = pkg.index.category ?? "Em Desenvolvimento";
 
   // Dimensões do ProMetric
-  const dims = index.dimensions;
+  const dims = pkg.dimensions;
   const strongDims = dims.filter((d) => d.category === "Excelente" || d.category === "Bom");
   const attentionDims = dims.filter(
     (d) => d.category === "Prioritário" || d.category === "Atenção" || d.category === "Em Desenvolvimento"
@@ -103,18 +100,19 @@ export function buildDeterministicStudentReport(
   // 1. RESUMO GERAL
   // ───────────────────────────────────────────────────────────────────────────
   const antropoParts: string[] = [];
-  if (lastEval.height_cm) antropoParts.push(`estatura de ${lastEval.height_cm} cm`);
-  if (lastEval.weight_kg) antropoParts.push(`peso corporal de ${lastEval.weight_kg} kg`);
-  if (lastEval.imc) {
-    const age = lastEval.age_years ?? currentAge ?? 10;
-    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
-    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
-    const clinicalLabel = IMC_BAND_LABEL[band];
-    antropoParts.push(`IMC de ${lastEval.imc.toFixed(1)} kg/m² (${clinicalLabel} — OMS 2007)`);
+  const imcInd = pkg.indicators.imc;
+  const rceInd = pkg.indicators.rce;
+  const currEval = pkg.evolution.currentEvaluation as StudentEvalData | null;
+  const heightVal = currEval?.height_cm;
+  const weightVal = currEval?.weight_kg;
+
+  if (heightVal) antropoParts.push(`estatura de ${heightVal} cm`);
+  if (weightVal) antropoParts.push(`peso corporal de ${weightVal} kg`);
+  if (imcInd.hasData && imcInd.value != null) {
+    antropoParts.push(`IMC de ${imcInd.value.toFixed(1)} kg/m² (${imcInd.clinicalLabel} — OMS 2007)`);
   }
-  if (lastEval.rce) {
-    const rceCat = zoneToCategory(consolidated.rce);
-    antropoParts.push(`RCE de ${lastEval.rce.toFixed(2)}${rceCat ? ` (${rceCat})` : ""}`);
+  if (rceInd.hasData && rceInd.value != null) {
+    antropoParts.push(`RCE de ${rceInd.value.toFixed(2)}${rceInd.category ? ` (${rceInd.category})` : ""}`);
   }
 
   const dimHighlights: string[] = [];
@@ -126,14 +124,15 @@ export function buildDeterministicStudentReport(
   }
 
   const resumo_geral = [
-    `${art} ${student.full_name}, ${currentAge ? `${currentAge} anos, ` : ""}possui um histórico de ${totalEvals} avaliação(ões) física(s) registrada(s) no sistema ProMetric®, compreendendo o período de ${firstDate}${totalEvals > 1 ? ` a ${lastDate}` : ""}.`,
-    `Seu Índice ProMetric® consolidado é de ${index.score}/100 pontos, situando seu perfil geral de aptidão física na categoria '${overallCategory}'.`,
+    `${art} ${pkg.student.fullName}, ${currentAge ? `${currentAge} anos, ` : ""}possui um histórico de ${totalRegistered} avaliação(ões) física(s) registrada(s) no sistema ProMetric® (${classifiedCount} classificadas e ${partialCount} parciais), compreendendo o período de ${firstDate}${totalRegistered > 1 ? ` a ${lastDate}` : ""}.`,
+    `Seu Índice ProMetric® consolidado é de ${pkg.index.score}/100 pontos, situando seu perfil geral de aptidão física na categoria '${overallCategory}'.`,
     antropoParts.length > 0
       ? `Na dimensão de Saúde Corporal mais recente, apresenta ${antropoParts.join(", ")}.`
       : "",
     dimHighlights.length > 0
       ? `A análise multidimensional das valências motoras identifica ${dimHighlights.join(", com ")}.`
       : `O perfil motor consolidado apresenta equilíbrio geral entre as valências avaliadas.`,
+    pkg.disclaimers.missingDimensionWarning ?? "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -142,79 +141,87 @@ export function buildDeterministicStudentReport(
   // 2. EVOLUÇÃO
   // ───────────────────────────────────────────────────────────────────────────
   let evolucao = "";
-  if (totalEvals === 1) {
-    evolucao = `Esta é a avaliação diagnóstica inicial (linha de base) de ${student.full_name}, realizada em ${lastDate}. Como há um registro único até o momento, os resultados atuais servem como referência normativa oficial do aluno no Método ProMetric®. As próximas reavaliações permitirão acompanhar com precisão a taxa de evolução temporal, o progresso neuromuscular e as adaptações morfofuncionais.`;
+  if (totalRegistered === 1) {
+    evolucao = `Esta é a avaliação diagnóstica inicial (linha de base) de ${pkg.student.fullName}, realizada em ${lastDate}. Como há um registro único até o momento, os resultados atuais servem como referência normativa oficial do aluno no Método ProMetric®. As próximas reavaliações permitirão acompanhar com precisão a taxa de evolução temporal, o progresso neuromuscular e as adaptações morfofuncionais.`;
   } else {
-    const firstIndex = currentIndex([firstEval]);
-    const deltaIndex = index.score - firstIndex.score;
-    const indexDirection =
-      deltaIndex > 0
-        ? `um ganho acumulado de +${deltaIndex} pontos no Índice ProMetric® (de ${firstIndex.score} para ${index.score} pontos)`
-        : deltaIndex < 0
-        ? `uma variação de ${deltaIndex} pontos no Índice ProMetric® (de ${firstIndex.score} para ${index.score} pontos)`
-        : `a manutenção estável do Índice ProMetric® em ${index.score} pontos`;
+    const firstEval = pkg.evolution.firstClassified ?? pkg.evolution.firstRecord;
+    const lastEval = pkg.evolution.currentEvaluation;
+    const deltaIndex = pkg.evolution.deltaScore;
+    const baseScore = pkg.evolution.baseScore;
+    const currScore = pkg.evolution.currentScore;
+
+    let indexDirection = "";
+    if (deltaIndex != null && baseScore != null) {
+      if (deltaIndex > 0) {
+        indexDirection = `um ganho acumulado de +${deltaIndex} pontos no Índice ProMetric® (de ${baseScore} para ${currScore} pontos)`;
+      } else if (deltaIndex < 0) {
+        indexDirection = `uma variação de ${deltaIndex} pontos no Índice ProMetric® (de ${baseScore} para ${currScore} pontos)`;
+      } else {
+        indexDirection = `a manutenção estável do Índice ProMetric® em ${currScore} pontos`;
+      }
+    } else {
+      indexDirection = `evolução consistente com Índice ProMetric® atual de ${currScore} pontos`;
+    }
 
     const testChanges: string[] = [];
+    if (firstEval && lastEval) {
+      const higherTests = [
+        { field: "horizontal_jump_cm", name: "Salto Horizontal", unit: "cm" },
+        { field: "medicine_ball_m", name: "Arremesso de Medicine Ball", unit: "m" },
+        { field: "abdominal_reps", name: "Resistência Abdominal", unit: "reps" },
+        { field: "sit_and_reach_cm", name: "Flexibilidade", unit: "cm" },
+        { field: "run_6min_m", name: "Corrida de 6 Minutos", unit: "m" },
+      ] as const;
 
-    // Comparações específicas onde maior é melhor
-    const higherTests: { field: keyof StudentEvalData; name: string; unit: string }[] = [
-      { field: "horizontal_jump_cm", name: "Salto Horizontal", unit: "cm" },
-      { field: "medicine_ball_m", name: "Arremesso de Medicine Ball", unit: "m" },
-      { field: "abdominal_reps", name: "Resistência Abdominal", unit: "reps" },
-      { field: "sit_and_reach_cm", name: "Flexibilidade", unit: "cm" },
-      { field: "run_6min_m", name: "Corrida de 6 Minutos", unit: "m" },
-    ];
-
-    for (const t of higherTests) {
-      const v1 = firstEval[t.field] as number | null | undefined;
-      const v2 = lastEval[t.field] as number | null | undefined;
-      if (v1 != null && v2 != null) {
-        const diff = +(v2 - v1).toFixed(2);
-        if (diff > 0) {
-          testChanges.push(`${t.name} evoluiu de ${v1} para ${v2} ${t.unit} (+${diff} ${t.unit})`);
-        } else if (diff < 0) {
-          testChanges.push(`${t.name} variou de ${v1} para ${v2} ${t.unit} (${diff} ${t.unit})`);
-        } else {
-          testChanges.push(`${t.name} manteve-se em ${v2} ${t.unit}`);
+      for (const t of higherTests) {
+        const v1 = (firstEval as any)[t.field] as number | null | undefined;
+        const v2 = (lastEval as any)[t.field] as number | null | undefined;
+        if (v1 != null && v2 != null) {
+          const diff = +(v2 - v1).toFixed(2);
+          if (diff > 0) {
+            testChanges.push(`${t.name} evoluiu de ${v1} para ${v2} ${t.unit} (+${diff} ${t.unit})`);
+          } else if (diff < 0) {
+            testChanges.push(`${t.name} variou de ${v1} para ${v2} ${t.unit} (${diff} ${t.unit})`);
+          } else {
+            testChanges.push(`${t.name} manteve-se em ${v2} ${t.unit}`);
+          }
         }
       }
-    }
 
-    // Comparações onde menor é melhor (velocidade e agilidade)
-    const lowerTests: { field: keyof StudentEvalData; name: string; unit: string }[] = [
-      { field: "sprint_20m_s", name: "Velocidade (20m)", unit: "s" },
-      { field: "square_test_s", name: "Agilidade (Quadrado)", unit: "s" },
-    ];
+      const lowerTests = [
+        { field: "sprint_20m_s", name: "Velocidade 20m" },
+        { field: "square_test_s", name: "Agilidade (Quadrado)" },
+      ] as const;
 
-    for (const t of lowerTests) {
-      const v1 = firstEval[t.field] as number | null | undefined;
-      const v2 = lastEval[t.field] as number | null | undefined;
-      if (v1 != null && v2 != null) {
-        const diff = +(v2 - v1).toFixed(2);
-        if (diff < 0) {
-          testChanges.push(`${t.name} melhorou o tempo de ${v1}s para ${v2}s (${diff}s mais veloz)`);
-        } else if (diff > 0) {
-          testChanges.push(`${t.name} registrou ${v1}s inicialmente e ${v2}s atualmente (+${diff}s)`);
-        } else {
-          testChanges.push(`${t.name} manteve estabilidade em ${v2}s`);
+      for (const t of lowerTests) {
+        const v1 = (firstEval as any)[t.field] as number | null | undefined;
+        const v2 = (lastEval as any)[t.field] as number | null | undefined;
+        if (v1 != null && v2 != null) {
+          const diff = +(v1 - v2).toFixed(2);
+          if (diff > 0) {
+            testChanges.push(`${t.name} evoluiu sendo ${diff}s mais veloz (${v1}s para ${v2}s)`);
+          } else if (diff < 0) {
+            testChanges.push(`${t.name} variou de ${v1}s para ${v2}s (+${Math.abs(diff)}s)`);
+          } else {
+            testChanges.push(`${t.name} manteve estabilidade em ${v2}s`);
+          }
         }
       }
-    }
 
-    // Crescimento em estatura
-    if (firstEval.height_cm != null && lastEval.height_cm != null && lastEval.height_cm !== firstEval.height_cm) {
-      const hDiff = +(lastEval.height_cm - firstEval.height_cm).toFixed(1);
-      testChanges.unshift(`crescimento estatural de +${hDiff} cm (${firstEval.height_cm} cm → ${lastEval.height_cm} cm)`);
+      const h1 = Number(firstEval.height_cm);
+      const h2 = Number(lastEval.height_cm);
+      if (!isNaN(h1) && !isNaN(h2) && h1 > 0 && h2 > 0 && h2 !== h1) {
+        const hDiff = +(h2 - h1).toFixed(1);
+        testChanges.unshift(`crescimento estatural de +${hDiff} cm (${h1} cm → ${h2} cm)`);
+      }
     }
 
     evolucao = [
-      `Ao longo do intervalo avaliativo entre ${firstDate} e ${lastDate} (${totalEvals} sessões de avaliação), ${art.toLowerCase()} demonstrou ${indexDirection}.`,
+      `Ao longo do intervalo avaliativo entre ${firstDate} e ${lastDate} (${totalRegistered} sessões registradas, sendo ${classifiedCount} classificadas), ${art.toLowerCase()} demonstrou ${indexDirection}.`,
       testChanges.length > 0
         ? `Entre os testes motores executados no período, observa-se: ${testChanges.join("; ")}.`
-        : "Os parâmetros motores mantiveram consistência ao longo das baterias de testes realizadas.",
-      deltaIndex >= 0
-        ? `A trajetória evolutiva reflete adaptação positiva aos estímulos motores e às práticas corporais propostas.`
-        : `A flutuação nos indicadores sugere a necessidade de reforçar a frequência e constância dos estímulos nas valências em declínio.`,
+        : "Os parâmetros motores mantiveram consistência e estabilidade em todas as baterias realizadas.",
+      "Essa evolução confirma adaptações biológicas positivas e a importância da constância nas atividades corporais.",
     ].join(" ");
   }
 
@@ -229,7 +236,7 @@ export function buildDeterministicStudentReport(
     name: string;
     unit: string;
     val: number | null | undefined;
-    zone: Zone | undefined;
+    zone: Zone | null;
     category: PMCategory | null;
     meaningGood: string;
     meaningWarn: string;
@@ -239,9 +246,9 @@ export function buildDeterministicStudentReport(
       key: "jump",
       name: "Potência de Membros Inferiores (Salto Horizontal)",
       unit: "cm",
-      val: lastEval.horizontal_jump_cm,
-      zone: consolidated.jump,
-      category: zoneToCategory(consolidated.jump),
+      val: pkg.indicators.jump.value,
+      zone: pkg.indicators.jump.zone,
+      category: pkg.indicators.jump.category,
       meaningGood: "excelente capacidade de impulsão e força explosiva dos membros inferiores",
       meaningWarn: "déficit na potência muscular e capacidade de impulsão",
       rec: "Incluir exercícios lúdicos de saltos bipodais e unipodais, aterrissagens controladas e circuitos com pequenos obstáculos.",
@@ -250,9 +257,9 @@ export function buildDeterministicStudentReport(
       key: "mball",
       name: "Força Explosiva de Membros Superiores (Medicine Ball)",
       unit: "m",
-      val: lastEval.medicine_ball_m,
-      zone: consolidated.mball,
-      category: zoneToCategory(consolidated.mball),
+      val: pkg.indicators.mball.value,
+      zone: pkg.indicators.mball.zone,
+      category: pkg.indicators.mball.category,
       meaningGood: "excelente recrutamento neuromuscular e transferência de força da cintura escapular",
       meaningWarn: "necessidade de fortalecimento da musculatura escapular e de membros superiores",
       rec: "Adicionar brincadeiras de arremessos com implementos leves, empurrar/puxar e apoios adaptados no solo.",
@@ -261,9 +268,9 @@ export function buildDeterministicStudentReport(
       key: "abdo",
       name: "Resistência Muscular Localizada (Abdominal 1min)",
       unit: "reps",
-      val: lastEval.abdominal_reps,
-      zone: consolidated.abdo,
-      category: zoneToCategory(consolidated.abdo),
+      val: pkg.indicators.abdo.value,
+      zone: pkg.indicators.abdo.zone,
+      category: pkg.indicators.abdo.category,
       meaningGood: "estabilidade central (core) consistente e boa resistência muscular do abdômen",
       meaningWarn: "fadiga precoce da musculatura estabilizadora do tronco (core)",
       rec: "Praticar exercícios de estabilização do core em pranchas isométricas adequadas à idade e variações dinâmicas seguras.",
@@ -272,9 +279,9 @@ export function buildDeterministicStudentReport(
       key: "flex",
       name: "Mobilidade e Flexibilidade (Sentar e Alcançar)",
       unit: "cm",
-      val: lastEval.sit_and_reach_cm,
-      zone: consolidated.flex,
-      category: zoneToCategory(consolidated.flex),
+      val: pkg.indicators.flex.value,
+      zone: pkg.indicators.flex.zone,
+      category: pkg.indicators.flex.category,
       meaningGood: "excelente amplitude articular e flexibilidade da cadeia muscular posterior",
       meaningWarn: "encurtamento e rigidez da cadeia posterior (isquiotibiais e paravertebrais)",
       rec: "Implementar rotinas de alongamento estático e dinâmico de 5 a 10 minutos após as aulas, com foco em membros inferiores.",
@@ -283,9 +290,9 @@ export function buildDeterministicStudentReport(
       key: "sprint",
       name: "Velocidade de Deslocamento (Corrida 20m)",
       unit: "s",
-      val: lastEval.sprint_20m_s,
-      zone: consolidated.sprint,
-      category: zoneToCategory(consolidated.sprint),
+      val: pkg.indicators.sprint.value,
+      zone: pkg.indicators.sprint.zone,
+      category: pkg.indicators.sprint.category,
       meaningGood: "ótima aceleração inicial e velocidade de reação motora",
       meaningWarn: "tempo de reação e capacidade de aceleração abaixo do referencial normativo",
       rec: "Propor jogos de perseguição (pega-pega estruturado) e estafetas curtas com largadas variadas.",
@@ -294,9 +301,9 @@ export function buildDeterministicStudentReport(
       key: "square",
       name: "Agilidade e Coordenação (Teste do Quadrado)",
       unit: "s",
-      val: lastEval.square_test_s,
-      zone: consolidated.square,
-      category: zoneToCategory(consolidated.square),
+      val: pkg.indicators.square.value,
+      zone: pkg.indicators.square.zone,
+      category: pkg.indicators.square.category,
       meaningGood: "agilidade apurada nas frenagens e mudanças rápidas de direção",
       meaningWarn: "dificuldade de controle corporal e desaceleração rápida nas trocas de sentido",
       rec: "Utilizar escadas de agilidade, circuitos em zigue-zague e jogos com comandos visuais e sonoros.",
@@ -305,9 +312,9 @@ export function buildDeterministicStudentReport(
       key: "run6",
       name: "Aptidão Cardiorrespiratória (Corrida 6min)",
       unit: "m",
-      val: lastEval.run_6min_m,
-      zone: consolidated.run6,
-      category: zoneToCategory(consolidated.run6),
+      val: pkg.indicators.run6.value,
+      zone: pkg.indicators.run6.zone,
+      category: pkg.indicators.run6.category,
       meaningGood: "eficiência cardiorrespiratória e resistência aeróbica bem desenvolvida",
       meaningWarn: "resistência aeróbica reduzida, demandando estímulo progressivo",
       rec: "Incentivar atividades contínuas e recreativas com duração sustentada de 10 a 20 minutos (jogos coletivos, corridas intervaladas lúdicas).",
@@ -325,21 +332,16 @@ export function buildDeterministicStudentReport(
   }
 
   // Verifica IMC se estiver eutrófico/saudável
-  if (lastEval.imc != null) {
-    const age = lastEval.age_years ?? currentAge ?? 10;
-    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
-    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
-    if (band === "eutrofia") {
-      pontos_fortes.push(
-        `Composição Corporal (IMC ${lastEval.imc.toFixed(1)} kg/m² — Eutrofia): Nível de massa corporal saudável e adequado para a faixa etária segundo os parâmetros da OMS 2007.`
-      );
-    }
+  if (imcInd.hasData && imcInd.value != null && imcInd.clinicalStatus === "adequate") {
+    pontos_fortes.push(
+      `Composição Corporal (IMC ${imcInd.value.toFixed(1)} kg/m² — ${imcInd.clinicalLabel}): Nível de massa corporal saudável e adequado para a faixa etária segundo os parâmetros da OMS 2007.`
+    );
   }
 
   // Se nenhum teste atingiu Bom/Excelente, destaca os melhores desempenhos relativos
   if (pontos_fortes.length === 0) {
     pontos_fortes.push(
-      `Adesão e Engajamento nas Avaliações: Participação ativa em ${totalEvals} bateria(s) de testes do ProMetric®, demonstrando comprometimento com a rotina de avaliação física.`
+      `Adesão e Engajamento nas Avaliações: Participação ativa em ${totalRegistered} bateria(s) de testes do ProMetric®, demonstrando comprometimento com a rotina de avaliação física.`
     );
     const sortedByScore = [...testItems]
       .filter((t) => t.category !== null)
@@ -380,13 +382,10 @@ export function buildDeterministicStudentReport(
   }
 
   // Alerta antropométrico se houver desvio de eutrofia
-  if (lastEval.imc != null) {
-    const age = lastEval.age_years ?? currentAge ?? 10;
-    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
-    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
-    if (band === "sobrepeso" || band === "obesidade" || band === "magreza") {
+  if (imcInd.hasData && imcInd.value != null) {
+    if (imcInd.clinicalStatus === "attention" || imcInd.clinicalStatus === "critical") {
       pontos_atencao.push(
-        `Composição Corporal (IMC ${lastEval.imc.toFixed(1)} kg/m² — ${IMC_BAND_LABEL[band]}): Parâmetro OMS 2007 em faixa que demanda acompanhamento preventivo contínuo e incentivo ativo a práticas corporais saudáveis.`
+        `Composição Corporal (IMC ${imcInd.value.toFixed(1)} kg/m² — ${imcInd.clinicalLabel}): Parâmetro OMS 2007 em faixa que demanda acompanhamento preventivo contínuo e incentivo ativo a práticas corporais saudáveis.`
       );
     }
   }
@@ -415,17 +414,10 @@ export function buildDeterministicStudentReport(
     }
   }
 
-  if (lastEval.imc != null) {
-    const age = lastEval.age_years ?? currentAge ?? 10;
-    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
-    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
-    if (band === "sobrepeso" || band === "obesidade") {
+  if (imcInd.hasData && imcInd.value != null) {
+    if (imcInd.clinicalStatus === "attention" || imcInd.clinicalStatus === "critical") {
       recomendacoes.push(
         "Incentivar a ampliação do tempo diário em atividades físicas recreativas ativas (mínimo de 60 minutos diários) e redução do tempo sedentário de tela, em cooperação com a família."
-      );
-    } else if (band === "magreza") {
-      recomendacoes.push(
-        "Orientar diálogo preventivo com a família e profissionais de saúde para adequação energética e acompanhamento do ganho saudável de peso."
       );
     }
   }
@@ -448,10 +440,10 @@ export function buildDeterministicStudentReport(
   // ───────────────────────────────────────────────────────────────────────────
   const statusGeralTexto =
     overallCategory === "Excelente" || overallCategory === "Bom"
-      ? `um nível consistente e satisfatório de aptidão física geral (Índice ProMetric® de ${index.score}/100)`
-      : `um perfil de desenvolvimento em construção, com Índice ProMetric® consolidado de ${index.score}/100`;
+      ? `um nível consistente e satisfatório de aptidão física geral (Índice ProMetric® de ${pkg.index.score}/100)`
+      : `um perfil de desenvolvimento em construção, com Índice ProMetric® consolidado de ${pkg.index.score}/100`;
 
-  const conclusao = `${art} ${student.full_name} apresenta ${statusGeralTexto}. Os registros cronológicos armazenados no Método ProMetric® fornecem à coordenação pedagógica, aos professores e aos responsáveis subsídios objetivos para orientar as práticas de Educação Física de forma segura, motivadora e personalizada. A implementação contínua das orientações pedagógicas aqui estabelecidas promoverá tanto a consolidação dos pontos fortes quanto a superação das valências em desenvolvimento, contribuindo de forma decisiva para a saúde integral e o bem-estar do aluno.\n\nNota técnica: ${IMC_CLINICAL_DISCLAIMER}`;
+  const conclusao = `${art} ${student.full_name} apresenta ${statusGeralTexto}. Os registros cronológicos armazenados no Método ProMetric® fornecem à coordenação pedagógica, aos professores e aos responsáveis subsídios objetivos para orientar as práticas de Educação Física de forma segura, motivadora e personalizada. A implementação contínua das orientações pedagógicas aqui estabelecidas promoverá tanto a consolidação dos pontos fortes quanto a superação das valências em desenvolvimento, contribuindo de forma decisiva para a saúde integral e o bem-estar do aluno.\n\nNota técnica: ${pkg.disclaimers.imc}`;
 
   return {
     resumo_geral,

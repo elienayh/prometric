@@ -214,6 +214,7 @@ export async function downloadStudentEvolutionPDF(
     const { data } = await q;
     const rows: { classifications: Classifications | null }[] = [];
     for (const ps of (data ?? []) as any[]) {
+      if (ps.id === studentId) continue; // Exclui o próprio aluno da média de pares
       const evs = (ps.evaluations ?? []) as { classifications: Classifications | null; evaluated_at: string }[];
       if (!evs.length) continue;
        rows.push({ classifications: consolidatedClassifications(evs) });
@@ -244,11 +245,21 @@ export async function downloadStudentEvolutionPDF(
     : null;
 
   // ── Compute analytics ────────────────────────────────────────────────
-  const first = history[0];
-  const last = history[history.length - 1];
+  const evaluativeHistory = history.filter((e) => Object.values(e.classifications ?? {}).some(Boolean));
+  const classifiedHistory = evaluativeHistory.filter((e) => {
+    const cls = e.classifications ?? {};
+    return Object.values(cls).filter(Boolean).length >= 4;
+  });
+  const first = classifiedHistory.length > 0
+    ? classifiedHistory[0]
+    : (evaluativeHistory[0] ?? history[0]);
+  const last = evaluativeHistory.length > 0
+    ? evaluativeHistory[evaluativeHistory.length - 1]
+    : history[history.length - 1];
   const idxFirst = prometricIndex(first.classifications ?? {});
   const idxLast = prometricIndex(last.classifications ?? {});
-  const delta = idxLast.score - idxFirst.score;
+  const isComparable = !idxLast.partial && !idxFirst.partial && first.id !== last.id;
+  const delta = isComparable ? idxLast.score - idxFirst.score : 0;
 
   const dimsLast = dimensionScores(last.classifications ?? {});
   const dimsFirst = dimensionScores(first.classifications ?? {});
@@ -618,18 +629,19 @@ export async function downloadStudentEvolutionPDF(
     doc.setDrawColor(235);
     doc.line(rightX, yy, rightX + chartW, yy);
   });
-  const scores = history.map((e) => prometricIndex(e.classifications ?? {}).score);
-  const stepX = history.length > 1 ? chartW / (history.length - 1) : 0;
+  const plotHistory = evaluativeHistory.length > 0 ? evaluativeHistory : history;
+  const scores = plotHistory.map((e) => prometricIndex(e.classifications ?? {}).score);
+  const stepX = plotHistory.length > 1 ? chartW / (plotHistory.length - 1) : 0;
   doc.setDrawColor(...primary);
   doc.setLineWidth(0.9);
-  for (let i = 1; i < history.length; i++) {
+  for (let i = 1; i < plotHistory.length; i++) {
     const x1 = rightX + stepX * (i - 1);
     const y1 = chartTop + chartH - (scores[i - 1] / 100) * chartH;
     const x2 = rightX + stepX * i;
     const y2 = chartTop + chartH - (scores[i] / 100) * chartH;
     doc.line(x1, y1, x2, y2);
   }
-  history.forEach((_, i) => {
+  plotHistory.forEach((_, i) => {
     const x = rightX + stepX * i;
     const yp = chartTop + chartH - (scores[i] / 100) * chartH;
     doc.setFillColor(255, 255, 255); doc.circle(x, yp, 1.7, "F");
@@ -640,9 +652,9 @@ export async function downloadStudentEvolutionPDF(
   });
   doc.setFont("helvetica", "normal").setFontSize(6);
   doc.setTextColor(110);
-  doc.text(new Date(first.evaluated_at).toLocaleDateString("pt-BR"), rightX, chartTop + chartH + 3);
-  if (history.length > 1) {
-    doc.text(new Date(last.evaluated_at).toLocaleDateString("pt-BR"), rightX + chartW, chartTop + chartH + 3, { align: "right" });
+  doc.text(new Date(plotHistory[0].evaluated_at).toLocaleDateString("pt-BR"), rightX, chartTop + chartH + 3);
+  if (plotHistory.length > 1) {
+    doc.text(new Date(plotHistory[plotHistory.length - 1].evaluated_at).toLocaleDateString("pt-BR"), rightX + chartW, chartTop + chartH + 3, { align: "right" });
   }
   doc.setTextColor(34, 120, 60);
   doc.text(`Faixa verde = esperado (${EXPECTED_INDEX_RANGE.min}–${EXPECTED_INDEX_RANGE.max})`, rightX + chartW / 2, chartTop + chartH + 3, { align: "center" });

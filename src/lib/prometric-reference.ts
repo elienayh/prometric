@@ -49,8 +49,8 @@ export function scoreToSituation(score: number, partial = false): PRSituation | 
   if (partial) return null;
   if (score < 25) return "Muito abaixo";
   if (score < 45) return "Abaixo";
-  if (score < 75) return "Dentro do esperado";
-  if (score < 90) return "Acima do esperado";
+  if (score < 85) return "Dentro do esperado";
+  if (score < 95) return "Acima do esperado";
   return "Muito acima do esperado";
 }
 

@@ -880,14 +880,16 @@ function InsightsPanel({ data, last, prev, classEvals }: { data: EvalRow[]; last
   const insights = useMemo(() => {
     const out: { tone: "good" | "warn" | "bad" | "info"; text: string }[] = [];
 
-    // Score geral
-    const lastScore = prometricIndex(last.classifications ?? {}).score;
-    if (prev) {
-      const prevScore = prometricIndex(prev.classifications ?? {}).score;
-      const delta = lastScore - prevScore;
-      if (delta >= 5) out.push({ tone: "good", text: `Índice ProMetric subiu de ${prevScore} para ${lastScore} desde a última avaliação.` });
-      else if (delta <= -5) out.push({ tone: "bad", text: `Índice ProMetric caiu de ${prevScore} para ${lastScore} desde a última avaliação.` });
-      else out.push({ tone: "info", text: `Índice ProMetric estável (${lastScore}) em relação à avaliação anterior.` });
+    // Score geral (apenas entre avaliações classificadas com dados suficientes)
+    const lastPm = prometricIndex(last.classifications ?? {});
+    if (prev && !lastPm.partial) {
+      const prevPm = prometricIndex(prev.classifications ?? {});
+      if (!prevPm.partial) {
+        const delta = lastPm.score - prevPm.score;
+        if (delta >= 5) out.push({ tone: "good", text: `Índice ProMetric subiu de ${prevPm.score} para ${lastPm.score} desde a última avaliação classificada.` });
+        else if (delta <= -5) out.push({ tone: "bad", text: `Índice ProMetric caiu de ${prevPm.score} para ${lastPm.score} desde a última avaliação classificada.` });
+        else out.push({ tone: "info", text: `Índice ProMetric estável (${lastPm.score}) em relação à avaliação classificada anterior.` });
+      }
     }
 
     // Pontos fortes / atenção
@@ -897,23 +899,33 @@ function InsightsPanel({ data, last, prev, classEvals }: { data: EvalRow[]; last
     const weakest = sorted[sorted.length - 1];
     if (weakest && weakest.score < 50) out.push({ tone: "warn", text: `Ponto de atenção: ${weakest.dimension} (${weakest.score}/100 — ${weakest.category}).` });
 
-    // Comparativo turma
-    if (classEvals.length >= 2) {
-      for (const ind of INDICATORS) {
+    // Comparativo turma (excluindo o próprio aluno da média dos colegas e comparando testes motores)
+    const peerClassEvals = classEvals.filter((e) => e.student_id !== last.student_id && e.id !== last.id);
+    const poolClass = peerClassEvals.length > 0 ? peerClassEvals : classEvals;
+    if (poolClass.length >= 2) {
+      const motorInds = INDICATORS.filter((i) => i.key !== "imc" && i.key !== "rce");
+      for (const ind of motorInds) {
         const v = num(last, ind.field);
-        const vals = classEvals.map((e) => num(e, ind.field)).filter((x): x is number => x != null);
+        const vals = poolClass.map((e) => num(e, ind.field)).filter((x): x is number => x != null);
         if (v == null || !vals.length) continue;
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
         if (avg === 0) continue;
         const diff = ((v - avg) / avg) * 100;
         const better = ind.higherBetter ? diff >= 10 : diff <= -10;
         const worse  = ind.higherBetter ? diff <= -10 : diff >= 10;
-        if (better) { out.push({ tone: "good", text: `${ind.label}: ${Math.abs(diff).toFixed(0)}% acima da média da turma.` }); break; }
-        if (worse)  { out.push({ tone: "warn", text: `${ind.label}: ${Math.abs(diff).toFixed(0)}% abaixo da média da turma.` }); break; }
+        if (better) { out.push({ tone: "good", text: `${ind.label}: ${Math.abs(diff).toFixed(0)}% acima da média dos colegas de turma.` }); break; }
+        if (worse)  { out.push({ tone: "warn", text: `${ind.label}: ${Math.abs(diff).toFixed(0)}% abaixo da média dos colegas de turma.` }); break; }
       }
     }
 
-    if (data.length >= 3) out.push({ tone: "info", text: `Acompanhamento consistente: ${data.length} avaliações registradas.` });
+    const classifiedCount = data.filter((e) => (Object.values(e.classifications ?? {}).filter(Boolean) as string[]).length >= 4).length;
+    const partialCount = data.length - classifiedCount;
+    if (data.length >= 2) {
+      out.push({
+        tone: "info",
+        text: `Acompanhamento consistente: ${data.length} avaliações registradas (${classifiedCount} classificadas e ${partialCount} parciais).`,
+      });
+    }
     return out;
   }, [data, last, prev, classEvals]);
 
@@ -1078,14 +1090,18 @@ function ComparativeTab({ last, classEvals, schoolEvals }: { last: EvalRow; clas
   const dims = dimensionScores(last.classifications ?? {});
   const radarData = dims.map((d) => ({
     dim: d.dimension.split(" ")[0],
-    Aluno: d.score,
+    Aluno: d.category ? d.score : null,
     Turma: avgDimension(classEvals, d.dimension),
     Escola: avgDimension(schoolEvals, d.dimension),
   }));
 
+  // Exclui o próprio aluno da turma para obter a média autêntica dos colegas de turma
+  const peerClassEvals = classEvals.filter((e) => e.student_id !== last.student_id && e.id !== last.id);
+  const poolClass = peerClassEvals.length > 0 ? peerClassEvals : classEvals;
+
   const rows = INDICATORS.map((ind) => {
     const v = num(last, ind.field);
-    const cVals = classEvals.map((e) => num(e, ind.field)).filter((x): x is number => x != null);
+    const cVals = poolClass.map((e) => num(e, ind.field)).filter((x): x is number => x != null);
     const sVals = schoolEvals.map((e) => num(e, ind.field)).filter((x): x is number => x != null);
     const cAvg = cVals.length ? cVals.reduce((a, b) => a + b, 0) / cVals.length : null;
     const sAvg = sVals.length ? sVals.reduce((a, b) => a + b, 0) / sVals.length : null;
@@ -1129,9 +1145,9 @@ function ComparativeTab({ last, classEvals, schoolEvals }: { last: EvalRow; clas
             {rows.map((r) => (
               <tr key={r.key}>
                 <td className="px-4 py-3 font-medium">{r.label}</td>
-                <td className="px-4 py-3 text-right font-mono">{r.v != null ? `${r.v} ${r.unit}` : "—"}</td>
-                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.cAvg != null ? `${r.cAvg.toFixed(1)} ${r.unit}` : "—"}</td>
-                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.sAvg != null ? `${r.sAvg.toFixed(1)} ${r.unit}` : "—"}</td>
+                <td className="px-4 py-3 text-right font-mono">{r.v != null ? `${formatNumber(r.v, r.unit)}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
+                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.cAvg != null ? `${formatNumber(r.cAvg, r.unit)}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
+                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.sAvg != null ? `${formatNumber(r.sAvg, r.unit)}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
                 <td className="px-4 py-3 text-right">
                   {r.cDiff.diff != null ? (
                     <span className={cn(
@@ -1618,8 +1634,9 @@ function RankingPanel({ last, classEvals }: { last: EvalRow; classEvals: EvalRow
     const pool = classEvals.some((e) => e.id === last.id) ? classEvals : [...classEvals, last];
     const total = pool.length;
 
-    // Por indicador
-    const indRows = INDICATORS.map((ind) => {
+    // Por indicador (apenas testes motores funcionais — IMC e RCE são parâmetros clínicos de saúde/triagem, não competição esportiva)
+    const motorIndicators = INDICATORS.filter((ind) => ind.key !== "imc" && ind.key !== "rce");
+    const indRows = motorIndicators.map((ind) => {
       const vals = pool
         .map((e) => ({ id: e.id, v: num(e, ind.field) }))
         .filter((x): x is { id: string; v: number } => x.v != null);
@@ -1629,16 +1646,20 @@ function RankingPanel({ last, classEvals }: { last: EvalRow; classEvals: EvalRow
       return { label: ind.label, position: idx >= 0 ? idx + 1 : null, total: vals.length, unit: ind.unit, value: num(last, ind.field) };
     });
 
-    // Índice geral
-    const scored = pool.map((e) => ({ id: e.id, s: prometricIndex(e.classifications ?? {}).score }));
+    // Índice geral (apenas para avaliações com dados suficientes)
+    const lastPm = prometricIndex(last.classifications ?? {});
+    const scored = pool
+      .map((e) => ({ id: e.id, pm: prometricIndex(e.classifications ?? {}) }))
+      .filter((e) => !e.pm.partial)
+      .map((e) => ({ id: e.id, s: e.pm.score }));
     scored.sort((a, b) => b.s - a.s);
     const idxOverall = scored.findIndex((x) => x.id === last.id);
     const overallRow = {
       label: "Índice ProMetric (geral)",
-      position: idxOverall >= 0 ? idxOverall + 1 : null,
-      total,
+      position: !lastPm.partial && idxOverall >= 0 ? idxOverall + 1 : null,
+      total: scored.length,
       unit: "",
-      value: prometricIndex(last.classifications ?? {}).score,
+      value: lastPm.partial ? null : lastPm.score,
     };
 
     return [overallRow, ...indRows];

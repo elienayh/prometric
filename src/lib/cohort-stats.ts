@@ -80,7 +80,9 @@ export function aggregateCohort(
     let evolution: number | null = null;
     if (first && first.classifications && first.evaluated_at !== s.evaluated_at) {
       const baseIdx = prometricIndex(first.classifications as Classifications);
-      evolution = idx.score - baseIdx.score;
+      if (!idx.partial && !baseIdx.partial) {
+        evolution = idx.score - baseIdx.score;
+      }
     }
     return {
       student_id: s.student_id,
@@ -91,9 +93,10 @@ export function aggregateCohort(
     };
   });
 
-  const evaluatedCount = students.length;
+  const classifiedStudents = students.filter((s) => s.category !== null);
+  const evaluatedCount = classifiedStudents.length;
   const avgScore = evaluatedCount
-    ? Math.round(students.reduce((a, s) => a + s.score, 0) / evaluatedCount)
+    ? Math.round(classifiedStudents.reduce((a, s) => a + s.score, 0) / evaluatedCount)
     : 0;
   const avgCategory = evaluatedCount ? scoreToCategory(avgScore) : null;
 

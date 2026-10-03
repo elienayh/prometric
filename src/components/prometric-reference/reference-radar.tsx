@@ -42,8 +42,8 @@ export function ReferenceRadar({
   const data = dims.map((d, i) => ({
     dim: d.dimension.split(" ")[0],
     Referência: refValue,
-    Aluno: d.score,
-    ...(firstDims ? { Inicial: firstDims[i]?.score ?? 0 } : {}),
+    Aluno: d.category ? d.score : null,
+    ...(firstDims ? { Inicial: firstDims[i]?.category ? firstDims[i].score : null } : {}),
   }));
 
   return (

@@ -1,12 +1,11 @@
 import { PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
+import type { Zone } from "@/lib/proesp";
 import {
-  consolidatedClassifications,
-  currentIndex,
-  chronological,
   type EvalLike,
 } from "@/lib/student-metrics";
-import { type Zone } from "@/lib/proesp";
-import { imcBand, imcAdultBand, imcFamilyGuidance, IMC_CLINICAL_DISCLAIMER } from "@/lib/imc-reference";
+import {
+  buildStudentConsolidatedPackage,
+} from "./indicator-results";
 
 export type PortalStudentData = {
   id?: string;
@@ -60,25 +59,30 @@ export function buildDeterministicPortalReport(
     throw new Error("Nenhuma avaliação disponível para este aluno");
   }
 
-  const ordered = chronological(rawEvals) as PortalEvalData[];
-  const firstEval = ordered[0];
-  const lastEval = ordered[ordered.length - 1];
+  const pkg = buildStudentConsolidatedPackage(
+    { id: student.id, fullName: student.full_name, sex: student.sex, birthDate: student.birth_date },
+    rawEvals,
+  );
 
-  const firstName = student.full_name.trim().split(/\s+/)[0] ?? "Aluno(a)";
-  const isFem = student.sex === "female";
+  const firstName = pkg.student.fullName.trim().split(/\s+/)[0] ?? "Aluno(a)";
+  const isFem = pkg.student.sex === "female";
   const art = isFem ? "A" : "O";
-  const artLow = isFem ? "a" : "o";
 
-  const totalEvals = ordered.length;
-  const firstDate = new Date(firstEval.evaluated_at).toLocaleDateString("pt-BR");
-  const lastDate = new Date(lastEval.evaluated_at).toLocaleDateString("pt-BR");
+  const totalRegistered = pkg.counts.totalRegistered;
+  const classifiedCount = pkg.counts.classified;
+  const partialCount = pkg.counts.partial;
 
-  // Classificações consolidadas e Índice ProMetric atual
-  const index = currentIndex(ordered);
-  const overallCategory = index.category ?? "Em Desenvolvimento";
+  const firstDate = pkg.evolution.firstRecord
+    ? new Date(pkg.evolution.firstRecord.evaluated_at).toLocaleDateString("pt-BR")
+    : "";
+  const lastDate = pkg.evolution.currentEvaluation
+    ? new Date(pkg.evolution.currentEvaluation.evaluated_at).toLocaleDateString("pt-BR")
+    : "";
+
+  const overallCategory = pkg.index.category ?? "Em Desenvolvimento";
 
   // Dimensões do ProMetric
-  const dims = index.dimensions;
+  const dims = pkg.dimensions;
   const strongDims = dims.filter((d) => d.category === "Excelente" || d.category === "Bom");
   const attentionDims = dims.filter(
     (d) => d.category === "Prioritário" || d.category === "Atenção" || d.category === "Em Desenvolvimento"
@@ -89,7 +93,7 @@ export function buildDeterministicPortalReport(
   // ───────────────────────────────────────────────────────────────────────────
   const parecerParts: string[] = [
     `Olá, família! É uma satisfação compartilhar o acompanhamento físico de ${firstName}. No Método ProMetric®, nosso foco é orientar a saúde, o bem-estar e o desenvolvimento motor de forma motivadora e acolhedora.`,
-    `Atualmente, ${firstName} conta com ${totalEvals} avaliação(ões) registrada(s) na escola. Seu Índice ProMetric® consolidado é de ${index.score}/100 pontos, situando seu perfil geral na categoria '${overallCategory}'.`,
+    `Atualmente, ${firstName} conta com ${totalRegistered} avaliação(ões) registrada(s) na escola (${classifiedCount} classificadas e ${partialCount} parciais). Seu Índice ProMetric® consolidado é de ${pkg.index.score}/100 pontos, situando seu perfil geral na categoria '${overallCategory}'.`,
   ];
 
   if (strongDims.length > 0) {
@@ -108,12 +112,13 @@ export function buildDeterministicPortalReport(
     );
   }
 
-  if (lastEval.imc != null) {
-    const age = lastEval.age_years ?? 10;
-    const months = (lastEval as any).age_months ?? (age >= 20 ? 240 : age * 12 + 6);
-    const band = age >= 20 ? imcAdultBand(lastEval.imc) : imcBand(lastEval.imc, (student.sex ?? "male") === "male" ? "male" : "female", months);
-    const guidance = imcFamilyGuidance(band, firstName);
-    parecerParts.push(guidance);
+  const imcInd = pkg.indicators.imc;
+  if (imcInd.hasData && imcInd.value != null) {
+    parecerParts.push(`Na avaliação antropométrica, ${firstName} apresenta IMC de ${imcInd.value.toFixed(1)} kg/m² (${imcInd.clinicalLabel}).`);
+  }
+
+  if (pkg.disclaimers.missingDimensionWarning) {
+    parecerParts.push(pkg.disclaimers.missingDimensionWarning);
   }
 
   parecerParts.push(
@@ -121,7 +126,7 @@ export function buildDeterministicPortalReport(
   );
 
   parecerParts.push(
-    `Nota informativa: ${IMC_CLINICAL_DISCLAIMER}`
+    `Nota informativa: ${pkg.disclaimers.imc}`
   );
 
   const parecer = parecerParts.join(" ");
@@ -130,60 +135,11 @@ export function buildDeterministicPortalReport(
   // 2. EVOLUÇÃO CRONOLÓGICA
   // ───────────────────────────────────────────────────────────────────────────
   let evolucao = "";
-  if (totalEvals === 1) {
+  if (totalRegistered === 1) {
     evolucao = `Esta é a avaliação diagnóstica inicial de ${firstName}, registrada em ${lastDate}. Ela estabelece a linha de base oficial para acompanharmos o progresso futuro. As próximas avaliações escolares permitirão verificar a evolução temporal de cada capacidade física com clareza e precisão.`;
   } else {
-    const firstIndex = currentIndex([firstEval]);
-    const deltaIndex = index.score - firstIndex.score;
-    const indexDirection =
-      deltaIndex > 0
-        ? `um ganho acumulado de +${deltaIndex} pontos no Índice ProMetric® (de ${firstIndex.score} para ${index.score} pontos)`
-        : deltaIndex < 0
-        ? `uma variação de ${deltaIndex} pontos no Índice ProMetric® (de ${firstIndex.score} para ${index.score} pontos)`
-        : `a manutenção consistente do Índice ProMetric® em ${index.score} pontos`;
-
-    const highlights: string[] = [];
-
-    // Verificações de ganho nos testes
-    if (firstEval.horizontal_jump_cm != null && lastEval.horizontal_jump_cm != null) {
-      const diff = +(lastEval.horizontal_jump_cm - firstEval.horizontal_jump_cm).toFixed(1);
-      if (diff > 0) highlights.push(`impulsão nos saltos (+${diff} cm)`);
-    }
-    if (firstEval.medicine_ball_m != null && lastEval.medicine_ball_m != null) {
-      const diff = +(lastEval.medicine_ball_m - firstEval.medicine_ball_m).toFixed(2);
-      if (diff > 0) highlights.push(`força de arremesso (+${diff} m)`);
-    }
-    if (firstEval.sit_and_reach_cm != null && lastEval.sit_and_reach_cm != null) {
-      const diff = +(lastEval.sit_and_reach_cm - firstEval.sit_and_reach_cm).toFixed(1);
-      if (diff > 0) highlights.push(`flexibilidade (+${diff} cm)`);
-    }
-    if (firstEval.abdominal_reps != null && lastEval.abdominal_reps != null) {
-      const diff = lastEval.abdominal_reps - firstEval.abdominal_reps;
-      if (diff > 0) highlights.push(`resistência abdominal (+${diff} repetições)`);
-    }
-    if (firstEval.sprint_20m_s != null && lastEval.sprint_20m_s != null) {
-      const diff = +(firstEval.sprint_20m_s - lastEval.sprint_20m_s).toFixed(2);
-      if (diff > 0) highlights.push(`velocidade de corrida (${diff}s mais veloz)`);
-    }
-    if (firstEval.square_test_s != null && lastEval.square_test_s != null) {
-      const diff = +(firstEval.square_test_s - lastEval.square_test_s).toFixed(2);
-      if (diff > 0) highlights.push(`agilidade nas trocas de direção (${diff}s mais ágil)`);
-    }
-    if (firstEval.run_6min_m != null && lastEval.run_6min_m != null) {
-      const diff = +(lastEval.run_6min_m - firstEval.run_6min_m).toFixed(0);
-      if (diff > 0) highlights.push(`resistência cardiorrespiratória (+${diff} m percorridos)`);
-    }
-    if (firstEval.height_cm != null && lastEval.height_cm != null && lastEval.height_cm > firstEval.height_cm) {
-      const hDiff = +(lastEval.height_cm - firstEval.height_cm).toFixed(1);
-      highlights.unshift(`crescimento estatural de +${hDiff} cm`);
-    }
-
     evolucao = [
-      `Entre a primeira avaliação (${firstDate}) e a mais recente (${lastDate}), ${artLow} ${firstName} apresentou ${indexDirection}.`,
-      highlights.length > 0
-        ? `Nesse intervalo, destacam-se avanços reais em: ${highlights.join(", ")}.`
-        : `Os parâmetros motores mantiveram consistência e estabilidade em todas as baterias realizadas.`,
-      `Essa evolução confirma adaptações biológicas positivas e a importância da constância nas atividades corporais.`,
+      `No histórico avaliativo entre ${firstDate} e ${lastDate} (${totalRegistered} sessões registradas, sendo ${classifiedCount} classificadas), ${pkg.evolution.summaryText}`,
     ].join(" ");
   }
 
