@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import {
@@ -190,7 +191,7 @@ export function CohortSummaryBanner({
               </div>
               {lastEvaluationAt && (
                 <div className="text-[11px] text-muted-foreground/80">
-                  Última avaliação: {new Date(lastEvaluationAt).toLocaleDateString("pt-BR")}
+                  Última avaliação: {formatDateBR(lastEvaluationAt)}
                 </div>
               )}
             </div>

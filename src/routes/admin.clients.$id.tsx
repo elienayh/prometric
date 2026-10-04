@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,7 +31,7 @@ const STATUS_VARIANT: Record<Status, "default" | "secondary" | "destructive" | "
 };
 
 const fmtCurrency = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
+const fmtDate = (d?: string | null) => formatDateBR(d);
 const fmtDateTime = (d?: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
 
 function ClientDetailPage() {

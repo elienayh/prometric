@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { useQuery } from "@tanstack/react-query";
 import { Building2, ClipboardList, DollarSign, GraduationCap, TrendingUp, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -96,7 +97,7 @@ export function AdminDashboard() {
           </div>
           <div className="mt-2 text-3xl font-bold text-primary">{fmtCurrency(data?.monthRevenue ?? 0)}</div>
           <div className="text-xs text-muted-foreground">
-            Pagamentos liquidados em {new Date().toLocaleDateString("pt-BR", { month: "long" })}
+            Pagamentos liquidados em {formatDateBR(new Date(), { month: "long" })}
           </div>
         </Card>
       </div>

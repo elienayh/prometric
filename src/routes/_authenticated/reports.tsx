@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -55,7 +56,7 @@ export function buildExportRows(evals: EvalReportItem[]) {
       "Sexo": e.student.sex === "male" ? "M" : "F",
       "Idade (anos)": e.age_years ?? "",
       "Idade (meses)": e.age_months ?? "",
-      "Data da Avaliação": new Date(e.evaluated_at).toLocaleDateString("pt-BR"),
+      "Data da Avaliação": formatDateBR(e.evaluated_at),
       "Peso (kg)": e.weight_kg ?? "",
       "Estatura (cm)": e.height_cm ?? "",
       "Cintura (cm)": e.waist_cm ?? "",
@@ -266,7 +267,7 @@ function ReportsPage() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{e.student.full_name}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {new Date(e.evaluated_at).toLocaleDateString("pt-BR")} • {e.age_years} anos{e.age_months ? ` (${e.age_months} meses)` : ""}
+                        {formatDateBR(e.evaluated_at)} • {e.age_years} anos{e.age_months ? ` (${e.age_months} meses)` : ""}
                       </div>
                     </div>
                     <span className={cn("rounded-full border px-2 py-0.5 text-[10px]", zoneColor(ov.label))}>{ov.label ?? "—"}</span>

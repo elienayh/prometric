@@ -96,16 +96,18 @@ export function ageFromBirth(birth: string, ref = new Date()): number {
 }
 
 export type ResolvedAge = {
-  years: number;
-  months: number;
+  years: number | null;
+  months: number | null;
   isApproximated: boolean; // true se derivado de idade_em_anos * 12 + 6 por ausência de data de nascimento
+  isUnknown: boolean;      // true se nenhum dado de idade ou nascimento foi fornecido
 };
 
 /**
  * Resolve a idade do aluno de forma centralizada:
  * 1. Se houver data de nascimento, calcula os meses e anos exatos por calendário civil.
  * 2. Se houver age_months registrado, usa-o diretamente.
- * 3. Como último recurso, deriva os meses pela regra (anos * 12 + 6) e sinaliza `isApproximated = true`.
+ * 3. Se houver apenas idade em anos, deriva os meses pela regra (anos * 12 + 6) e sinaliza `isApproximated = true`.
+ * 4. Sem dados, retorna `isUnknown = true` com `years: null` e `months: null` (NÃO assume valor arbitrário).
  */
 export function resolveAge(
   birthDate?: DateInput | null,
@@ -116,19 +118,80 @@ export function resolveAge(
   if (birthDate) {
     const years = ageInYears(birthDate, refDate);
     const months = ageInMonths(birthDate, refDate);
-    return { years, months, isApproximated: false };
+    return { years, months, isApproximated: false, isUnknown: false };
   }
 
   if (fallbackAgeMonths != null && fallbackAgeMonths > 0) {
     const years = fallbackAgeYears ?? Math.floor(fallbackAgeMonths / 12);
-    return { years, months: fallbackAgeMonths, isApproximated: false };
+    return { years, months: fallbackAgeMonths, isApproximated: false, isUnknown: false };
   }
 
-  const years = fallbackAgeYears != null && fallbackAgeYears > 0 ? fallbackAgeYears : 10;
+  if (fallbackAgeYears != null && fallbackAgeYears > 0) {
+    return {
+      years: fallbackAgeYears,
+      months: fallbackAgeYears * 12 + 6,
+      isApproximated: true,
+      isUnknown: false,
+    };
+  }
+
   return {
-    years,
-    months: years * 12 + 6,
-    isApproximated: true,
+    years: null,
+    months: null,
+    isApproximated: false,
+    isUnknown: true,
   };
+}
+
+const SHORT_MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const LONG_MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+export interface FormatDateBROptions {
+  day?: "numeric" | "2-digit";
+  month?: "numeric" | "2-digit" | "short" | "long";
+  year?: "numeric" | "2-digit";
+}
+
+/**
+ * Formata data de calendário civil no padrão brasileiro sem desvio por timezone (dd/mm/aaaa).
+ * Trata strings 'AAAA-MM-DD', ISO ou instâncias de Date diretamente via parseDateParts.
+ */
+export function formatDateBR(
+  input: DateInput | null | undefined,
+  options?: FormatDateBROptions
+): string {
+  if (!input) return "—";
+  const { year, month, day } = parseDateParts(input);
+  if (!year || !month || !day) return "—";
+
+  if (!options) {
+    const dd = String(day).padStart(2, "0");
+    const mm = String(month).padStart(2, "0");
+    return `${dd}/${mm}/${year}`;
+  }
+
+  const dStr = options.day === "numeric" ? String(day) : String(day).padStart(2, "0");
+  const yStr = options.year === "2-digit" ? String(year).slice(-2) : String(year);
+
+  if (options.month === "short") {
+    const mStr = SHORT_MONTHS[month - 1] ?? "";
+    if (options.day && options.year) return `${dStr} ${mStr} ${yStr}`;
+    if (options.day) return `${dStr} ${mStr}`;
+    if (options.year) return `${mStr} de ${yStr}`;
+    return mStr;
+  }
+
+  if (options.month === "long") {
+    const mStr = LONG_MONTHS[month - 1] ?? "";
+    if (options.day && options.year) return `${dStr} de ${mStr} de ${yStr}`;
+    if (options.day) return `${dStr} de ${mStr}`;
+    if (options.year) return `${mStr} de ${yStr}`;
+    return mStr;
+  }
+
+  const mStr = options.month === "numeric" ? String(month) : String(month).padStart(2, "0");
+  if (!options.year && options.day) return `${dStr}/${mStr}`;
+  if (!options.day && options.year) return `${mStr}/${yStr}`;
+  return `${dStr}/${mStr}/${yStr}`;
 }
 

@@ -266,7 +266,8 @@ export function buildStudentConsolidatedPackage(
 
     // Faixa de referência
     const rangeAge = sourceEval && (sourceEval as any).age_years != null ? (sourceEval as any).age_years : resolvedAge.years;
-    const expectedRange = expectedRangeFor(key, rangeAge, sex);
+    const rangeMonths = sourceEval && (sourceEval as any).age_months != null ? (sourceEval as any).age_months : resolvedAge.months;
+    const expectedRange = rangeAge != null ? expectedRangeFor(key, rangeAge, sex, rangeMonths ?? undefined) : null;
     const rangeLabel = expectedRange
       ? `${formatIndicatorNumber(expectedRange.min, meta.unit)}–${formatIndicatorNumber(expectedRange.max, meta.unit)}${meta.unit ? ` ${meta.unit}` : ""}`
       : "—";
@@ -297,9 +298,13 @@ export function buildStudentConsolidatedPackage(
     // Label clínico específico para IMC
     let clinicalLabel = clinicalStatusLabel(clinicalStatus);
     if (key === "imc" && value != null) {
-      const months = (sourceEval as any)?.age_months ?? (resolvedAge.years >= 20 ? 240 : resolvedAge.months);
-      const band = resolvedAge.years >= 20 ? imcAdultBand(value) : imcBand(value, sex, months);
-      clinicalLabel = IMC_BAND_LABEL[band];
+      if (resolvedAge.years == null) {
+        clinicalLabel = "Sem referência";
+      } else {
+        const months = (sourceEval as any)?.age_months ?? (resolvedAge.years >= 20 ? 240 : resolvedAge.months ?? resolvedAge.years * 12 + 6);
+        const band = resolvedAge.years >= 20 ? imcAdultBand(value) : imcBand(value, sex, months);
+        clinicalLabel = IMC_BAND_LABEL[band];
+      }
     }
 
     indicatorsRecord[key] = {

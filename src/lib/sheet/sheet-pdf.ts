@@ -2,6 +2,7 @@
 // Uses jsPDF + qrcode. Layout: 1 student per A4 page.
 // Large boxed fields optimized for handwriting + later OCR.
 
+import { formatDateBR } from "../age";
 import { jsPDF } from "jspdf";
 import QRCode from "qrcode";
 import type { SheetBundle, SheetStudent } from "./sheet.functions";
@@ -60,7 +61,7 @@ async function renderStudentPage(doc: jsPDF, b: SheetBundle, st: SheetStudent, l
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(110,110,110);
   doc.text("Ficha de Avaliação Física — Modo Prancheta", MARGIN + 24, y + 14);
   doc.setFontSize(8);
-  doc.text(`Impressa em ${new Date().toLocaleDateString("pt-BR")} · ProMetric®`, MARGIN + 24, y + 19);
+  doc.text(`Impressa em ${formatDateBR(new Date())} · ProMetric®`, MARGIN + 24, y + 19);
 
   // QR code (top right)
   const qrSize = 32;

@@ -187,7 +187,7 @@ export function recalculateEvaluationRecord(
   if (finalImc != null) {
     if (exactYears >= 20) {
       imcBandResult = imcAdultBand(finalImc);
-    } else if (exactMonths >= 60) {
+    } else if (exactMonths >= 61 && exactMonths <= 228) {
       imcBandResult = imcBand(finalImc, student.sex, exactMonths);
     }
     if (imcBandResult) {

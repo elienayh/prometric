@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -102,7 +103,7 @@ function RiskPage() {
         Aluno: e.student?.full_name ?? "",
         Turma: e.student?.class?.name ?? "",
         "Indicadores em atenção": issues,
-        "Última avaliação": new Date(e.evaluated_at).toLocaleDateString("pt-BR"),
+        "Última avaliação": formatDateBR(e.evaluated_at),
       };
     });
     const wb = XLSX.utils.book_new();
@@ -115,7 +116,7 @@ function RiskPage() {
       const c = e.classifications ?? {};
       const issues = INDICATORS.filter((i) => c[i.key as keyof Classifications] && RISK_ZONES.includes(c[i.key as keyof Classifications]!))
         .map((i) => `${i.label}:${c[i.key as keyof Classifications]}`).join("|");
-      return [e.student?.full_name ?? "", e.student?.class?.name ?? "", issues, new Date(e.evaluated_at).toLocaleDateString("pt-BR")];
+      return [e.student?.full_name ?? "", e.student?.class?.name ?? "", issues, formatDateBR(e.evaluated_at)];
     });
     const csv = "Aluno;Turma;Indicadores;Última\n" + rows.map((r) => r.join(";")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -214,7 +215,7 @@ function RiskPage() {
                       <Link to="/students/$id" params={{ id: e.student_id }} className="truncate font-medium text-foreground hover:text-primary">
                         {e.student?.full_name}
                       </Link>
-                      <span className="text-xs text-muted-foreground">{new Date(e.evaluated_at).toLocaleDateString("pt-BR")}</span>
+                      <span className="text-xs text-muted-foreground">{formatDateBR(e.evaluated_at)}</span>
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">{e.student?.class?.name ?? "—"}</div>
                     <div className="mt-2 flex flex-wrap gap-1">
@@ -267,7 +268,7 @@ function RiskPage() {
                             })}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(e.evaluated_at).toLocaleDateString("pt-BR")}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{formatDateBR(e.evaluated_at)}</td>
                       </tr>
                     );
                   })}

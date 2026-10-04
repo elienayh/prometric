@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -255,7 +256,7 @@ function StudentDetail() {
                 `${ageInYears(s.birth_date)} anos`,
                 s.class?.name,
                 s.class?.school?.name,
-                last ? `Última avaliação: ${new Date(last.evaluated_at).toLocaleDateString("pt-BR")}` : null,
+                last ? `Última avaliação: ${formatDateBR(last.evaluated_at)}` : null,
               ].filter(Boolean).join(" • ")
             : "—"
         }
@@ -530,7 +531,7 @@ function ClinicalCard({
   const zone = source.classifications?.[ind.key];
   const status = zoneToClinical(zone);
   const styles = STATUS_STYLE[status];
-  const range = expectedRangeFor(ind.key, source.age_years ?? age, sex);
+  const range = expectedRangeFor(ind.key, source.age_years ?? age, sex, (source as any).age_months ?? undefined);
 
   let displayLabel = styles.label;
   let displayInterpretation =
@@ -598,7 +599,7 @@ function ClinicalCard({
       </div>
       {value != null && source.id !== last.id && (
         <div className="mt-0.5 text-[10px] text-muted-foreground/80">
-          Registrado em {new Date(source.evaluated_at).toLocaleDateString("pt-BR")}
+          Registrado em {formatDateBR(source.evaluated_at)}
         </div>
       )}
 
@@ -687,7 +688,7 @@ function EvaluationDetailDialog({
       <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display">
-            Avaliação de {new Date(ev.evaluated_at).toLocaleDateString("pt-BR")}
+            Avaliação de {formatDateBR(ev.evaluated_at)}
           </DialogTitle>
         </DialogHeader>
 
@@ -709,12 +710,12 @@ function EvaluationDetailDialog({
             // Zona exibida por teste = a efetivamente registrada nesta avaliação.
             const zone = (ev.recorded_classifications ?? ev.classifications)?.[ind.key];
 
+            const evAge = ev.age_years ?? age;
             const status = zoneToClinical(zone);
             const styles = STATUS_STYLE[status];
-            const range = expectedRangeFor(ind.key, age, sex);
+            const range = expectedRangeFor(ind.key, evAge, sex, (ev as any).age_months ?? undefined);
             let indLabel = styles.label;
             if (ind.key === "imc") {
-              const evAge = ev.age_years ?? age;
               if (evAge < 5) {
                 indLabel = "Sem referência";
               } else if (value != null) {
@@ -784,7 +785,7 @@ function TestEvolutionDialog({
         return {
           id: ev.id,
           date: ev.evaluated_at,
-          label: new Date(ev.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }),
+          label: formatDateBR(ev.evaluated_at, { day: "2-digit", month: "2-digit", year: "2-digit" }),
           value: v,
           zone: (ev.recorded_classifications ?? ev.classifications)?.[ind.key],
           age_years: ev.age_years,
@@ -795,7 +796,7 @@ function TestEvolutionDialog({
 
   if (!ind) return null;
   const lastEv = data[data.length - 1];
-  const range = expectedRangeFor(ind.key, lastEv?.age_years ?? 0, sex);
+  const range = expectedRangeFor(ind.key, lastEv?.age_years ?? 0, sex, (lastEv as any)?.age_months ?? undefined);
   const first = rows[0]?.value ?? null;
   const latest = rows[rows.length - 1]?.value ?? null;
   const { diff, positive } = pct(latest, rows.length > 1 ? first : null, ind.higherBetter);
@@ -858,7 +859,7 @@ function TestEvolutionDialog({
             }
             return (
               <div key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-                <span className="text-muted-foreground">{new Date(r.date).toLocaleDateString("pt-BR")}</span>
+                <span className="text-muted-foreground">{formatDateBR(r.date)}</span>
                 <span className="font-mono font-semibold tabular-nums">
                   {r.value != null ? formatNumber(r.value, ind.unit) : "—"} {ind.unit}
                 </span>
@@ -966,7 +967,7 @@ function EvolutionChart({ data }: { data: EvalRow[] }) {
       valor = prometricIndex(e.classifications ?? {}).score;
     }
     return {
-      date: new Date(e.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }),
+      date: formatDateBR(e.evaluated_at, { day: "2-digit", month: "short", year: "2-digit" }),
       valor,
     };
   });
@@ -1040,8 +1041,8 @@ function RadarEvolutivo({ first, last }: { first: EvalRow; last: EvalRow }) {
     Atual: d.score,
   }));
   const sameEval = first.id === last.id;
-  const fDate = new Date(first.evaluated_at).toLocaleDateString("pt-BR");
-  const lDate = new Date(last.evaluated_at).toLocaleDateString("pt-BR");
+  const fDate = formatDateBR(first.evaluated_at);
+  const lDate = formatDateBR(last.evaluated_at);
   const firstScore = prometricIndex(first.classifications ?? {}).score;
   const lastScore = prometricIndex(last.classifications ?? {}).score;
   const delta = lastScore - firstScore;
@@ -1216,7 +1217,7 @@ function TimelineTab({ data, studentId, student, tenantName, onOpenPortal, onVie
                 {partial ? "🟡" : "🟢"}
               </span>
               <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-xs font-semibold">{new Date(ev.evaluated_at).toLocaleDateString("pt-BR")}</span>
+                <span className="text-xs font-semibold">{formatDateBR(ev.evaluated_at)}</span>
                 {idx === 0 && <span className="text-[10px] uppercase text-primary">mais recente</span>}
                 {ov?.label && (
                   <span className={cn("rounded-full border px-2 py-0.5 text-[10px]", zoneColor(ov.label))}>
@@ -1818,7 +1819,7 @@ function PortalTab({ studentId, studentName }: { studentId: string; studentName:
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat label="Acessos" value={String(portal.data?.portal_views ?? 0)} />
               <Stat label="Último acesso" value={portal.data?.portal_last_access ? new Date(portal.data.portal_last_access).toLocaleString("pt-BR") : "—"} />
-              <Stat label="Token criado" value={portal.data?.portal_token_created_at ? new Date(portal.data.portal_token_created_at).toLocaleDateString("pt-BR") : "—"} />
+              <Stat label="Token criado" value={portal.data?.portal_token_created_at ? formatDateBR(portal.data.portal_token_created_at) : "—"} />
               <Stat label="Status" value={active ? "Ativo" : "Inativo"} />
             </div>
           </>

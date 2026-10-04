@@ -1,4 +1,5 @@
 // PDF report shared by Class and Group dashboards.
+import { formatDateBR } from "./age";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { CohortAggregates } from "./cohort-stats";
@@ -47,7 +48,7 @@ export function generateCohortPDF(input: CohortReportInput) {
   doc.text(`Alunos avaliados: ${input.agg.evaluatedCount}`, 16, 126);
   doc.setFontSize(9);
   doc.text(`Gerado por ProMetric — ${brandName}`, 16, PH - 24);
-  doc.text(new Date().toLocaleDateString("pt-BR"), 16, PH - 16);
+  doc.text(formatDateBR(new Date()), 16, PH - 16);
 
   // Página 2 — Distribuição
   doc.addPage();

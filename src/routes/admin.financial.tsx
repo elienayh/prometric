@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -161,7 +162,7 @@ function FinancialPage() {
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
               <div className="min-w-0">
                 <div className="truncate font-semibold">{p.tenant?.name ?? "—"}</div>
-                <div className="text-xs text-muted-foreground">{p.paid_at ? new Date(p.paid_at).toLocaleDateString("pt-BR") : "—"}</div>
+                <div className="text-xs text-muted-foreground">{formatDateBR(p.paid_at)}</div>
               </div>
               <div className="shrink-0 text-right">
                 <div className="font-bold">{fmt(p.amount_cents)}</div>
@@ -194,7 +195,7 @@ function FinancialPage() {
               )}
               {(payments.data ?? []).map((p: { id: string; paid_at: string | null; amount_cents: number; method: string | null; status: string; tenant: { name: string } | null }) => (
                 <tr key={p.id} className="border-t border-border/60">
-                  <td className="px-4 py-3 text-muted-foreground">{p.paid_at ? new Date(p.paid_at).toLocaleDateString("pt-BR") : "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatDateBR(p.paid_at)}</td>
                   <td className="px-4 py-3 font-medium">{p.tenant?.name ?? "—"}</td>
                   <td className="px-4 py-3">{fmt(p.amount_cents)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{p.method ?? "—"}</td>

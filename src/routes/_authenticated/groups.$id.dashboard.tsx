@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -92,7 +93,7 @@ function GroupDashboard() {
   const agg = aggregateCohort(students_latest, students_first);
   const originDims = peerDimensions(origin_classes_latest as never);
   const schoolDims = peerDimensions(school_latest as never);
-  const last = header.last_evaluation_at ? new Date(header.last_evaluation_at).toLocaleDateString("pt-BR") : "—";
+  const last = header.last_evaluation_at ? formatDateBR(header.last_evaluation_at) : "—";
 
   const handlePDF = () => {
     generateCohortPDF({

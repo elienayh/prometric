@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -114,11 +115,11 @@ function Dashboard() {
   const today = new Date();
   for (let i = 5; i >= 0; i--) {
     const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    months[d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })] = 0;
+    months[formatDateBR(d, { month: "short", year: "2-digit" })] = 0;
   }
   for (const e of evals.data ?? []) {
     const d = new Date(e.evaluated_at);
-    const k = d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+    const k = formatDateBR(d, { month: "short", year: "2-digit" });
     if (k in months) months[k]++;
   }
   const timeline = Object.entries(months).map(([month, total]) => ({ month, total }));
@@ -137,7 +138,7 @@ function Dashboard() {
     if (!sid || seen.has(sid)) continue;
     seen.add(sid);
     const has = Object.values(e.classifications ?? {}).some((z) => z === "Muito Fraco" || z === "Fraco");
-    if (has) atRisk.push({ id: sid, name: e.student?.full_name ?? "—", date: new Date(e.evaluated_at).toLocaleDateString("pt-BR") });
+    if (has) atRisk.push({ id: sid, name: e.student?.full_name ?? "—", date: formatDateBR(e.evaluated_at) });
     if (atRisk.length >= 6) break;
   }
 

@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -55,7 +56,7 @@ function financialStatus(sub: TenantRow["subscriptions"][number] | undefined): {
 }
 
 function fmtDate(d: string | null) {
-  return d ? new Date(d).toLocaleDateString("pt-BR") : "—";
+  return formatDateBR(d);
 }
 
 function fmtDateTime(d: string | null) {

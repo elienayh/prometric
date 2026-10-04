@@ -1,3 +1,4 @@
+import { formatDateBR } from "./age";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { TEST_META, ZONES, type Classifications, type Zone, type Sex, overallScore } from "./proesp";
@@ -51,7 +52,7 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
   const sexLabel = ev.student.sex === "male" ? "Masculino" : "Feminino";
   const ageLabel = ev.age_years != null ? `${ev.age_years} anos${ev.age_months ? ` (${ev.age_months} meses)` : ""}` : "—";
   doc.text(
-    `Sexo: ${sexLabel}  •  Idade: ${ageLabel}  •  Data: ${new Date(ev.evaluated_at).toLocaleDateString("pt-BR")}`,
+    `Sexo: ${sexLabel}  •  Idade: ${ageLabel}  •  Data: ${formatDateBR(ev.evaluated_at)}`,
     12, 42,
   );
 
@@ -181,7 +182,7 @@ export function generateInstitutionalPDF(data: InstitutionalData) {
   if (loc) doc.text(loc, 16, 96);
   doc.setFontSize(10);
   doc.text(`Gerado por ProMetric — ${data.tenantName}`, 16, PH - 24);
-  doc.text(new Date().toLocaleDateString("pt-BR"), 16, PH - 16);
+  doc.text(formatDateBR(new Date()), 16, PH - 16);
 
   // Página 2 — Indicadores
   doc.addPage();
@@ -446,7 +447,7 @@ export function generateEvaluationPDFComplete(
   const sexLabel = ev.student.sex === "male" ? "Masculino" : "Feminino";
   doc.text(`${sexLabel}  •  ${ev.age_years ?? "—"} anos`, 16, 116);
   if (extras.className) doc.text(`Turma: ${extras.className}`, 16, 123);
-  doc.text(`Avaliado em ${new Date(ev.evaluated_at).toLocaleDateString("pt-BR")}`, 16, 130);
+  doc.text(`Avaliado em ${formatDateBR(ev.evaluated_at)}`, 16, 130);
 
   // Card: Índice ProMetric
   doc.setFillColor(255, 255, 255);
@@ -467,7 +468,7 @@ export function generateEvaluationPDFComplete(
   doc.text(brandName, 16, PH - 14);
   const contact = [extras.branding?.website, extras.branding?.email, extras.branding?.phone].filter(Boolean).join("  •  ");
   if (contact) doc.text(contact, 16, PH - 8);
-  doc.text(new Date().toLocaleDateString("pt-BR"), W - 16, PH - 8, { align: "right" });
+  doc.text(formatDateBR(new Date()), W - 16, PH - 8, { align: "right" });
 
   // ---------- Página 2 — Antropometria + Testes ----------
   doc.addPage();
@@ -551,7 +552,7 @@ export function generateEvaluationPDFComplete(
     : null;
   if (hasEvo) {
     doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(80);
-    doc.text(`Inicial: ${new Date(firstEv!.evaluated_at).toLocaleDateString("pt-BR")}  •  Atual: ${new Date(ev.evaluated_at).toLocaleDateString("pt-BR")}`, W / 2, 32, { align: "center" });
+    doc.text(`Inicial: ${formatDateBR(firstEv!.evaluated_at)}  •  Atual: ${formatDateBR(ev.evaluated_at)}`, W / 2, 32, { align: "center" });
   }
   drawRadar(
     doc,
@@ -583,7 +584,7 @@ export function generateEvaluationPDFComplete(
     drawLineChart(
       doc,
       24, 38, W - 36, 50,
-      hist.map((h) => new Date(h.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })),
+      hist.map((h) => formatDateBR(h.evaluated_at, { day: "2-digit", month: "2-digit" })),
       hist.map((h) => overallScore(h.classifications ?? {}).score),
       100,
       BR,
@@ -696,7 +697,7 @@ export function generateEvaluationPDFComplete(
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(120);
     doc.text(`${brandName} • Página ${i}/${total}`, 12, PH - 11);
     if (footerContact) doc.text(footerContact, 12, PH - 6);
-    doc.text(`Relatório gerado em ${new Date().toLocaleDateString("pt-BR")}`, W - 12, PH - 6, { align: "right" });
+    doc.text(`Relatório gerado em ${formatDateBR(new Date())}`, W - 12, PH - 6, { align: "right" });
   }
 
   doc.save(`relatorio-evolutivo-${ev.student.full_name.replace(/\s+/g, "_")}-${ev.evaluated_at}.pdf`);

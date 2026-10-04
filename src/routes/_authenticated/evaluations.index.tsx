@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -210,7 +211,7 @@ function StudentCard({ s, tenantName }: { s: StudentSummary; tenantName: string 
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
         <div className="rounded-lg bg-muted/40 p-2">
           <div className="text-[10px] uppercase text-muted-foreground">Última</div>
-          <div className="font-display text-sm font-bold">{new Date(s.lastDate).toLocaleDateString("pt-BR")}</div>
+          <div className="font-display text-sm font-bold">{formatDateBR(s.lastDate)}</div>
         </div>
         <div className="rounded-lg bg-muted/40 p-2">
           <div className="text-[10px] uppercase text-muted-foreground">Índice</div>
@@ -564,7 +565,7 @@ function EvaluationDetail({
         ) : (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{new Date(ev.evaluated_at).toLocaleDateString("pt-BR")}</span>
+              <span>{formatDateBR(ev.evaluated_at)}</span>
               <span>•</span>
               <span>{ev.age_years} anos</span>
               {overall?.label && (

@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ClipboardList, Download, FileDown, GraduationCap, Plus, Printer, Users, Zap } from "lucide-react";
@@ -61,7 +62,7 @@ function ClassDashboard() {
   const schoolDims = peerDimensions(school_latest as never);
 
   const last = header.last_evaluation_at
-    ? new Date(header.last_evaluation_at).toLocaleDateString("pt-BR")
+    ? formatDateBR(header.last_evaluation_at)
     : "—";
 
   const handlePDF = () => {

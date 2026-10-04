@@ -1,3 +1,4 @@
+import { formatDateBR } from "./age";
 import { PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
 import type { Zone } from "@/lib/proesp";
 import {
@@ -73,10 +74,10 @@ export function buildDeterministicPortalReport(
   const partialCount = pkg.counts.partial;
 
   const firstDate = pkg.evolution.firstRecord
-    ? new Date(pkg.evolution.firstRecord.evaluated_at).toLocaleDateString("pt-BR")
+    ? formatDateBR(pkg.evolution.firstRecord.evaluated_at)
     : "";
   const lastDate = pkg.evolution.currentEvaluation
-    ? new Date(pkg.evolution.currentEvaluation.evaluated_at).toLocaleDateString("pt-BR")
+    ? formatDateBR(pkg.evolution.currentEvaluation.evaluated_at)
     : "";
 
   const overallCategory = pkg.index.category ?? "Em Desenvolvimento";

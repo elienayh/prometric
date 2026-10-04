@@ -68,7 +68,8 @@ export async function downloadEvaluationPDFCompleteWithContext(
       .from("students")
       .select("id, evaluations(classifications, evaluated_at)")
       .eq("tenant_id", tenantId)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .neq("id", studentId);
     if (filter === "class" && classId) q = q.eq("class_id", classId);
     const { data } = await q;
     const rows: { classifications: Classifications | null }[] = [];

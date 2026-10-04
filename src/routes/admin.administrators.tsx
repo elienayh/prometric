@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute } from "@tanstack/react-router";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -165,7 +166,7 @@ function AdministratorsPage() {
             <div key={i.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2 last:border-0">
               <div>
                 <div className="text-sm font-medium">{i.email}</div>
-                <div className="text-xs text-muted-foreground">{roleLabel[i.role]} • expira {new Date(i.expires_at).toLocaleDateString("pt-BR")}</div>
+                <div className="text-xs text-muted-foreground">{roleLabel[i.role]} • expira {formatDateBR(i.expires_at)}</div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={i.status === "pending" ? "default" : "outline"}>{i.status}</Badge>

@@ -39,6 +39,13 @@ export function zoneToSituation(z: Zone | null | undefined): PRSituation | null 
 }
 
 /**
+ * Ponto de corte para a situação "Muito acima do esperado" no Índice ProMetric®.
+ * [SEM FONTE OFICIAL] Definido empiricamente como 95 pontos.
+ * Pendente de decisão técnica formal quanto à fonte/norma oficial.
+ */
+export const SCORE_SITUATION_VERY_HIGH_CUTOFF_WITHOUT_SOURCE = 95;
+
+/**
  * Mapeia Índice ProMetric (0–100) → situação Referência ProMetric®.
  * Limites derivados das mesmas categorias usadas em prometric-method:
  *   <25 Prioritário, 25–44 Atenção, 45–64 Em Desenvolvimento,
@@ -50,7 +57,7 @@ export function scoreToSituation(score: number, partial = false): PRSituation | 
   if (score < 25) return "Muito abaixo";
   if (score < 45) return "Abaixo";
   if (score < 85) return "Dentro do esperado";
-  if (score < 95) return "Acima do esperado";
+  if (score < SCORE_SITUATION_VERY_HIGH_CUTOFF_WITHOUT_SOURCE) return "Acima do esperado";
   return "Muito acima do esperado";
 }
 

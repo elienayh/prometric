@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -144,7 +145,7 @@ function SchoolDashboard() {
 
   const { header, students_latest } = q.data;
   const last = header.last_evaluation_at
-    ? new Date(header.last_evaluation_at).toLocaleDateString("pt-BR")
+    ? formatDateBR(header.last_evaluation_at)
     : "—";
 
   const distCounts = agg.distribution.reduce<Record<string, number>>((acc, d) => { acc[d.category] = d.count; return acc; }, {});

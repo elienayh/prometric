@@ -7,6 +7,7 @@
 // avaliação como experiência principal.
 // ============================================================================
 
+import { formatDateBR } from "./age";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import { supabase } from "@/integrations/supabase/client";
@@ -330,10 +331,10 @@ export async function downloadStudentEvolutionPDF(
   doc.text(tenantName, logoDataUrl ? M + 18 : M, 14.5);
   doc.setFontSize(7.5);
   doc.text(
-    `Emitido em ${new Date().toLocaleDateString("pt-BR")}  •  ${history.length} avaliação(ões)`,
+    `Emitido em ${formatDateBR(new Date())}  •  ${history.length} avaliação(ões)`,
     W - M, 9, { align: "right" },
   );
-  doc.text(`Última: ${new Date(last.evaluated_at).toLocaleDateString("pt-BR")}`, W - M, 14.5, { align: "right" });
+  doc.text(`Última: ${formatDateBR(last.evaluated_at)}`, W - M, 14.5, { align: "right" });
 
   // ── HERO ─────────────────────────────────────────────────────────────
   // Big Índice ProMetric® disc + categoria + situação + identificação
@@ -652,9 +653,9 @@ export async function downloadStudentEvolutionPDF(
   });
   doc.setFont("helvetica", "normal").setFontSize(6);
   doc.setTextColor(110);
-  doc.text(new Date(plotHistory[0].evaluated_at).toLocaleDateString("pt-BR"), rightX, chartTop + chartH + 3);
+  doc.text(formatDateBR(plotHistory[0].evaluated_at), rightX, chartTop + chartH + 3);
   if (plotHistory.length > 1) {
-    doc.text(new Date(plotHistory[plotHistory.length - 1].evaluated_at).toLocaleDateString("pt-BR"), rightX + chartW, chartTop + chartH + 3, { align: "right" });
+    doc.text(formatDateBR(plotHistory[plotHistory.length - 1].evaluated_at), rightX + chartW, chartTop + chartH + 3, { align: "right" });
   }
   doc.setTextColor(34, 120, 60);
   doc.text(`Faixa verde = esperado (${EXPECTED_INDEX_RANGE.min}–${EXPECTED_INDEX_RANGE.max})`, rightX + chartW / 2, chartTop + chartH + 3, { align: "center" });

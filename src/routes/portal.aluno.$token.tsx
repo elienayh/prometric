@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute } from "@tanstack/react-router";
 import * as React from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -207,7 +208,7 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
 
   // Evolução
   const evolution = clinicalEvaluations.map((e) => ({
-    date: new Date(e.evaluated_at).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }),
+    date: formatDateBR(e.evaluated_at, { month: "short", year: "2-digit" }),
     score: prometricIndex(e.classifications ?? {}).score,
   }));
   const diff = pm && pmFirst ? pm.score - pmFirst.score : 0;
@@ -288,7 +289,7 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
               {last && (
                 <p className="mt-0.5 flex items-center gap-1 text-[11px] opacity-80">
                   <Calendar className="h-3 w-3" />
-                  Última avaliação: {new Date(last.evaluated_at).toLocaleDateString("pt-BR")}
+                  Última avaliação: {formatDateBR(last.evaluated_at)}
                 </p>
               )}
             </div>
@@ -346,9 +347,9 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                 <>
                   <div className="grid grid-cols-3 gap-3">
                     <StatBox label="Primeira" value={pmFirst?.score ?? 0} suffix="/100"
-                      hint={new Date(first!.evaluated_at).toLocaleDateString("pt-BR")} />
+                      hint={formatDateBR(first!.evaluated_at)} />
                     <StatBox label="Atual" value={pm?.score ?? 0} suffix="/100"
-                      hint={new Date(last.evaluated_at).toLocaleDateString("pt-BR")} />
+                      hint={formatDateBR(last.evaluated_at)} />
                     <StatBox
                       label="Diferença"
                       value={`${diff > 0 ? "+" : ""}${diff}`}
@@ -591,7 +592,7 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="text-sm font-semibold">
-                            {new Date(e.evaluated_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
+                            {formatDateBR(e.evaluated_at, { day: "2-digit", month: "long", year: "numeric" })}
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <span className="font-mono font-semibold tabular-nums text-foreground">{epm.score}/100</span>
@@ -641,7 +642,7 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
         <footer className="pt-4 text-center text-[11px] text-muted-foreground">
           <div className="flex items-center justify-center gap-2">
             <span>{evaluations.length} avaliação{evaluations.length === 1 ? "" : "ões"}</span>
-            {last && <><span>•</span><span>Atualizado em {new Date(last.evaluated_at).toLocaleDateString("pt-BR")}</span></>}
+            {last && <><span>•</span><span>Atualizado em {formatDateBR(last.evaluated_at)}</span></>}
           </div>
           <div className="mt-2 font-display font-semibold">ProMetric®</div>
           <div className="mt-0.5">Acompanhamento contínuo da evolução física</div>

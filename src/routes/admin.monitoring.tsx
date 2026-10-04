@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,7 +21,7 @@ function MonitoringPage() {
       ]);
       const evalsByDay: Record<string, number> = {};
       (evals7d.data ?? []).forEach((e) => {
-        const d = new Date(e.created_at).toLocaleDateString("pt-BR");
+        const d = formatDateBR(e.created_at);
         evalsByDay[d] = (evalsByDay[d] ?? 0) + 1;
       });
       const tenantsByMonth: Record<string, number> = {};

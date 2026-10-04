@@ -1,3 +1,4 @@
+import { formatDateBR } from "@/lib/age";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -575,11 +576,11 @@ function TeamPage() {
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                           <Clock className="h-3.5 w-3.5 text-muted-foreground/60" />
                           <span>
-                            Enviado em {new Date(inv.createdAt).toLocaleDateString("pt-BR")}
+                            Enviado em {formatDateBR(inv.createdAt)}
                           </span>
                           <span>•</span>
                           <span>
-                            Expira em {new Date(inv.expiresAt).toLocaleDateString("pt-BR")}
+                            Expira em {formatDateBR(inv.expiresAt)}
                           </span>
                         </div>
                       </div>
