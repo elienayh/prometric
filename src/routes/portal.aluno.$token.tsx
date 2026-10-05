@@ -357,16 +357,24 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
               ) : (
                 <>
                   <div className="grid grid-cols-3 gap-3">
-                    <StatBox label="Primeira" value={pmFirst?.score ?? 0} suffix="/100"
-                      hint={formatDateBR(first!.evaluated_at)} />
-                    <StatBox label="Atual" value={pm?.score ?? 0} suffix="/100"
-                      hint={formatDateBR(last.evaluated_at)} />
+                    <StatBox
+                      label="Primeira"
+                      value={pmFirst ? (pmFirst.partial ? "—" : pmFirst.score) : "—"}
+                      suffix={pmFirst?.partial ? "" : "/100"}
+                      hint={pmFirst?.partial ? `${pmFirst.filledDimensions} de 5 áreas` : formatDateBR(first!.evaluated_at)}
+                    />
+                    <StatBox
+                      label="Atual"
+                      value={pm ? (pm.partial ? "—" : pm.score) : "—"}
+                      suffix={pm?.partial ? "" : "/100"}
+                      hint={pm?.partial ? `${pm.filledDimensions} de 5 áreas` : formatDateBR(last.evaluated_at)}
+                    />
                     <StatBox
                       label="Diferença"
-                      value={`${diff > 0 ? "+" : ""}${diff}`}
-                      suffix="pts"
-                      tone={diff > 0 ? "success" : diff < 0 ? "destructive" : "default"}
-                      hint={diff > 0 ? "Evolução consistente" : diff < 0 ? "Atenção" : "Estável"}
+                      value={diff !== null ? `${diff > 0 ? "+" : ""}${diff}` : "—"}
+                      suffix={diff !== null ? "pts" : ""}
+                      tone={diff !== null ? (diff > 0 ? "success" : diff < 0 ? "destructive" : "default") : "default"}
+                      hint={diff !== null ? (diff > 0 ? "Evolução consistente" : diff < 0 ? "Atenção" : "Estável") : "Requer 5 áreas avaliadas"}
                     />
                   </div>
                   <div className="mt-4 h-56">

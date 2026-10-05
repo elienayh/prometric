@@ -208,7 +208,7 @@ export function overallScore(c: Classifications): { score: number; label: Zone |
     }
   }
   return {
-    score: pm.score,
+    score: pm.partial ? 0 : pm.score,
     label,
     filled: pm.filledTests,
     partial: pm.partial,

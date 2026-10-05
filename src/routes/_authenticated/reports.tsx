@@ -78,8 +78,8 @@ export function buildExportRows(evals: EvalReportItem[]) {
       "Classificação Velocidade": e.classifications?.sprint ?? "",
       "Corrida 6min (m)": e.run_6min_m ?? "",
       "Classificação Corrida": e.classifications?.run6 ?? "",
-      "Índice ProMetric (0-100)": pm.score,
-      "Categoria ProMetric": pm.category ?? "",
+      "Índice ProMetric (0-100)": pm.partial ? "" : pm.score,
+      "Categoria ProMetric": pm.partial ? "" : (pm.category ?? ""),
       "Situação de Referência": situation ?? "",
       "Perfil Geral": overall.label ?? "",
     };

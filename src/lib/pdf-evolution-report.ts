@@ -42,8 +42,15 @@ function familyActions(
   weakest: PMDimension | null,
   best: PMDimension | null,
   delta: number,
+  isPartial: boolean = false,
 ): string[] {
   const tips: string[] = [];
+  if (isPartial || s === null) {
+    tips.push("Avaliação física em andamento. Acompanhe a realização dos demais testes no Portal da Família.");
+    tips.push("Incentive seu filho(a) a manter hábitos saudáveis, sono regular e alimentação equilibrada.");
+    tips.push("Ao concluir as 5 áreas metodológicas, o relatório apresentará o perfil e índice consolidados.");
+    return tips;
+  }
   if (s === "Muito abaixo" || s === "Abaixo") {
     tips.push("Garanta ao menos 60 min de atividade física diária — brincar ao ar livre conta.");
     tips.push("Reduza tempo de tela (TV, celular, tablet) para menos de 2h por dia.");
@@ -67,21 +74,30 @@ function familyActions(
 function studentActions(
   s: PRSituation | null,
   weakest: PMDimension | null,
-  score: number,
+  score: number | null,
+  isPartial: boolean = false,
 ): string[] {
   const tips: string[] = [];
+  if (isPartial || s === null) {
+    tips.push("Avaliação em andamento: complete os testes das demais áreas para conhecer seu Índice ProMetric®.");
+    tips.push("Mantenha uma rotina ativa com pelo menos 60 minutos de movimento e brincadeiras por dia.");
+    tips.push("Converse com seu(sua) professor(a) de Educação Física sobre as próximas sessões de teste.");
+    return tips;
+  }
   if (s === "Muito abaixo" || s === "Abaixo") {
     tips.push("Comece pequeno: 15 min de brincadeira ativa por dia já fazem diferença.");
     tips.push("Desafio da semana: 3 dias com pelo menos 30 min de movimento (correr, pular, pedalar).");
   } else if (s === "Dentro do esperado") {
     tips.push("Você está no caminho certo! Próxima meta: subir para a próxima faixa até a próxima avaliação.");
     tips.push("Escolha 1 esporte que você ama e pratique 3x na semana.");
-  } else {
+  } else if (s === "Acima do esperado" || s === "Muito acima do esperado") {
     tips.push("Excelente desempenho! Procure desafios maiores — competições, treinos com objetivos.");
     tips.push("Ensine um(a) amigo(a): liderar inspira você e quem está ao seu lado.");
   }
   if (weakest) tips.push(`Sua próxima conquista: melhorar em ${weakest.toLowerCase()} — peça ajuda ao(à) professor(a) de EF.`);
-  tips.push(`Meta visível: chegar a ${Math.min(100, Math.max(score + 5, 50))} pts no Índice ProMetric® na próxima avaliação.`);
+  if (score != null) {
+    tips.push(`Meta visível: chegar a ${Math.min(100, Math.max(score + 5, 50))} pts no Índice ProMetric® na próxima avaliação.`);
+  }
   return tips.slice(0, 4);
 }
 
@@ -264,39 +280,59 @@ export async function downloadStudentEvolutionPDF(
 
   const dimsLast = dimensionScores(last.classifications ?? {});
   const dimsFirst = dimensionScores(first.classifications ?? {});
-  const dimDeltas = PM_DIMENSIONS.map((d) => {
-    const a = dimsFirst.find((x) => x.dimension === d)?.score ?? 0;
-    const b = dimsLast.find((x) => x.dimension === d)?.score ?? 0;
-    return { dimension: d, first: a, last: b, delta: b - a };
-  });
-  const bestEvo = [...dimDeltas].sort((a, b) => b.delta - a.delta)[0];
-  const worstEvo = [...dimDeltas].sort((a, b) => a.delta - b.delta)[0];
-  const stableEvo = [...dimDeltas].sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta))[0];
-  const lowestNow = [...dimsLast].sort((a, b) => a.score - b.score)[0];
-  const highestNow = [...dimsLast].sort((a, b) => b.score - a.score)[0];
+  
+  // Apenas dimensões efetivamente testadas na avaliação atual
+  const testedDimsLast = dimsLast.filter((d) => d.category !== null);
+  const lowestNow = testedDimsLast.length > 0 ? [...testedDimsLast].sort((a, b) => a.score - b.score)[0] : null;
+  const highestNow = testedDimsLast.length > 0 ? [...testedDimsLast].sort((a, b) => b.score - a.score)[0] : null;
 
-  // Comparativos: aluno vs média da turma / escola
+  const dimDeltas = PM_DIMENSIONS.map((d) => {
+    const a = dimsFirst.find((x) => x.dimension === d);
+    const b = dimsLast.find((x) => x.dimension === d);
+    const hasBoth = a?.category != null && b?.category != null;
+    return {
+      dimension: d,
+      hasBoth,
+      first: hasBoth ? a!.score : null,
+      last: hasBoth ? b!.score : null,
+      delta: hasBoth ? b!.score - a!.score : 0,
+    };
+  });
+  const validDeltas = dimDeltas.filter((d) => d.hasBoth && first.id !== last.id);
+  const bestEvo = validDeltas.length > 0 ? [...validDeltas].sort((a, b) => b.delta - a.delta)[0] : null;
+  const worstEvo = validDeltas.length > 0 ? [...validDeltas].sort((a, b) => a.delta - b.delta)[0] : null;
+  const stableEvo = validDeltas.length > 0 ? [...validDeltas].sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta))[0] : null;
+
+  // Comparativos: aluno vs média da turma / escola (apenas índices completos de turmas/escolas)
   const classAvg = classPeers.length ? aggregateZones(classPeers) : null;
   const schoolAvg = schoolPeers.length ? aggregateZones(schoolPeers) : null;
-  const classIndex = classAvg ? prometricIndex(classAvg).score : null;
-  const schoolIndex = schoolAvg ? prometricIndex(schoolAvg).score : null;
+  const classPm = classAvg ? prometricIndex(classAvg) : null;
+  const schoolPm = schoolAvg ? prometricIndex(schoolAvg) : null;
+  const classIndex = classPm && !classPm.partial ? classPm.score : null;
+  const schoolIndex = schoolPm && !schoolPm.partial ? schoolPm.score : null;
 
   // Recomendações automáticas (até 3)
   const recommendations: string[] = [];
-  if (lowestNow && lowestNow.score < 50) {
+  if (idxLast.partial) {
     recommendations.push(
-      `Priorizar trabalho em ${lowestNow.dimension.toLowerCase()} (atual: ${lowestNow.score}/100).`,
+      `Avaliação em andamento (${idxLast.filledDimensions} de 5 áreas concluídas). Recomenda-se realizar os testes pendentes para compor o Índice ProMetric® e o perfil motor completo.`
     );
-  }
-  if (bestEvo && bestEvo.delta > 5) {
-    recommendations.push(
-      `Manter a estratégia que gerou +${bestEvo.delta} pontos em ${bestEvo.dimension.toLowerCase()}.`,
-    );
-  }
-  if (highestNow && highestNow.score >= 75) {
-    recommendations.push(
-      `Estimular avanço em ${highestNow.dimension.toLowerCase()} — perfil de potencial elevado.`,
-    );
+  } else {
+    if (lowestNow && lowestNow.score < 50) {
+      recommendations.push(
+        `Priorizar trabalho em ${lowestNow.dimension.toLowerCase()} (atual: ${lowestNow.score}/100).`,
+      );
+    }
+    if (bestEvo && bestEvo.delta > 5) {
+      recommendations.push(
+        `Manter a estratégia que gerou +${bestEvo.delta} pontos em ${bestEvo.dimension.toLowerCase()}.`,
+      );
+    }
+    if (highestNow && highestNow.score >= 75) {
+      recommendations.push(
+        `Estimular avanço em ${highestNow.dimension.toLowerCase()} — perfil de potencial elevado.`,
+      );
+    }
   }
   if (recommendations.length === 0) {
     recommendations.push("Continuar a periodização atual e reavaliar em 8–12 semanas.");
@@ -464,27 +500,47 @@ export async function downloadStudentEvolutionPDF(
 
   // Evolution chip
   const chipY = y + heroH - 11;
-  const chipColor: [number, number, number] = delta >= 0 ? [34, 197, 94] : [239, 68, 68];
-  doc.setFillColor(...chipColor);
-  doc.setGState(new (doc as any).GState({ opacity: 0.12 }));
-  doc.roundedRect(rightHeroX, chipY, 46, 8, 1.5, 1.5, "F");
-  doc.setGState(new (doc as any).GState({ opacity: 1 }));
-
-  // Draw clean vector triangle for up/down indicator (guarantees perfect rendering without font encoding bugs)
-  doc.setFillColor(...chipColor);
-  const triCx = rightHeroX + 5.5;
-  const triCy = chipY + 4;
-  if (delta >= 0) {
-    // Up arrow triangle (▲)
-    doc.triangle(triCx - 1.8, triCy + 1.5, triCx + 1.8, triCy + 1.5, triCx, triCy - 1.8, "F");
+  if (idxLast.partial) {
+    const chipColor: [number, number, number] = [217, 119, 6]; // amber-600
+    doc.setFillColor(...chipColor);
+    doc.setGState(new (doc as any).GState({ opacity: 0.12 }));
+    doc.roundedRect(rightHeroX, chipY, 48, 8, 1.5, 1.5, "F");
+    doc.setGState(new (doc as any).GState({ opacity: 1 }));
+    doc.setFont("helvetica", "bold").setFontSize(7.5);
+    doc.setTextColor(...chipColor);
+    doc.text(`${idxLast.filledDimensions} de 5 áreas`, rightHeroX + 4, chipY + 5.3);
+  } else if (!isComparable) {
+    const chipColor: [number, number, number] = [79, 70, 229]; // indigo-600
+    doc.setFillColor(...chipColor);
+    doc.setGState(new (doc as any).GState({ opacity: 0.12 }));
+    doc.roundedRect(rightHeroX, chipY, 46, 8, 1.5, 1.5, "F");
+    doc.setGState(new (doc as any).GState({ opacity: 1 }));
+    doc.setFont("helvetica", "bold").setFontSize(7.5);
+    doc.setTextColor(...chipColor);
+    doc.text("Avaliação Inicial", rightHeroX + 5, chipY + 5.3);
   } else {
-    // Down arrow triangle (▼)
-    doc.triangle(triCx - 1.8, triCy - 1.8, triCx + 1.8, triCy - 1.8, triCx, triCy + 1.5, "F");
-  }
+    const chipColor: [number, number, number] = delta >= 0 ? [34, 197, 94] : [239, 68, 68];
+    doc.setFillColor(...chipColor);
+    doc.setGState(new (doc as any).GState({ opacity: 0.12 }));
+    doc.roundedRect(rightHeroX, chipY, 46, 8, 1.5, 1.5, "F");
+    doc.setGState(new (doc as any).GState({ opacity: 1 }));
 
-  doc.setFont("helvetica", "bold").setFontSize(8.5);
-  doc.setTextColor(...chipColor);
-  doc.text(`${delta >= 0 ? "+" : ""}${delta} pts evolução`, rightHeroX + 9, chipY + 5.3);
+    // Draw clean vector triangle for up/down indicator (guarantees perfect rendering without font encoding bugs)
+    doc.setFillColor(...chipColor);
+    const triCx = rightHeroX + 5.5;
+    const triCy = chipY + 4;
+    if (delta >= 0) {
+      // Up arrow triangle (▲)
+      doc.triangle(triCx - 1.8, triCy + 1.5, triCx + 1.8, triCy + 1.5, triCx, triCy - 1.8, "F");
+    } else {
+      // Down arrow triangle (▼)
+      doc.triangle(triCx - 1.8, triCy - 1.8, triCx + 1.8, triCy - 1.8, triCx, triCy + 1.5, "F");
+    }
+
+    doc.setFont("helvetica", "bold").setFontSize(8.5);
+    doc.setTextColor(...chipColor);
+    doc.text(`${delta >= 0 ? "+" : ""}${delta} pts evolução`, rightHeroX + 9, chipY + 5.3);
+  }
 
   // Interpretative sentence below hero
   y += heroH + 3;
@@ -533,14 +589,22 @@ export async function downloadStudentEvolutionPDF(
     doc.setGState(new (doc as any).GState({ opacity: 0.18 }));
     doc.rect(trackX + expStart, leftY, expEnd - expStart, barH, "F");
     doc.setGState(new (doc as any).GState({ opacity: 1 }));
-    // value bar tinted by situation
-    const sit = scoreToSituation(d.score);
-    const tone = situationTone(sit) ?? primary;
-    doc.setFillColor(...tone);
-    doc.roundedRect(trackX, leftY, Math.max(0.5, (d.score / 100) * trackW), barH, 1, 1, "F");
-    doc.setFont("helvetica", "bold").setFontSize(7.5);
-    doc.setTextColor(40);
-    doc.text(`${d.score}`, leftX + colWidth - 2, leftY + 3, { align: "right" });
+    
+    // value bar tinted by situation (apenas se houver teste avaliado)
+    const hasData = d.category !== null;
+    if (hasData) {
+      const sit = scoreToSituation(d.score);
+      const tone = situationTone(sit) ?? primary;
+      doc.setFillColor(...tone);
+      doc.roundedRect(trackX, leftY, Math.max(0.5, (d.score / 100) * trackW), barH, 1, 1, "F");
+      doc.setFont("helvetica", "bold").setFontSize(7.5);
+      doc.setTextColor(40);
+      doc.text(`${d.score}`, leftX + colWidth - 2, leftY + 3, { align: "right" });
+    } else {
+      doc.setFont("helvetica", "normal").setFontSize(7.5);
+      doc.setTextColor(150);
+      doc.text("—", leftX + colWidth - 2, leftY + 3, { align: "right" });
+    }
     leftY += barH + 3;
   });
   // legend
@@ -567,7 +631,7 @@ export async function downloadStudentEvolutionPDF(
   const pts: [number, number][] = [];
   dimsLast.forEach((d, i) => {
     const ang = (-Math.PI / 2) + (i * 2 * Math.PI) / n;
-    const r = (d.score / 100) * radius;
+    const r = d.category ? (d.score / 100) * radius : 0;
     pts.push([cx + Math.cos(ang) * r, cy + Math.sin(ang) * r]);
     const lx = cx + Math.cos(ang) * (radius + 5);
     const ly = cy + Math.sin(ang) * (radius + 5);
@@ -577,47 +641,88 @@ export async function downloadStudentEvolutionPDF(
     doc.setTextColor(90);
     doc.text(d.dimension, lx, ly, { align: "center", baseline: "middle" });
   });
-  doc.setFillColor(...primary);
-  doc.setDrawColor(...primary);
-  doc.setLineWidth(0.5);
-  const deltas: [number, number][] = [];
-  for (let i = 1; i < pts.length; i++) deltas.push([pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]]);
-  deltas.push([pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]]);
-  doc.setGState(new (doc as any).GState({ opacity: 0.28 }));
-  doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], "F");
-  doc.setGState(new (doc as any).GState({ opacity: 1 }));
-  doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], "S");
+
+  const testedCount = dimsLast.filter((d) => d.category !== null).length;
+  if (testedCount >= 3) {
+    doc.setFillColor(...primary);
+    doc.setDrawColor(...primary);
+    doc.setLineWidth(0.5);
+    const deltas: [number, number][] = [];
+    for (let i = 1; i < pts.length; i++) deltas.push([pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]]);
+    deltas.push([pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]]);
+    doc.setGState(new (doc as any).GState({ opacity: 0.28 }));
+    doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], "F");
+    doc.setGState(new (doc as any).GState({ opacity: 1 }));
+    doc.lines(deltas, pts[0][0], pts[0][1], [1, 1], "S");
+  } else {
+    pts.forEach(([px, py], i) => {
+      if (dimsLast[i]?.category) {
+        doc.setFillColor(...primary);
+        doc.circle(px, py, 1.8, "F");
+      }
+    });
+    doc.setFont("helvetica", "italic").setFontSize(6);
+    doc.setTextColor(130);
+    doc.text(
+      "Polígono disponível a partir de 3 áreas avaliadas.",
+      cx, cy + radius + 4,
+      { align: "center" }
+    );
+  }
   leftY = cy + radius + 6;
 
   // 3. Inicial × Atual
   leftY = sectionTitle(leftX, leftY, "Inicial × Atual");
-  dimDeltas.forEach((d) => {
-    const sign = d.delta > 0 ? "+" : d.delta < 0 ? "" : "";
-    const tone: [number, number, number] = d.delta > 0 ? [34, 197, 94] : d.delta < 0 ? [239, 68, 68] : [120, 120, 120];
+  if (first.id === last.id) {
     doc.setFont("helvetica", "normal").setFontSize(7.5);
-    doc.setTextColor(60);
-    doc.text(d.dimension, leftX, leftY + 3);
-    doc.text(`${d.first} -> ${d.last}`, leftX + colWidth - 18, leftY + 3, { align: "right" });
+    doc.setTextColor(100);
+    doc.text(
+      `Apenas 1 avaliação registrada (${formatDateBR(last.evaluated_at)}).`,
+      leftX, leftY + 3,
+    );
+    doc.setFont("helvetica", "italic").setFontSize(6.8);
+    doc.setTextColor(140);
+    doc.text(
+      "Realize uma nova avaliação para acompanhar o comparativo evolutivo.",
+      leftX, leftY + 7,
+      { maxWidth: colWidth }
+    );
+    leftY += 13;
+  } else {
+    dimDeltas.forEach((d) => {
+      doc.setFont("helvetica", "normal").setFontSize(7.5);
+      doc.setTextColor(60);
+      doc.text(d.dimension, leftX, leftY + 3);
+      if (d.hasBoth && d.first != null && d.last != null) {
+        const sign = d.delta > 0 ? "+" : "";
+        const tone: [number, number, number] = d.delta > 0 ? [34, 197, 94] : d.delta < 0 ? [239, 68, 68] : [120, 120, 120];
+        doc.text(`${d.first} -> ${d.last}`, leftX + colWidth - 18, leftY + 3, { align: "right" });
 
-    // Vector triangle indicator for delta
-    doc.setFillColor(...tone);
-    const triX = leftX + colWidth - 14;
-    const triY = leftY + 2.2;
-    if (d.delta > 0) {
-      doc.triangle(triX - 1.2, triY + 1, triX + 1.2, triY + 1, triX, triY - 1.2, "F");
-    } else if (d.delta < 0) {
-      doc.triangle(triX - 1.2, triY - 1.2, triX + 1.2, triY - 1.2, triX, triY + 1, "F");
-    } else {
-      doc.setFont("helvetica", "bold").setFontSize(7.5);
-      doc.setTextColor(...tone);
-      doc.text("=", triX, leftY + 3, { align: "center" });
-    }
+        // Vector triangle indicator for delta
+        doc.setFillColor(...tone);
+        const triX = leftX + colWidth - 14;
+        const triY = leftY + 2.2;
+        if (d.delta > 0) {
+          doc.triangle(triX - 1.2, triY + 1, triX + 1.2, triY + 1, triX, triY - 1.2, "F");
+        } else if (d.delta < 0) {
+          doc.triangle(triX - 1.2, triY - 1.2, triX + 1.2, triY - 1.2, triX, triY + 1, "F");
+        } else {
+          doc.setFont("helvetica", "bold").setFontSize(7.5);
+          doc.setTextColor(...tone);
+          doc.text("=", triX, leftY + 3, { align: "center" });
+        }
 
-    doc.setFont("helvetica", "bold").setFontSize(7.5);
-    doc.setTextColor(...tone);
-    doc.text(`${sign}${d.delta}`, leftX + colWidth - 2, leftY + 3, { align: "right" });
-    leftY += 4;
-  });
+        doc.setFont("helvetica", "bold").setFontSize(7.5);
+        doc.setTextColor(...tone);
+        doc.text(`${sign}${d.delta}`, leftX + colWidth - 2, leftY + 3, { align: "right" });
+      } else {
+        doc.setFont("helvetica", "normal").setFontSize(7.5);
+        doc.setTextColor(150);
+        doc.text("—", leftX + colWidth - 2, leftY + 3, { align: "right" });
+      }
+      leftY += 4;
+    });
+  }
 
   // ── RIGHT COLUMN ─────────────────────────────────────────────────────
   // 1. Evolução temporal com banda esperada
@@ -688,9 +793,9 @@ export async function downloadStudentEvolutionPDF(
 
   // 2. Comparativos
   rightY = sectionTitle(rightX, rightY, "Comparativos");
-  const compRows: { label: string; me: number; peer: number | null }[] = [
-    { label: "Aluno × Turma", me: idxLast.score, peer: classIndex },
-    { label: "Aluno × Escola", me: idxLast.score, peer: schoolIndex },
+  const compRows: { label: string; me: number | null; peer: number | null }[] = [
+    { label: "Aluno × Turma", me: idxLast.partial ? null : idxLast.score, peer: classIndex },
+    { label: "Aluno × Escola", me: idxLast.partial ? null : idxLast.score, peer: schoolIndex },
   ];
   compRows.forEach((row) => {
     doc.setFont("helvetica", "normal").setFontSize(7.5);
@@ -707,8 +812,10 @@ export async function downloadStudentEvolutionPDF(
     doc.setGState(new (doc as any).GState({ opacity: 0.18 }));
     doc.rect(trackX + eS, rightY, eE - eS, 3, "F");
     doc.setGState(new (doc as any).GState({ opacity: 1 }));
-    doc.setFillColor(...primary);
-    doc.roundedRect(trackX, rightY, (row.me / 100) * trackWc, 3, 0.5, 0.5, "F");
+    if (row.me !== null) {
+      doc.setFillColor(...primary);
+      doc.roundedRect(trackX, rightY, (row.me / 100) * trackWc, 3, 0.5, 0.5, "F");
+    }
     if (row.peer !== null) {
       doc.setDrawColor(...secondary);
       doc.setLineWidth(0.9);
@@ -717,8 +824,9 @@ export async function downloadStudentEvolutionPDF(
     }
     doc.setFont("helvetica", "bold").setFontSize(7.5);
     doc.setTextColor(40);
+    const meTxt = row.me !== null ? String(row.me) : "—";
     const peerTxt = row.peer !== null ? ` (média ${row.peer})` : "";
-    doc.text(`${row.me}${peerTxt}`, rightX + colWidth - 2, rightY + 3, { align: "right" });
+    doc.text(`${meTxt}${peerTxt}`, rightX + colWidth - 2, rightY + 3, { align: "right" });
     rightY += 6;
   });
 
@@ -728,10 +836,11 @@ export async function downloadStudentEvolutionPDF(
   doc.setFont("helvetica", "normal").setFontSize(7.5);
   doc.setTextColor(60);
   const highlights = [
+    idxLast.partial ? `Avaliação em andamento: ${idxLast.filledDimensions} de 5 áreas concluídas` : null,
     bestEvo && bestEvo.delta > 0 ? `Maior evolução: ${bestEvo.dimension} (+${bestEvo.delta} pts)` : null,
-    highestNow ? `Maior potencial: ${highestNow.dimension} (${highestNow.score}/100)` : null,
-    lowestNow ? `Atenção: ${lowestNow.dimension} (${lowestNow.score}/100)` : null,
-    idxLast.category ? `Perfil predominante: ${idxLast.category}` : null,
+    highestNow ? `Maior pontuação: ${highestNow.dimension} (${highestNow.score}/100)` : null,
+    lowestNow && lowestNow.dimension !== highestNow?.dimension ? `Área a desenvolver: ${lowestNow.dimension} (${lowestNow.score}/100)` : null,
+    !idxLast.partial && idxLast.category ? `Perfil predominante: ${idxLast.category}` : null,
   ].filter(Boolean) as string[];
   highlights.forEach((h) => {
     doc.text(`•  ${h}`, rightX, rightY + 3);
@@ -753,7 +862,7 @@ export async function downloadStudentEvolutionPDF(
   doc.text("PARA A FAMÍLIA", M + 4, stripY + 6);
   doc.setFont("helvetica", "normal").setFontSize(7.5);
   doc.setTextColor(40, 60, 90);
-  const familyTips = familyActions(situation, lowestNow?.dimension ?? null, bestEvo?.dimension ?? null, delta);
+  const familyTips = familyActions(situation, lowestNow?.dimension ?? null, bestEvo?.dimension ?? null, delta, idxLast.partial);
   let fy = stripY + 11;
   familyTips.forEach((t) => {
     const lines = doc.splitTextToSize(`•  ${t}`, stripColW - 8);
@@ -771,7 +880,7 @@ export async function downloadStudentEvolutionPDF(
   doc.text(`PARA ${firstName.toUpperCase()} — SEU PRÓXIMO PASSO`, sx + 4, stripY + 6);
   doc.setFont("helvetica", "normal").setFontSize(7.5);
   doc.setTextColor(90, 50, 20);
-  const studentTips = studentActions(situation, lowestNow?.dimension ?? null, idxLast.score);
+  const studentTips = studentActions(situation, lowestNow?.dimension ?? null, idxLast.partial ? null : idxLast.score, idxLast.partial);
   let sy = stripY + 11;
   studentTips.forEach((t) => {
     const lines = doc.splitTextToSize(`•  ${t}`, stripColW - 8);
