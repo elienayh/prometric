@@ -31,15 +31,23 @@ export async function resolveTenantModel(
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: cred, error: credErr } = await supabaseAdmin
-      .from("tenant_ai_credentials" as never)
+      .from("tenant_ai_credentials")
       .select(
         "provider, model, is_active, api_key_ciphertext, api_key_iv, api_key_tag, prompt_version",
       )
-      .eq("tenant_id" as never, tenantId)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
 
     if (!credErr && cred) {
-      row = cred as typeof row;
+      row = {
+        provider: cred.provider,
+        model: cred.model,
+        is_active: cred.is_active,
+        api_key_ciphertext: cred.api_key_ciphertext,
+        api_key_iv: cred.api_key_iv,
+        api_key_tag: cred.api_key_tag,
+        prompt_version: cred.prompt_version,
+      };
     }
   } catch (dbErr) {
     console.warn("[unified-generate] Aviso ao buscar credenciais do tenant:", dbErr);

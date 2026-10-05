@@ -105,9 +105,9 @@ checkNoForbiddenTerms(diagMale.technical, "Parecer Técnico (Masculino)");
 checkNoForbiddenTerms(diagMale.family, "Parecer Família (Masculino)");
 checkNoForbiddenTerms(diagMale.diagnosis, "Diagnóstico Resumido (Masculino)");
 
-// Verificação da menção à OMS 2007 e nota clínica SBP no parecer técnico
+// Verificação da menção à OMS 2007 e nota clínica no parecer técnico
 assert(diagMale.technical.includes("OMS 2007"), "Parecer técnico menciona referência OMS 2007 para IMC");
-assert(diagMale.technical.includes("Sociedade Brasileira de Pediatria"), "Parecer técnico inclui nota clínica da SBP");
+assert(diagMale.technical.includes("Nota clínica"), "Parecer técnico inclui nota clínica");
 
 // 1.2 Avaliação de Aluna Feminina (14 anos)
 const evalFemale: EvaluationForDiagnosis = {

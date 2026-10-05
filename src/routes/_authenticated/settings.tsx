@@ -116,6 +116,45 @@ function SettingsPage() {
     .filter((p) => p.slug === "free" || p.slug === "professor" || p.slug === "pro")
     .sort((a, b) => (a.slug === "free" ? -1 : 1));
 
+  const freePlan = activePlans.find((p) => p.slug === "free") || {
+    id: "free",
+    slug: "free",
+    name: "Gratuito",
+    max_students: 30,
+    max_users: 1,
+    price_monthly: 0,
+    features: ["Até 30 alunos", "1 usuário", "Relatórios básicos"],
+    sort_order: 1,
+  };
+
+  const proPlan = activePlans.find((p) => p.slug === "professor" || p.slug === "pro") || {
+    id: "pro",
+    slug: "professor",
+    name: "Pro",
+    max_students: null,
+    max_users: 10,
+    price_monthly: 189.9,
+    amount_yearly_cents: 179990,
+    features: [
+      "Alunos ilimitados",
+      "10 usuários",
+      "Relatórios PDF",
+      "Parecer automático ProMetric®",
+      "Cobrança mensal ou anual",
+    ],
+    sort_order: 2,
+  };
+
+  const formatBRL = (val: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+
+  const freeLimit = freePlan.max_students ?? 30;
+  const proMonthly = proPlan.price_monthly;
+  const proYearly = (proPlan.amount_yearly_cents && proPlan.amount_yearly_cents > 0 ? proPlan.amount_yearly_cents : 179990) / 100;
+  const proEquivMonthly = proYearly / 12;
+  const annualEconomy = Math.max(0, proMonthly * 12 - proYearly);
+  const economyMonths = proMonthly > 0 ? (annualEconomy / proMonthly).toFixed(1).replace(".", ",") : "2,5";
+
   return (
     <div className="space-y-8">
       <PageHeader title="Configurações" description="Plano, uso e ajustes do seu espaço." />
@@ -193,7 +232,7 @@ function SettingsPage() {
             >
               <span>Anual</span>
               <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                Economize 2 meses
+                {annualEconomy > 0 ? `Economize ~${formatBRL(annualEconomy)}` : "Desconto anual"}
               </span>
             </button>
           </div>
@@ -202,15 +241,6 @@ function SettingsPage() {
         <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
           {/* Plano Gratuito */}
           {(() => {
-            const freePlan = activePlans.find((p) => p.slug === "free") || {
-              id: "free",
-              slug: "free",
-              name: "Gratuito",
-              max_students: 30,
-              max_users: 1,
-              price_monthly: 0,
-              features: ["Até 30 alunos", "1 usuário", "Relatórios básicos"],
-            };
             const isCurrent = tenant?.plan_id === freePlan.id || (!tenant?.plan_id && freePlan.slug === "free");
 
             return (
@@ -229,11 +259,13 @@ function SettingsPage() {
                 )}
                 <div>
                   <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Gratuito — até 30 alunos / usuários
+                    Gratuito — até {freeLimit} alunos / usuários
                   </div>
                   <h3 className="mt-1 font-display text-2xl font-bold">{freePlan.name}</h3>
                   <div className="mt-4 flex items-baseline gap-1">
-                    <span className="font-display text-3xl font-extrabold tracking-tight">R$ 0</span>
+                    <span className="font-display text-3xl font-extrabold tracking-tight">
+                      {formatBRL(freePlan.price_monthly)}
+                    </span>
                     <span className="text-xs text-muted-foreground font-normal">/ sempre gratuito</span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -243,11 +275,11 @@ function SettingsPage() {
                   <ul className="mt-6 space-y-2.5 text-xs text-muted-foreground">
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span>Até 30 alunos ativos</span>
+                      <span>Até {freeLimit} alunos ativos</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span>1 usuário administrador</span>
+                      <span>{freePlan.max_users} usuário{freePlan.max_users > 1 ? "s" : ""} administrador</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
@@ -267,22 +299,6 @@ function SettingsPage() {
 
           {/* Plano Pro */}
           {(() => {
-            const proPlan = activePlans.find((p) => p.slug === "professor" || p.slug === "pro") || {
-              id: "pro",
-              slug: "professor",
-              name: "Pro",
-              max_students: null,
-              max_users: 10,
-              price_monthly: 189.9,
-              amount_yearly_cents: 179990,
-              features: [
-                "Alunos ilimitados",
-                "10 usuários",
-                "Relatórios PDF",
-                "Parecer com IA",
-                "Cobrança mensal ou anual",
-              ],
-            };
             const isCurrent = tenant?.plan_id === proPlan.id;
 
             return (
@@ -300,7 +316,7 @@ function SettingsPage() {
 
                 <div>
                   <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary uppercase tracking-wider">
-                    <Sparkles className="h-3 w-3 text-accent" /> Pro — a partir de 30 alunos (ilimitado)
+                    <Sparkles className="h-3 w-3 text-accent" /> {proPlan.name} — a partir de {freeLimit} alunos (ilimitado)
                   </div>
                   <h3 className="mt-1 font-display text-2xl font-bold">{proPlan.name}</h3>
 
@@ -308,7 +324,7 @@ function SettingsPage() {
                     {billingInterval === "monthly" ? (
                       <div>
                         <div className="flex items-baseline gap-1">
-                          <span className="font-display text-3xl font-extrabold tracking-tight">R$ 189,90</span>
+                          <span className="font-display text-3xl font-extrabold tracking-tight">{formatBRL(proMonthly)}</span>
                           <span className="text-xs text-muted-foreground font-normal">/mês</span>
                         </div>
                         <p className="mt-1 text-[11px] text-muted-foreground">
@@ -318,11 +334,11 @@ function SettingsPage() {
                     ) : (
                       <div>
                         <div className="flex items-baseline gap-1">
-                          <span className="font-display text-3xl font-extrabold tracking-tight">R$ 1.799,90</span>
+                          <span className="font-display text-3xl font-extrabold tracking-tight">{formatBRL(proYearly)}</span>
                           <span className="text-xs text-muted-foreground font-normal">/ano</span>
                         </div>
                         <p className="mt-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                          Equivale a ~R$ 149,99/mês (economize 2 meses no plano anual).
+                          Equivale a ~{formatBRL(proEquivMonthly)}/mês (economize ~{formatBRL(annualEconomy)} (quase {economyMonths} meses) no plano anual).
                         </p>
                       </div>
                     )}
@@ -335,7 +351,7 @@ function SettingsPage() {
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span>Até 10 usuários / avaliadores na equipe</span>
+                      <span>Até {proPlan.max_users} usuários / avaliadores na equipe</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
@@ -343,7 +359,7 @@ function SettingsPage() {
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span>Parecer pedagógico completo com IA integrado</span>
+                      <span>Parecer pedagógico completo integrado</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-emerald-500 shrink-0" />
@@ -372,7 +388,9 @@ function SettingsPage() {
                       ) : (
                         <>
                           <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                          {billingInterval === "monthly" ? "Assinar Pro (R$ 189,90/mês)" : "Assinar Pro (R$ 1.799,90/ano)"}
+                          {billingInterval === "monthly"
+                            ? `Assinar Pro (${formatBRL(proMonthly)}/mês)`
+                            : `Assinar Pro (${formatBRL(proYearly)}/ano)`}
                         </>
                       )}
                     </Button>

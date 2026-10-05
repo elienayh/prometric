@@ -8,7 +8,7 @@ export const PROESP_MIN_AGE = 6;
 export const PROESP_MAX_AGE = 17;
 
 export const PROESP_AGE_WARNING =
-  "Os pontos de corte do PROESP-BR cobrem 6 a 17 anos. Testes motores de desempenho não são classificados fora dessa faixa (IMC e RCE permanecem ativos).";
+  "Os pontos de corte de referência cobrem 6 a 17 anos. Testes motores de desempenho não são classificados fora dessa faixa (IMC e RCE permanecem ativos).";
 
 export interface RangeRule {
   field: string;

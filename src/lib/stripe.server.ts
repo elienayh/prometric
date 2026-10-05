@@ -7,6 +7,7 @@
  */
 
 import Stripe from "stripe";
+import type { Database } from "@/integrations/supabase/types";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { checkTenantAdminPermission } from "./team-invitations.server";
 
@@ -335,7 +336,7 @@ async function syncTenantSubscription(
   }
 
   // 2. Atualizar tenants (plan_id e status)
-  const tenantUpdates: Record<string, any> = {};
+  const tenantUpdates: Database["public"]["Tables"]["tenants"]["Update"] = {};
   if (targetPlanId) {
     tenantUpdates.plan_id = targetPlanId;
   }

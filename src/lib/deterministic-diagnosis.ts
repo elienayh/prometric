@@ -114,7 +114,7 @@ export function buildDeterministicDiagnosis(
     technicalParts.push(`Valências com margem para desenvolvimento: ${devTests.map((t) => `${t.name} ('${t.cat}')`).join(", ")}.`);
   }
   technicalParts.push(`Recomenda-se programa motor diversificado com ênfase nas valências deficitárias e nova bateria de controle em 90 a 120 dias.`);
-  technicalParts.push(`Nota clínica: ${IMC_CLINICAL_DISCLAIMER} Critérios de classificação do IMC alinhados às curvas da OMS 2007 e às diretrizes da Sociedade Brasileira de Pediatria (Manual nº 64/2023).`);
+  technicalParts.push(`Nota clínica: ${IMC_CLINICAL_DISCLAIMER} Critérios de classificação do IMC alinhados às curvas de crescimento da OMS 2007.`);
 
   const technical = technicalParts.join(" ");
 

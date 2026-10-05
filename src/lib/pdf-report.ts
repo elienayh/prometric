@@ -136,7 +136,7 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
   const PH = doc.internal.pageSize.getHeight();
   doc.setFontSize(7.5).setTextColor(130);
   doc.text(
-    `Gerado por ProMetric em ${new Date().toLocaleString("pt-BR")} • Modelo ProMetric® • Antropometria conforme OMS 2007 e SBP (Manual nº 64/2023).`,
+    `Gerado por ProMetric em ${new Date().toLocaleString("pt-BR")} • Modelo ProMetric® • Antropometria conforme curvas de IMC da OMS 2007.`,
     12, PH - 11,
   );
   doc.setFontSize(7).setTextColor(150);
@@ -518,7 +518,7 @@ export function generateEvaluationPDFComplete(
   const finalYPage2 = (doc as any).lastAutoTable.finalY;
   doc.setFontSize(7).setTextColor(130);
   doc.text(
-    `Antropometria: Curvas de IMC da OMS 2007 (5–19 anos) e Sociedade Brasileira de Pediatria (Manual nº 64/2023). ${IMC_CLINICAL_DISCLAIMER}`,
+    `Antropometria: Curvas de IMC da OMS 2007 (5–19 anos). ${IMC_CLINICAL_DISCLAIMER}`,
     12,
     Math.min(PH - 20, finalYPage2 + 6),
     { maxWidth: W - 24 }

@@ -776,7 +776,7 @@ export async function downloadStudentEvolutionPDF(
     doc.setFont("helvetica", "normal").setFontSize(6);
     doc.setTextColor(130);
     doc.text(
-      `Modelo ProMetric® • Antropometria conforme OMS 2007 e SBP (Manual nº 64/2023). ${IMC_CLINICAL_DISCLAIMER}`,
+      `Modelo ProMetric® • Antropometria conforme curvas de IMC da OMS 2007. ${IMC_CLINICAL_DISCLAIMER}`,
       M + 22,
       footerY + 17,
       { maxWidth: W - 2 * M - 22 }

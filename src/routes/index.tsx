@@ -33,7 +33,7 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
   { q: "O sistema possui inteligência artificial?", a: "Sim. A IA gera parecer técnico, mensagem para a família e metas personalizadas de 30/60/90 dias por aluno." },
   { q: "Como funciona o histórico do aluno?", a: "Cada avaliação fica registrada cronologicamente, com Perfil de Desenvolvimento Físico ProMetric em cada momento." },
   { q: "Posso cadastrar turmas?", a: "Sim. Você organiza alunos por turma, série, escola ou clube, com filtros e permissões por professor." },
-  { q: "Existe versão gratuita e como funcionam os planos?", a: "Sim. O ProMetric é gratuito para sempre até 30 alunos/usuários, sem necessidade de cartão de crédito. A partir de 30 alunos, o plano Pro custa R$ 189,90/mês com alunos ilimitados, laudos com IA e suporte prioritário. Não existem outros planos nem taxas adicionais." },
+  { q: "Existe versão gratuita e como funcionam os planos?", a: "Sim. O ProMetric oferece plano Gratuito livre para sempre até 30 alunos/usuários, sem necessidade de cartão de crédito. Para turmas maiores e recursos avançados, o plano Pro oferece alunos ilimitados, relatórios completos e suporte prioritário. A tabela completa de planos está disponível na sua conta." },
 ];
 
 const STRUCTURED_DATA = [
@@ -141,7 +141,7 @@ function Landing() {
         {config.visibility.showTestimonials && config.testimonials?.items?.length > 0 && (
           <TestimonialsSection testimonials={config.testimonials} />
         )}
-        {config.visibility.showPricing && <Pricing pricing={config.pricing} />}
+        {config.visibility.showPricing && <GetStartedSection />}
         {config.visibility.showFaq && <Faq faq={config.faq} />}
         {config.visibility.showCtaBanner && <CtaBanner cta={config.ctaBanner} />}
       </main>
@@ -166,7 +166,6 @@ function SiteHeader() {
           <a href="#o-que-e" className="transition-colors hover:text-foreground">O que é</a>
           <a href="#metodo" className="transition-colors hover:text-foreground">Método</a>
           <a href="#como-funciona" className="transition-colors hover:text-foreground">Como funciona</a>
-          <a href="#planos" className="transition-colors hover:text-foreground">Planos</a>
           <Link to="/blog" className="transition-colors hover:text-foreground">Blog</Link>
           <a href="#faq" className="transition-colors hover:text-foreground">FAQ</a>
         </nav>
@@ -625,93 +624,56 @@ function TestimonialsSection({ testimonials }: { testimonials: HomePageConfig["t
   );
 }
 
-/* ---------- Pricing ---------- */
-function Pricing({ pricing }: { pricing?: HomePageConfig["pricing"] }) {
-  const eyebrow = pricing?.badge || "Planos";
-  const title = pricing?.title || "Comece grátis hoje. Faça upgrade quando crescer.";
-  const description =
-    pricing?.description ||
-    "Comece gratuitamente e faça upgrade com alunos ilimitados quando sua escola ou turmas crescerem.";
-
-  const plans = [
-    {
-      name: pricing?.freeTitle || "Gratuito",
-      price: pricing?.freePrice || "R$ 0",
-      period: "sempre gratuito",
-      features: pricing?.freeBullets || [
-        "Gratuito até 30 alunos / usuários",
-        "Método ProMetric® completo",
-        "Relatórios PDF individuais",
-        "Acesso completo no celular e Modo Quadra",
-      ],
-      cta: "Começar grátis agora",
-      highlight: false,
-    },
-    {
-      name: pricing?.proTitle || "Pro",
-      price: pricing?.proPrice || "R$ 189,90",
-      period: "/mês",
-      features: pricing?.proBullets || [
-        "Alunos e turmas ilimitados (a partir de 30)",
-        "Professores e avaliadores ilimitados",
-        "Parecer pedagógico completo com IA",
-        "Relatórios institucionais e por turma",
-        "Personalização da marca e logo nos PDFs",
-        "Suporte prioritário via WhatsApp",
-      ],
-      cta: "Assinar plano Pro",
-      highlight: true,
-    },
-  ];
+/* ---------- Comece Grátis (Incentivo à Criação de Conta) ---------- */
+function GetStartedSection() {
   return (
-    <section id="planos" className="border-t border-border bg-secondary/40">
-      <div className="mx-auto max-w-7xl px-6 py-20 md:py-28">
-        <SectionHeader
-          eyebrow={eyebrow}
-          title={title}
-          description={description}
-        />
-        <div className="mt-12 grid gap-6 md:grid-cols-2 max-w-4xl mx-auto">
-          {plans.map((p) => (
-            <div
-              key={p.name}
-              className={cn(
-                "relative flex flex-col justify-between rounded-2xl border bg-card p-6 shadow-card",
-                p.highlight ? "border-primary/50 ring-1 ring-primary/40 shadow-pop" : "border-border",
-              )}
-            >
-              {p.highlight && (
-                <div className="absolute -top-3 right-6 rounded-full bg-gradient-brand px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground shadow-glow">
-                  {pricing?.proTag || "Recomendado"}
-                </div>
-              )}
-              <div>
-                <div className="font-display text-base font-semibold">{p.name}</div>
-                <div className="mt-4 flex items-baseline gap-1">
-                  <span className="font-display text-3xl font-bold">{p.price}</span>
-                  {p.period && <span className="text-sm text-muted-foreground">{p.period}</span>}
-                </div>
-                <ul className="mt-6 space-y-2.5 text-sm">
-                  {p.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-foreground/90">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <Button
-                asChild
-                className={cn(
-                  "mt-8 w-full",
-                  p.highlight ? "bg-gradient-brand text-primary-foreground shadow-glow hover:opacity-90" : "",
-                )}
-                variant={p.highlight ? "default" : "outline"}
-              >
-                <Link to="/register">{p.cta}</Link>
-              </Button>
+    <section id="comece-gratis" className="border-t border-border bg-gradient-to-b from-secondary/30 via-background to-secondary/30 py-20 md:py-28">
+      <div className="mx-auto max-w-4xl px-6">
+        <div className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-card p-8 md:p-12 shadow-glow text-center">
+          <div className="inline-flex items-center gap-2 rounded-full bg-gradient-brand/10 border border-primary/30 px-3.5 py-1 text-xs font-semibold text-primary">
+            <Sparkles className="h-3.5 w-3.5 text-accent" />
+            Acesso Imediato
+          </div>
+
+          <h2 className="mt-4 font-display text-3xl font-extrabold tracking-tight sm:text-4xl text-foreground">
+            Comece grátis, sem cartão de crédito
+          </h2>
+
+          <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground">
+            Crie sua conta em menos de 1 minuto e comece a avaliar seus estudantes hoje mesmo na quadra pelo celular.
+          </p>
+
+          <div className="mx-auto mt-8 max-w-xl rounded-2xl border border-border/80 bg-background/80 p-6 backdrop-blur-sm shadow-card">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+              O que você tem no plano gratuito livre para sempre:
             </div>
-          ))}
+            <ul className="space-y-3 text-left text-sm text-foreground/90">
+              <li className="flex items-start gap-3">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                <span><strong>Modo Quadra ultra-rápido:</strong> colete peso, estatura e baterias de testes sem retrabalho.</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                <span><strong>Índice ProMetric® e Radar:</strong> diagnósticos físicos integrados em 5 dimensões com curvas oficiais.</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                <span><strong>Relatórios em PDF e Portal:</strong> emissão individual instantânea e compartilhamento com as famílias.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button asChild size="lg" className="w-full sm:w-auto bg-gradient-brand text-primary-foreground shadow-glow hover:opacity-90 px-8 py-6 text-base font-semibold">
+              <Link to="/register">
+                Criar conta gratuita agora
+              </Link>
+            </Button>
+          </div>
+
+          <p className="mt-4 text-xs text-muted-foreground">
+            Sem pegadinhas • Não pede cartão • Configuração em 60 segundos
+          </p>
         </div>
       </div>
     </section>

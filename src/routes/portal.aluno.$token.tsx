@@ -509,14 +509,14 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                 ))}
               </ul>
 
-              {/* IA opcional */}
+              {/* Análise automática / Parecer */}
               <div className="mt-6 rounded-xl border bg-gradient-card p-4">
                 <div className="flex items-start gap-3">
                   <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                   <div className="min-w-0">
-                    <h3 className="font-semibold">Parecer personalizado com IA</h3>
+                    <h3 className="font-semibold">Parecer personalizado ProMetric®</h3>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      Análise completa com plano de evolução e atividades sugeridas, gerada pela IA configurada pela sua escola.
+                      Análise completa com plano de evolução e atividades sugeridas, gerada automaticamente pela metodologia ProMetric®.
                     </p>
                   </div>
                 </div>
@@ -528,7 +528,7 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                 >
                   {aiReport.isPending
                     ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Gerando…</>
-                    : <><Sparkles className="mr-1.5 h-3.5 w-3.5" /> {aiReport.data ? "Atualizar parecer" : "Gerar parecer com IA"}</>}
+                    : <><Sparkles className="mr-1.5 h-3.5 w-3.5" /> {aiReport.data ? "Atualizar parecer" : "Gerar parecer automático ProMetric®"}</>}
                 </Button>
 
                 {aiReport.data && (

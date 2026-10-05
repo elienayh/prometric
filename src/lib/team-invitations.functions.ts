@@ -20,6 +20,10 @@ export type InviteResult = {
   message: string;
 };
 
+type GenericRpcClient = {
+  rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+};
+
 export const createTeamInvite = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => InviteInput.parse(d))
@@ -40,16 +44,16 @@ export const createTeamInvite = createServerFn({ method: "POST" })
 
     // 2. Tenta gerar via RPC SECURITY DEFINER (mais rápido, sem barreiras de RLS)
     try {
-      const { data: rpcRes, error: rpcErr } = await userClient.rpc("create_team_invitation" as never, {
+      const { data: rpcRes, error: rpcErr } = await (userClient as unknown as GenericRpcClient).rpc("create_team_invitation", {
         _tenant: tenantId,
         _email: cleanEmail,
         _role: role,
         _full_name: fullName,
         _phone: phone || null,
-      } as never);
+      });
 
       if (!rpcErr && Array.isArray(rpcRes) && rpcRes.length > 0) {
-        const row = rpcRes[0] as any;
+        const row = (rpcRes as Array<{ token: string; is_existing_user?: boolean }>)[0];
         const inviteLink = `${baseUrl}/invite/${row.token}`;
         if (row.is_existing_user) {
           return {
@@ -98,6 +102,8 @@ export const createTeamInvite = createServerFn({ method: "POST" })
     if (!tenant) {
       throw new Error("Escola ou organização não encontrada.");
     }
+
+    const tenantName = tenant.display_name || tenant.name || "sua organização";
 
     // 4. Gerar token seguro para o link de convite
     const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
@@ -263,7 +269,8 @@ export const createTeamInvite = createServerFn({ method: "POST" })
         ) {
           try {
             const { data: userListData } = await supabaseAdmin.auth.admin.listUsers();
-            const matchedUser = userListData?.users?.find(
+            const users = userListData?.users as Array<{ id: string; email?: string }> | undefined;
+            const matchedUser = users?.find(
               (u) => u.email?.toLowerCase().trim() === cleanEmail
             );
             if (matchedUser) {
@@ -609,9 +616,9 @@ export const listTeamMembersAndInvites = createServerFn({ method: "POST" })
 
     // 1. Tenta primeiro a RPC get_tenant_team (SECURITY DEFINER, já traz nomes/emails integrados)
     try {
-      const { data: teamRpcData, error: rpcErr } = await userClient.rpc("get_tenant_team" as never, {
+      const { data: teamRpcData, error: rpcErr } = await (userClient as unknown as GenericRpcClient).rpc("get_tenant_team", {
         _tenant: tenantId,
-      } as never);
+      });
 
       if (!rpcErr && Array.isArray(teamRpcData) && teamRpcData.length > 0) {
         const canAdmin = await checkTenantAdminPermission(userId, tenantId, userClient);

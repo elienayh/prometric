@@ -237,7 +237,7 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomePageConfig = {
       "Interface ultra-rápida pensada para uso direto na quadra pelo celular ou tablet. Registre peso, estatura e baterias de testes em sequência.",
     card2Title: "Índice ProMetric® 0–100",
     card2Desc:
-      "Algoritmo proprietário que normaliza testes antropométricos e motores contra curvas populacionais de referência (PROESP-BR e OMS 2007).",
+      "Algoritmo proprietário que normaliza testes antropométricos e motores contra curvas populacionais de referência e da OMS 2007.",
     card3Title: "Laudos Inteligentes com IA",
     card3Desc:
       "Gere pareceres técnicos e orientações éticas para os pais em linguagem clara e acolhedora, com metas progressivas de 30, 60 e 90 dias.",
@@ -308,7 +308,7 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomePageConfig = {
         role: "Professora e Pesquisadora",
         organization: "Instituto de Esportes",
         quote:
-          "O rigor com a curva OMS 2007 em meses e os testes PROESP é exemplar. É o único software que alia precisão científica com extrema facilidade de uso na quadra.",
+          "O rigor com a curva OMS 2007 em meses e as baterias de testes motores é exemplar. É o único software que alia precisão científica com extrema facilidade de uso na quadra.",
         rating: 5,
       },
       {
@@ -361,7 +361,7 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomePageConfig = {
       {
         id: "f2",
         q: "Como funciona a classificação de IMC em escolares?",
-        a: "O ProMetric utiliza a referência oficial da OMS 2007 calculada com base na idade exata em meses e sexo do estudante, diferenciando magreza, eutrofia, sobrepeso e obesidade segundo o Manual de Orientação da SBP.",
+        a: "O ProMetric utiliza a referência oficial da OMS 2007 calculada com base na idade exata em meses e sexo do estudante, diferenciando magreza, eutrofia, sobrepeso e obesidade conforme curvas de crescimento da OMS.",
       },
       {
         id: "f3",
@@ -376,7 +376,7 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomePageConfig = {
       {
         id: "f5",
         q: "Como funcionam os planos e existe versão gratuita?",
-        a: "O ProMetric possui modelo transparente com apenas dois planos: o plano Gratuito é livre para sempre até 30 alunos/usuários, sem necessidade de cartão de crédito. A partir de 30 alunos, o plano Pro custa R$ 189,90 por mês com alunos ilimitados, laudos com inteligência artificial, relatórios comparativos e suporte prioritário. Não existem outros planos.",
+        a: "O ProMetric possui modelo transparente com plano Gratuito livre para sempre até 30 alunos/usuários, sem necessidade de cartão de crédito. Para turmas maiores, o plano Pro oferece alunos ilimitados, relatórios comparativos completos e suporte prioritário. A tabela detalhada de planos está disponível dentro da sua conta.",
       },
       {
         id: "f6",

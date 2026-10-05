@@ -366,7 +366,7 @@ export function generateSqlMigration(): string {
 -- Migração Fase 6: Recálculo em Lote e Backfill Seguro de Avaliações
 -- ============================================================================
 -- Atualiza age_years, age_months (calendário civil exato), imc, rce e classifications
--- com a curva OMS 2007 (5-19 anos) e critérios SBP.
+-- com a curva OMS 2007 (5-19 anos).
 -- Idempotente e transacional.
 -- ============================================================================
 
