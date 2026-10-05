@@ -41,6 +41,9 @@ export type StudentScore = {
   score: number;          // 0..100
   category: PMCategory | null;
   evolution: number | null; // delta vs first eval (percentage points)
+  partial: boolean;
+  filledDimensions: number;
+  totalDimensions: number;
 };
 
 export type DistributionRow = { category: PMCategory; count: number; pct: number; color: string };
@@ -55,6 +58,7 @@ export type CohortAggregates = {
   distribution: DistributionRow[];
   dimensions: DimensionAvg[];
   students: StudentScore[];
+  topStudents: StudentScore[]; // Alunos com avaliação completa (!partial), para rankings
   atRisk: StudentScore[];
   topGains: StudentScore[];
 };
@@ -90,6 +94,9 @@ export function aggregateCohort(
       score: idx.score,
       category: idx.category,
       evolution,
+      partial: idx.partial,
+      filledDimensions: idx.filledDimensions,
+      totalDimensions: idx.totalDimensions,
     };
   });
 
@@ -138,6 +145,10 @@ export function aggregateCohort(
     .sort((a, b) => (b.evolution ?? 0) - (a.evolution ?? 0))
     .slice(0, 10);
 
+  const topStudents = students
+    .filter((s) => !s.partial)
+    .sort((a, b) => b.score - a.score);
+
   return {
     studentCount: studentsLatest.length,
     evaluatedCount,
@@ -145,7 +156,8 @@ export function aggregateCohort(
     avgCategory,
     distribution,
     dimensions,
-    students: students.sort((a, b) => b.score - a.score),
+    students: students.sort((a, b) => (!a.partial && b.partial ? -1 : a.partial && !b.partial ? 1 : b.score - a.score)),
+    topStudents,
     atRisk,
     topGains,
   };

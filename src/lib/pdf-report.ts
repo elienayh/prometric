@@ -1,7 +1,9 @@
 import { formatDateBR } from "./age";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { TEST_META, ZONES, type Classifications, type Zone, type Sex, overallScore } from "./proesp";
+import { TEST_META, ZONES, type Classifications, type Zone, type Sex, overallScore, isEarlyChildhoodAge } from "./proesp";
+import { prometricIndex } from "./prometric-method";
+import { ageInYears } from "./age";
 import { imcBand, imcAdultBand, IMC_BAND_LABEL, IMC_CLINICAL_DISCLAIMER } from "./imc-reference";
 
 export type ReportEval = {
@@ -103,15 +105,16 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
   });
 
   // Resumo
+  const pm = prometricIndex(ev.classifications ?? {});
   const score = overallScore(ev.classifications ?? {});
   const yEnd = (doc as any).lastAutoTable.finalY + 6;
   doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(20);
-  if (score.partial) {
+  if (pm.partial) {
     doc.setTextColor(180, 90, 0);
-    doc.text(`Avaliação parcial — ${score.filled}/9 testes. Classificação geral indisponível.`, 12, yEnd);
+    doc.text(`Avaliação parcial — ${pm.filledDimensions} de 5 áreas avaliadas. Classificação geral indisponível.`, 12, yEnd);
     doc.setTextColor(20);
   } else {
-    doc.text(`Perfil geral: ${score.label ?? "—"} (Índice ProMetric: ${score.score}/100)`, 12, yEnd);
+    doc.text(`Perfil geral: ${score.label ?? "—"} (Índice ProMetric: ${pm.score}/100)`, 12, yEnd);
   }
 
   // Diagnóstico IA
@@ -132,8 +135,29 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
     doc.text(doc.splitTextToSize(ev.notes, W - 24), 12, y2 + 6);
   }
 
-  // Footer
   const PH = doc.internal.pageSize.getHeight();
+
+  // Nota de desenvolvimento para 6 e 7 anos
+  const ageY = ev.age_years ?? (ev.student.birth_date ? ageInYears(ev.student.birth_date, ev.evaluated_at) : null);
+  if (isEarlyChildhoodAge(ageY)) {
+    const noteY = PH - 23;
+    doc.setFillColor(254, 243, 199);
+    doc.setDrawColor(245, 158, 11);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(12, noteY, W - 24, 7, 1.5, 1.5, "FD");
+    doc.setFont("helvetica", "bold").setFontSize(6.8);
+    doc.setTextColor(180, 83, 9);
+    doc.text("Nota de Desenvolvimento (6 e 7 anos):", 15, noteY + 4.5);
+    doc.setFont("helvetica", "normal").setFontSize(6.2);
+    doc.setTextColor(120, 53, 15);
+    doc.text(
+      "Nessa idade a musculatura está sendo desenvolvida, sendo comum haver maior divergência entre um teste e outro.",
+      64,
+      noteY + 4.5,
+    );
+  }
+
+  // Footer
   doc.setFontSize(7.5).setTextColor(130);
   doc.text(
     `Gerado por ProMetric em ${new Date().toLocaleString("pt-BR")} • Modelo ProMetric® • Antropometria conforme curvas de IMC da OMS 2007.`,
@@ -450,18 +474,29 @@ export function generateEvaluationPDFComplete(
   doc.text(`Avaliado em ${formatDateBR(ev.evaluated_at)}`, 16, 130);
 
   // Card: Índice ProMetric
+  const pmCard = prometricIndex(ev.classifications ?? {});
   doc.setFillColor(255, 255, 255);
   doc.roundedRect(16, 150, W - 32, 50, 4, 4, "F");
   doc.setTextColor(80).setFont("helvetica", "normal").setFontSize(10);
   doc.text("Índice ProMetric", 24, 162);
   doc.setTextColor(BR[0], BR[1], BR[2]).setFont("helvetica", "bold").setFontSize(36);
-  doc.text(`${score.score}`, 24, 186);
-  doc.setFontSize(12).setTextColor(120);
-  doc.text("/ 100", 60, 186);
-  doc.setTextColor(40).setFont("helvetica", "bold").setFontSize(14);
-  doc.text("Classificação Geral", 100, 162);
-  doc.setTextColor(BR[0], BR[1], BR[2]).setFontSize(18);
-  doc.text(score.label ?? "—", 100, 178);
+  if (pmCard.partial) {
+    doc.text("—", 24, 186);
+    doc.setFontSize(8.5).setTextColor(120).setFont("helvetica", "normal");
+    doc.text(`${pmCard.filledDimensions} de 5 áreas avaliadas`, 38, 186);
+    doc.setTextColor(40).setFont("helvetica", "bold").setFontSize(14);
+    doc.text("Classificação Geral", 115, 162);
+    doc.setTextColor(120).setFont("helvetica", "normal").setFontSize(12);
+    doc.text("—", 115, 178);
+  } else {
+    doc.text(`${pmCard.score}`, 24, 186);
+    doc.setFontSize(12).setTextColor(120);
+    doc.text("/ 100", 60, 186);
+    doc.setTextColor(40).setFont("helvetica", "bold").setFontSize(14);
+    doc.text("Classificação Geral", 100, 162);
+    doc.setTextColor(BR[0], BR[1], BR[2]).setFontSize(18);
+    doc.text(score.label ?? "—", 100, 178);
+  }
 
   // Rodapé institucional
   doc.setTextColor(255).setFont("helvetica", "normal").setFontSize(9);
@@ -686,6 +721,26 @@ export function generateEvaluationPDFComplete(
     styles: { fontSize: 9 },
     margin: { left: 12, right: 12 },
   });
+
+  const ageVal = ev.age_years ?? (ev.student.birth_date ? ageInYears(ev.student.birth_date, ev.evaluated_at) : null);
+  if (isEarlyChildhoodAge(ageVal)) {
+    const tableFinalY = (doc as any).lastAutoTable?.finalY ?? (PH - 40);
+    const noteY = Math.min(tableFinalY + 6, PH - 28);
+    doc.setFillColor(254, 243, 199);
+    doc.setDrawColor(245, 158, 11);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(12, noteY, W - 24, 7.5, 1.5, 1.5, "FD");
+    doc.setFont("helvetica", "bold").setFontSize(7.2);
+    doc.setTextColor(180, 83, 9);
+    doc.text("Nota de Desenvolvimento (6 e 7 anos):", 15, noteY + 5);
+    doc.setFont("helvetica", "normal").setFontSize(6.5);
+    doc.setTextColor(120, 53, 15);
+    doc.text(
+      "Nessa idade a musculatura está sendo desenvolvida, sendo comum haver maior divergência entre um teste e outro.",
+      65,
+      noteY + 5,
+    );
+  }
 
   // Rodapé institucional em todas páginas (exceto capa)
   const total = doc.getNumberOfPages();

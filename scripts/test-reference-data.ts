@@ -59,6 +59,8 @@ import {
   isPartialEvaluation,
   imcZone,
   expectedRangeFor,
+  isEarlyChildhoodAge,
+  EARLY_CHILDHOOD_MOTOR_NOTE,
   type Classifications,
 } from "../src/lib/proesp";
 
@@ -313,23 +315,29 @@ assert(scoreHigh > scoreLow, "Queda de rendimento reflete queda de score");
 const diff = scoreLow - scoreHigh;
 assert(diff < 0, `Variação de evolução negativa (${diff.toFixed(1)})`);
 
-// Composição diferente de testes entre avaliações (ex: t1 com salto/arremesso, t2 com corrida/flexibilidade)
+// Composição diferente de testes entre avaliações (cobrindo as 5 áreas)
 const evComp1 = classifyAll({
   sex: "female", age: 11,
+  weight_kg: 35,
+  height_cm: 140,
   horizontal_jump_cm: 150,
   medicine_ball_m: 2.8,
   sit_and_reach_cm: 36,
   abdominal_reps: 32,
+  sprint_20m_s: 3.9,
 });
 const evComp2 = classifyAll({
   sex: "female", age: 11,
+  weight_kg: 36,
+  height_cm: 142,
+  horizontal_jump_cm: 155,
   square_test_s: 6.2,
   sprint_20m_s: 3.8,
   run_6min_m: 950,
   sit_and_reach_cm: 36,
 });
-assert(!prometricIndex(evComp1).partial, "Comp 1 é avaliada normalmente");
-assert(!prometricIndex(evComp2).partial, "Comp 2 é avaliada normalmente");
+assert(!prometricIndex(evComp1).partial, "Comp 1 cobrindo as 5 áreas é avaliada normalmente");
+assert(!prometricIndex(evComp2).partial, "Comp 2 cobrindo as 5 áreas é avaliada normalmente");
 console.log("   ✓ Evolução longitudinal validada!");
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -356,6 +364,9 @@ assert(agilityDim.category !== null, "Dimensão Agilidade preenchida tem categor
 
 const pmMotorOnly = prometricIndex(evMotorOnly);
 assert(pmMotorOnly.score === 60, `Índice normalizado sobre dimensões existentes é 60 (obtido: ${pmMotorOnly.score})`);
+assert(pmMotorOnly.partial === true, "Avaliação com apenas 2 das 5 áreas é marcada como partial");
+assert(pmMotorOnly.category === null, "Avaliação partial não recebe selo/categoria");
+assert(pmMotorOnly.filledDimensions === 2, "2 de 5 áreas preenchidas");
 console.log("   ✓ Dimensão ausente tratada sem penalidade arbitrária!");
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -435,5 +446,22 @@ const rangeMball = expectedRangeFor("mball", 14, "female");
 assert(rangeMball?.min === 2.80 && rangeMball?.max === 4.17, "Faixa esperada de arremesso 14a fem: 2.80-4.17m");
 
 console.log("   ✓ Caso de controle validado com perfeição absoluta!");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. Validação do aviso de desenvolvimento muscular para 6 e 7 anos
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("11. Testando aviso de desenvolvimento motor para alunos de 6 e 7 anos...");
+
+assert(isEarlyChildhoodAge(6) === true, "Idade 6 anos deve ativar aviso");
+assert(isEarlyChildhoodAge(7) === true, "Idade 7 anos deve ativar aviso");
+assert(isEarlyChildhoodAge(6.8) === true, "Idade 6.8 anos deve ativar aviso");
+assert(isEarlyChildhoodAge(7.5) === true, "Idade 7.5 anos deve ativar aviso");
+assert(isEarlyChildhoodAge(5) === false, "Idade 5 anos NÃO deve ativar aviso");
+assert(isEarlyChildhoodAge(8) === false, "Idade 8 anos NÃO deve ativar aviso");
+assert(isEarlyChildhoodAge(14) === false, "Idade 14 anos NÃO deve ativar aviso");
+assert(isEarlyChildhoodAge(null) === false, "Idade nula NÃO deve ativar aviso");
+assert(isEarlyChildhoodAge(undefined) === false, "Idade indefinida NÃO deve ativar aviso");
+assert(typeof EARLY_CHILDHOOD_MOTOR_NOTE === "string" && EARLY_CHILDHOOD_MOTOR_NOTE.includes("musculatura"), "Constante com aviso presente");
+console.log("   ✓ Regra de aviso para 6 e 7 anos validada com sucesso!");
 
 console.log(`\n🎉 TODOS OS TESTES PASSARAM COM SUCESSO! (${passedTests}/${totalTests} asserções)`);

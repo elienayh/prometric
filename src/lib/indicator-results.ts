@@ -208,8 +208,8 @@ export function buildStudentConsolidatedPackage(
 
   for (const ev of ordered) {
     const cls = ev.classifications ?? {};
-    const filled = filledTestsCount(cls);
-    if (filled >= MIN_TESTS_FOR_CLASSIFICATION) {
+    const pm = prometricIndex(cls);
+    if (!pm.partial) {
       classifiedCount++;
     } else {
       partialCount++;
@@ -224,7 +224,7 @@ export function buildStudentConsolidatedPackage(
 
   // 2. Avaliações cronológicas marcadas
   const firstRecord = ordered[0] ?? null;
-  const firstClassified = ordered.find((e) => filledTestsCount(e.classifications ?? {}) >= MIN_TESTS_FOR_CLASSIFICATION) ?? null;
+  const firstClassified = ordered.find((e) => !prometricIndex(e.classifications ?? {}).partial) ?? null;
   const currentEvaluation = ordered[ordered.length - 1] ?? null;
   const previousEvaluation = ordered.length >= 2 ? ordered[ordered.length - 2] : null;
 

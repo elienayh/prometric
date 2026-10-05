@@ -248,3 +248,12 @@ export function expectedRangeFor(
   }
   return getMotorExpectedRange(key, sex, Math.floor(age));
 }
+
+export const EARLY_CHILDHOOD_MOTOR_NOTE =
+  "Nessa faixa etária (6 e 7 anos), a musculatura está sendo desenvolvida, sendo comum e esperado haver maior divergência entre um teste e outro.";
+
+export function isEarlyChildhoodAge(ageYears: number | null | undefined): boolean {
+  if (ageYears == null || isNaN(ageYears)) return false;
+  const a = Math.floor(ageYears);
+  return a === 6 || a === 7;
+}

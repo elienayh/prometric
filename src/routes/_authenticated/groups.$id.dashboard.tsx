@@ -108,7 +108,7 @@ function GroupDashboard() {
         displayName: brand.displayName,
       },
       rankings: [
-        { title: "Top 10 — Índice ProMetric", rows: agg.students.slice(0, 10).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
+        { title: "Top 10 — Índice ProMetric", rows: agg.topStudents.slice(0, 10).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
         { title: "Top 10 — Velocidade 20m", rows: topByIndicator(students_latest, "sprint_20m_s", false).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(2), unit: "s" })) },
         { title: "Top 10 — Potência (Salto)", rows: topByIndicator(students_latest, "horizontal_jump_cm", true).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "cm" })) },
         { title: "Top 10 — Resistência (6min)", rows: topByIndicator(students_latest, "run_6min_m", true).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "m" })) },
@@ -224,11 +224,19 @@ function GroupDashboard() {
                 <Link key={s.student_id} to="/students/$id" params={{ id: s.student_id }} className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 hover:border-primary">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{s.full_name}</div>
-                    <div className="text-[11px] text-muted-foreground">Índice {s.score}/100</div>
+                    {s.partial ? (
+                      <div className="text-[11px] text-muted-foreground">
+                        Índice — <span className="text-[10px] text-muted-foreground/80">({s.filledDimensions} de 5 áreas avaliadas)</span>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-muted-foreground">Índice {s.score}/100</div>
+                    )}
                   </div>
-                  <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-semibold", categoryColor(s.category))}>
-                    {s.category ?? "—"}
-                  </span>
+                  {!s.partial && s.category && (
+                    <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-semibold", categoryColor(s.category))}>
+                      {s.category}
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>
@@ -244,7 +252,7 @@ function GroupDashboard() {
             <RankingTable title="Top 10 — Resistência (6min)" valueLabel="Distância"
               rows={topByIndicator(students_latest, "run_6min_m", true).map((r) => ({ student_id: r.student_id, full_name: r.full_name, value: r.value.toFixed(0), unit: "m" }))} />
             <RankingTable title="Top 10 — Índice ProMetric" valueLabel="Score"
-              rows={agg.students.slice(0, 10).map((s) => ({ student_id: s.student_id, full_name: s.full_name, value: s.score, unit: "/100", badge: s.category ?? undefined, badgeClass: categoryColor(s.category) }))} />
+              rows={agg.topStudents.slice(0, 10).map((s) => ({ student_id: s.student_id, full_name: s.full_name, value: s.score, unit: "/100", badge: s.category ?? undefined, badgeClass: categoryColor(s.category) }))} />
             <RankingTable title="Top 10 — Agilidade (Quadrado)" valueLabel="Tempo"
               rows={topByIndicator(students_latest, "square_test_s", false).map((r) => ({ student_id: r.student_id, full_name: r.full_name, value: r.value.toFixed(2), unit: "s" }))} />
             <RankingTable title="Top 10 — Med. Ball" valueLabel="m"

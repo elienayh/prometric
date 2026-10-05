@@ -62,7 +62,9 @@ function rollupRank(rows: { id: string; name: string; meta: string; students: nu
   return rows.map((r) => {
     const scores = r.classifications
       .filter(Boolean)
-      .map((c) => prometricIndex(c as Classifications).score);
+      .map((c) => prometricIndex(c as Classifications))
+      .filter((pm) => !pm.partial)
+      .map((pm) => pm.score);
     const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
     return { id: r.id, name: r.name, meta: r.meta, students: r.students, score: avg, category: scores.length ? scoreToCategory(avg) : null };
   }).sort((a, b) => b.score - a.score);
@@ -165,7 +167,7 @@ function SchoolDashboard() {
       rankings: [
         { title: "Ranking de Turmas", rows: classRank.slice(0, 15).map((r) => ({ full_name: r.name, value: r.score, unit: `/100 (${r.students} alunos)` })) },
         { title: "Ranking de Grupos", rows: groupRank.slice(0, 15).map((r) => ({ full_name: r.name, value: r.score, unit: `/100 (${r.students} integrantes)` })) },
-        { title: "Top 10 — Índice ProMetric", rows: agg.students.slice(0, 10).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
+        { title: "Top 10 — Índice ProMetric", rows: agg.topStudents.slice(0, 10).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
         { title: "Top 10 — Maior Evolução", rows: agg.topGains.map((s) => ({ full_name: s.full_name, value: `${(s.evolution ?? 0) >= 0 ? "+" : ""}${s.evolution}`, unit: "pts" })) },
         { title: "Top 10 — Resistência (6min)", rows: topByIndicator(students_latest, "run_6min_m", true).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "m" })) },
       ],

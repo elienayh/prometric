@@ -22,7 +22,7 @@ import {
   dimensionScores,
   PM_DIMENSIONS,
 } from "./prometric-method";
-import { ZONES, type Classifications, type Zone } from "./proesp";
+import { ZONES, type Classifications, type Zone, isEarlyChildhoodAge } from "./proesp";
 import { ageInYears, ageInMonths } from "./age";
 import { imcBand, imcAdultBand, IMC_BAND_LABEL, IMC_CLINICAL_DISCLAIMER } from "./imc-reference";
 import {
@@ -249,7 +249,7 @@ export async function downloadStudentEvolutionPDF(
   const evaluativeHistory = history.filter((e) => Object.values(e.classifications ?? {}).some(Boolean));
   const classifiedHistory = evaluativeHistory.filter((e) => {
     const cls = e.classifications ?? {};
-    return Object.values(cls).filter(Boolean).length >= 4;
+    return !prometricIndex(cls).partial;
   });
   const first = classifiedHistory.length > 0
     ? classifiedHistory[0]
@@ -368,52 +368,65 @@ export async function downloadStudentEvolutionPDF(
     );
   }
   // student marker on ring
-  const markerA = -Math.PI / 2 + (idxLast.score / 100) * 2 * Math.PI;
-  doc.setFillColor(...sitTone);
-  doc.circle(discCx + Math.cos(markerA) * (discR + 2.2), discCy + Math.sin(markerA) * (discR + 2.2), 1.6, "F");
+  if (!idxLast.partial) {
+    const markerA = -Math.PI / 2 + (idxLast.score / 100) * 2 * Math.PI;
+    doc.setFillColor(...sitTone);
+    doc.circle(discCx + Math.cos(markerA) * (discR + 2.2), discCy + Math.sin(markerA) * (discR + 2.2), 1.6, "F");
+  }
   // disc fill
   doc.setFillColor(...primary);
   doc.circle(discCx, discCy, discR, "F");
   doc.setTextColor(255);
   doc.setFont("helvetica", "bold").setFontSize(22);
-  doc.text(String(idxLast.score), discCx, discCy + 1, { align: "center", baseline: "middle" });
-  doc.setFont("helvetica", "normal").setFontSize(7);
-  doc.text("/ 100", discCx, discCy + 7, { align: "center" });
+  doc.text(idxLast.partial ? "—" : String(idxLast.score), discCx, discCy + 1, { align: "center", baseline: "middle" });
+  doc.setFont("helvetica", "normal").setFontSize(idxLast.partial ? 5.5 : 7);
+  doc.text(idxLast.partial ? `${idxLast.filledDimensions} de 5 áreas` : "/ 100", discCx, discCy + 7, { align: "center" });
   doc.setFontSize(6);
   doc.setTextColor(220, 230, 255);
   doc.text("ÍNDICE PROMETRIC®", discCx, discCy - 9, { align: "center" });
 
   // Middle: categoria + situação badge
   const midX = discCx + discR + 8;
+  const badgeW = 56, badgeH = 9;
   doc.setFont("helvetica", "normal").setFontSize(7);
   doc.setTextColor(110);
   doc.text("CATEGORIA PROMETRIC®", midX, y + 7);
   doc.setFont("helvetica", "bold").setFontSize(13);
   doc.setTextColor(...primary);
-  doc.text(idxLast.category ?? "—", midX, y + 13);
-
-  doc.setFont("helvetica", "normal").setFontSize(7);
-  doc.setTextColor(110);
-  doc.text(`SITUAÇÃO • ${REFERENCE_LABEL.toUpperCase()}`, midX, y + 21);
-  // badge
-  const badgeW = 56, badgeH = 9;
-  doc.setFillColor(...sitTone);
-  doc.setGState(new (doc as any).GState({ opacity: 0.15 }));
-  doc.roundedRect(midX, y + 23, badgeW, badgeH, 1.5, 1.5, "F");
-  doc.setGState(new (doc as any).GState({ opacity: 1 }));
-  doc.setDrawColor(...sitTone);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(midX, y + 23, badgeW, badgeH, 1.5, 1.5, "S");
-  doc.setFont("helvetica", "bold").setFontSize(9);
-  doc.setTextColor(...sitTone);
-  doc.text(situation ?? "Sem dados", midX + badgeW / 2, y + 29, { align: "center" });
-  // Expected range hint
-  doc.setFont("helvetica", "normal").setFontSize(6.5);
-  doc.setTextColor(110);
-  doc.text(
-    `Faixa esperada para a idade: ${EXPECTED_INDEX_RANGE.min}–${EXPECTED_INDEX_RANGE.max} pts`,
-    midX, y + 37,
-  );
+  if (idxLast.partial) {
+    doc.text("—", midX, y + 13);
+    doc.setFont("helvetica", "normal").setFontSize(7);
+    doc.setTextColor(110);
+    doc.text("STATUS DA AVALIAÇÃO", midX, y + 21);
+    doc.setFont("helvetica", "normal").setFontSize(7.5);
+    doc.setTextColor(120);
+    doc.text(`${idxLast.filledDimensions} de 5 áreas avaliadas`, midX, y + 27);
+    doc.setFont("helvetica", "normal").setFontSize(6.5);
+    doc.text("Sem categoria até concluir todas as áreas.", midX, y + 34);
+  } else {
+    doc.text(idxLast.category ?? "—", midX, y + 13);
+    doc.setFont("helvetica", "normal").setFontSize(7);
+    doc.setTextColor(110);
+    doc.text(`SITUAÇÃO • ${REFERENCE_LABEL.toUpperCase()}`, midX, y + 21);
+    // badge
+    doc.setFillColor(...sitTone);
+    doc.setGState(new (doc as any).GState({ opacity: 0.15 }));
+    doc.roundedRect(midX, y + 23, badgeW, badgeH, 1.5, 1.5, "F");
+    doc.setGState(new (doc as any).GState({ opacity: 1 }));
+    doc.setDrawColor(...sitTone);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(midX, y + 23, badgeW, badgeH, 1.5, 1.5, "S");
+    doc.setFont("helvetica", "bold").setFontSize(9);
+    doc.setTextColor(...sitTone);
+    doc.text(situation ?? "Sem dados", midX + badgeW / 2, y + 29, { align: "center" });
+    // Expected range hint
+    doc.setFont("helvetica", "normal").setFontSize(6.5);
+    doc.setTextColor(110);
+    doc.text(
+      `Faixa esperada para a idade: ${EXPECTED_INDEX_RANGE.min}–${EXPECTED_INDEX_RANGE.max} pts`,
+      midX, y + 37,
+    );
+  }
 
   // Right: identification + evolution chip
   const rightHeroX = midX + badgeW + 10;
@@ -631,25 +644,37 @@ export async function downloadStudentEvolutionPDF(
     doc.line(rightX, yy, rightX + chartW, yy);
   });
   const plotHistory = evaluativeHistory.length > 0 ? evaluativeHistory : history;
-  const scores = plotHistory.map((e) => prometricIndex(e.classifications ?? {}).score);
+  const plotIndices = plotHistory.map((e) => prometricIndex(e.classifications ?? {}));
   const stepX = plotHistory.length > 1 ? chartW / (plotHistory.length - 1) : 0;
   doc.setDrawColor(...primary);
   doc.setLineWidth(0.9);
   for (let i = 1; i < plotHistory.length; i++) {
-    const x1 = rightX + stepX * (i - 1);
-    const y1 = chartTop + chartH - (scores[i - 1] / 100) * chartH;
-    const x2 = rightX + stepX * i;
-    const y2 = chartTop + chartH - (scores[i] / 100) * chartH;
-    doc.line(x1, y1, x2, y2);
+    const prevPm = plotIndices[i - 1];
+    const currPm = plotIndices[i];
+    if (!prevPm.partial && !currPm.partial) {
+      const x1 = rightX + stepX * (i - 1);
+      const y1 = chartTop + chartH - (prevPm.score / 100) * chartH;
+      const x2 = rightX + stepX * i;
+      const y2 = chartTop + chartH - (currPm.score / 100) * chartH;
+      doc.line(x1, y1, x2, y2);
+    }
   }
   plotHistory.forEach((_, i) => {
+    const pm = plotIndices[i];
     const x = rightX + stepX * i;
-    const yp = chartTop + chartH - (scores[i] / 100) * chartH;
-    doc.setFillColor(255, 255, 255); doc.circle(x, yp, 1.7, "F");
-    doc.setFillColor(...primary); doc.circle(x, yp, 1.2, "F");
-    doc.setFont("helvetica", "bold").setFontSize(6);
-    doc.setTextColor(40);
-    doc.text(String(scores[i]), x, yp - 2.5, { align: "center" });
+    if (pm.partial) {
+      const yp = chartTop + chartH / 2;
+      doc.setFont("helvetica", "normal").setFontSize(6);
+      doc.setTextColor(150);
+      doc.text("—", x, yp, { align: "center" });
+    } else {
+      const yp = chartTop + chartH - (pm.score / 100) * chartH;
+      doc.setFillColor(255, 255, 255); doc.circle(x, yp, 1.7, "F");
+      doc.setFillColor(...primary); doc.circle(x, yp, 1.2, "F");
+      doc.setFont("helvetica", "bold").setFontSize(6);
+      doc.setTextColor(40);
+      doc.text(String(pm.score), x, yp - 2.5, { align: "center" });
+    }
   });
   doc.setFont("helvetica", "normal").setFontSize(6);
   doc.setTextColor(110);
@@ -714,8 +739,9 @@ export async function downloadStudentEvolutionPDF(
   });
 
   // ── Family + Student strip (full width) ─────────────────────────────
-  const stripY = Math.max(leftY, rightY) + 4;
-  const stripH = 38;
+  const isEarlyAge = isEarlyChildhoodAge(ageY ?? age);
+  const stripY = Math.max(leftY, rightY) + 3;
+  const stripH = isEarlyAge ? 30 : 38;
   const stripColW = (W - 2 * M - colGap) / 2;
   // FAMILY card
   doc.setFillColor(239, 246, 255); // soft blue
@@ -752,6 +778,25 @@ export async function downloadStudentEvolutionPDF(
     doc.text(lines, sx + 4, sy);
     sy += 3.6 * lines.length;
   });
+
+  // ── Early childhood development note (6 and 7 years old) ───────────
+  if (isEarlyAge) {
+    const noteY = stripY + stripH + 2.5;
+    doc.setFillColor(254, 243, 199); // soft amber
+    doc.setDrawColor(245, 158, 11);  // amber border
+    doc.setLineWidth(0.3);
+    doc.roundedRect(M, noteY, W - 2 * M, 6.8, 1.5, 1.5, "FD");
+    doc.setFont("helvetica", "bold").setFontSize(6.8);
+    doc.setTextColor(180, 83, 9);
+    doc.text("Nota de Desenvolvimento (6 e 7 anos):", M + 3, noteY + 4.5);
+    doc.setFont("helvetica", "normal").setFontSize(6.2);
+    doc.setTextColor(120, 53, 15);
+    doc.text(
+      "Nessa idade a musculatura está sendo desenvolvida, sendo comum haver maior divergência entre um teste e outro.",
+      M + 50,
+      noteY + 4.5,
+    );
+  }
 
   // ── FOOTER ───────────────────────────────────────────────────────────
   const footerH = 20;

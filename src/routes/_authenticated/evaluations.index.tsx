@@ -141,6 +141,8 @@ type StudentSummary = {
   score: number;
   category: string | null;
   tenantId: string;
+  partial: boolean;
+  filledDimensions: number;
 };
 
 function StudentCard({ s, tenantName }: { s: StudentSummary; tenantName: string }) {
@@ -201,7 +203,7 @@ function StudentCard({ s, tenantName }: { s: StudentSummary; tenantName: string 
             {s.count} avaliaç{s.count === 1 ? "ão" : "ões"} realizada{s.count === 1 ? "" : "s"}
           </p>
         </div>
-        {s.category && (
+        {s.category && !s.partial && (
           <span className={cn("rounded-full border px-2 py-0.5 text-[10px]", categoryColor(s.category as any))}>
             {s.category}
           </span>
@@ -215,11 +217,14 @@ function StudentCard({ s, tenantName }: { s: StudentSummary; tenantName: string 
         </div>
         <div className="rounded-lg bg-muted/40 p-2">
           <div className="text-[10px] uppercase text-muted-foreground">Índice</div>
-          <div className="font-display text-sm font-bold tabular-nums">{s.score}</div>
+          <div className="font-display text-sm font-bold tabular-nums">{s.partial ? "—" : s.score}</div>
+          {s.partial && (
+            <div className="text-[9px] text-muted-foreground leading-tight">{s.filledDimensions} de 5 áreas</div>
+          )}
         </div>
         <div className="rounded-lg bg-muted/40 p-2">
           <div className="text-[10px] uppercase text-muted-foreground">Perfil</div>
-          <div className="font-display text-[11px] font-bold leading-tight">{s.category ?? "—"}</div>
+          <div className="font-display text-[11px] font-bold leading-tight">{s.partial ? "—" : (s.category ?? "—")}</div>
         </div>
       </div>
 
@@ -268,8 +273,10 @@ function CentralSections({ all, tenantName }: {
         lastDate: last.evaluated_at,
         lastEvalId: current.id,
         score: pm.score,
-        category: pm.category ?? fallback ?? null,
+        category: pm.partial ? null : (pm.category ?? fallback ?? null),
         tenantId: (last as any).tenant_id ?? "",
+        partial: pm.partial,
+        filledDimensions: pm.filledDimensions,
       });
     }
     out.sort((a, b) => b.lastDate.localeCompare(a.lastDate));

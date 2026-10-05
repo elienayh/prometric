@@ -53,12 +53,12 @@ export function DevelopmentSummary({
           label="Índice ProMetric"
           value={pm.partial ? "—" : `${pm.score}`}
           suffix={pm.partial ? "" : "/100"}
-          hint={pm.partial ? `${pm.filledTests}/9 testes • dados insuficientes` : `${pm.filledTests}/9 testes`}
+          hint={pm.partial ? `${pm.filledDimensions} de 5 áreas avaliadas` : `${pm.filledTests}/9 testes`}
         />
         <Metric
           label="Perfil"
-          value={pm.category ?? "—"}
-          hint="categoria geral"
+          value={pm.partial ? "—" : (pm.category ?? "—")}
+          hint={pm.partial ? "dados insuficientes" : "categoria geral"}
         />
         <Metric
           label="Faixa esperada"

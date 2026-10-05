@@ -119,26 +119,44 @@ export type PMOverall = {
   category: PMCategory | null;
   dimensions: PMDimensionResult[];
   filledTests: number;      // nº de testes preenchidos (0..9)
-  partial: boolean;         // true se abaixo do mínimo para classificar
+  filledDimensions: number; // nº de dimensões preenchidas com dados reais (0..5)
+  totalDimensions: number;  // 5 (total de dimensões metodológicas)
+  partial: boolean;         // true se abaixo do mínimo para classificar (ao menos 1 em cada área)
 };
 
-// Mínimo de testes para emitir o Índice ProMetric com categoria.
-export const MIN_TESTS_FOR_INDEX = 4;
+// Mínimo de dimensões para emitir o Índice ProMetric com nota e categoria.
+// Exige que ao menos uma avaliação em cada uma das 5 áreas seja realizada.
+export const MIN_DIMENSIONS_FOR_INDEX = PM_DIMENSIONS.length; // 5
+export const MIN_TESTS_FOR_INDEX = PM_DIMENSIONS.length; // 5
 export const INSUFFICIENT_DATA_LABEL = "Dados insuficientes para classificação.";
 
 // Índice ProMetric® — score geral 0..100 com categoria e radar por dimensão.
 export function prometricIndex(c: Classifications): PMOverall {
   const dims = dimensionScores(c);
   const filledTests = (Object.values(c).filter(Boolean) as Zone[]).length;
-  const partial = filledTests < MIN_TESTS_FOR_INDEX;
   const filled = dims.filter((d) => d.category !== null);
-  if (filled.length === 0) return { score: 0, category: null, dimensions: dims, filledTests, partial: true };
+  const filledDimensions = filled.length;
+  const totalDimensions = PM_DIMENSIONS.length;
+  const partial = filledDimensions < totalDimensions;
+  if (filled.length === 0) {
+    return {
+      score: 0,
+      category: null,
+      dimensions: dims,
+      filledTests,
+      filledDimensions,
+      totalDimensions,
+      partial: true,
+    };
+  }
   const avg = Math.round(filled.reduce((a, d) => a + d.score, 0) / filled.length);
   return {
     score: avg,
     category: partial ? null : scoreToCategory(avg),
     dimensions: dims,
     filledTests,
+    filledDimensions,
+    totalDimensions,
     partial,
   };
 }

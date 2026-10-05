@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   TEST_META, ageFromBirth, expectedRangeFor, overallScore, zoneColor, zoneScore,
+  isEarlyChildhoodAge,
   type Classifications, type ClassificationKey, type Zone,
 } from "@/lib/proesp";
 import { ageInYears, ageInMonths } from "@/lib/age";
@@ -264,12 +265,18 @@ function StudentDetail() {
           pmIndex && (
             <div className="flex items-center gap-2">
               <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                Índice ProMetric: {pmIndex.score}
+                Índice ProMetric: {pmIndex.partial ? "—" : pmIndex.score}
               </span>
-              {overall?.label && (
-                <span className={cn("rounded-full border px-3 py-1 text-xs", zoneColor(overall.label))}>
-                  {overall.label}
+              {pmIndex.partial ? (
+                <span className="text-[11px] text-muted-foreground">
+                  {pmIndex.filledDimensions} de 5 áreas avaliadas
                 </span>
+              ) : (
+                overall?.label && (
+                  <span className={cn("rounded-full border px-3 py-1 text-xs", zoneColor(overall.label))}>
+                    {overall.label}
+                  </span>
+                )
               )}
             </div>
           )
@@ -319,6 +326,23 @@ function StudentDetail() {
               <TimelineTab data={data} studentId={id} student={s!} tenantName={tenant?.display_name ?? tenant?.name ?? "ProMetric"} onOpenPortal={() => setTab("portal")} onView={(ev) => setViewEval(ev)} />
               <InsightsPanel data={clinicalEvals} last={current} prev={prev} classEvals={classmates.data ?? []} />
               <AIReportSection studentId={id} student={s} evaluations={data} />
+              {isEarlyChildhoodAge(current?.age_years ?? (s?.birth_date ? ageInYears(s.birth_date) : null)) && (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 text-left dark:border-amber-900/50 dark:bg-amber-950/20">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-amber-200/80 text-xs font-bold text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                      i
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                        Nota sobre o desenvolvimento motor (6 e 7 anos)
+                      </h4>
+                      <p className="mt-1 text-xs leading-relaxed text-amber-800/90 dark:text-amber-300/80">
+                        Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="rounded-2xl border border-dashed border-border bg-gradient-card p-10 text-center">
@@ -694,10 +718,16 @@ function EvaluationDetailDialog({
 
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-primary">
-            Índice ProMetric {idx.score}
+            Índice ProMetric {idx.partial ? "—" : idx.score}
           </span>
-          {ov.label && (
-            <span className={cn("rounded-full border px-2.5 py-1", zoneColor(ov.label))}>Perfil: {ov.label}</span>
+          {idx.partial ? (
+            <span className="text-muted-foreground">
+              {idx.filledDimensions} de 5 áreas avaliadas
+            </span>
+          ) : (
+            ov.label && (
+              <span className={cn("rounded-full border px-2.5 py-1", zoneColor(ov.label))}>Perfil: {ov.label}</span>
+            )
           )}
           {ev.weight_kg != null && <span className="text-muted-foreground">Peso {ev.weight_kg} kg</span>}
           {ev.height_cm != null && <span className="text-muted-foreground">Altura {ev.height_cm} cm</span>}
@@ -964,7 +994,8 @@ function EvolutionChart({ data }: { data: EvalRow[] }) {
       const rec = e.recorded_values;
       valor = rec ? rec[ind.field] : num(e, ind.field);
     } else {
-      valor = prometricIndex(e.classifications ?? {}).score;
+      const pm = prometricIndex(e.classifications ?? {});
+      valor = pm.partial ? null : pm.score;
     }
     return {
       date: formatDateBR(e.evaluated_at, { day: "2-digit", month: "short", year: "2-digit" }),
@@ -1043,9 +1074,10 @@ function RadarEvolutivo({ first, last }: { first: EvalRow; last: EvalRow }) {
   const sameEval = first.id === last.id;
   const fDate = formatDateBR(first.evaluated_at);
   const lDate = formatDateBR(last.evaluated_at);
-  const firstScore = prometricIndex(first.classifications ?? {}).score;
-  const lastScore = prometricIndex(last.classifications ?? {}).score;
-  const delta = lastScore - firstScore;
+  const pmFirst = prometricIndex(first.classifications ?? {});
+  const pmLast = prometricIndex(last.classifications ?? {});
+  const isComparable = !pmFirst.partial && !pmLast.partial;
+  const delta = isComparable ? pmLast.score - pmFirst.score : null;
 
   return (
     <div className="rounded-2xl border border-border bg-gradient-card p-5 shadow-soft">
@@ -1053,7 +1085,7 @@ function RadarEvolutivo({ first, last }: { first: EvalRow; last: EvalRow }) {
         <h2 className="flex items-center gap-2 font-display text-sm font-semibold">
           <TrendingUp className="h-4 w-4 text-primary" /> Radar Evolutivo — Inicial × Atual
         </h2>
-        {!sameEval && (
+        {!sameEval && delta != null && (
           <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-medium",
             delta >= 0 ? "border-success/40 bg-success/10 text-success" : "border-destructive/40 bg-destructive/10 text-destructive")}>
             {delta >= 0 ? "+" : ""}{delta} pts no Índice ProMetric
@@ -1063,7 +1095,9 @@ function RadarEvolutivo({ first, last }: { first: EvalRow; last: EvalRow }) {
       <p className="mb-2 text-xs text-muted-foreground">
         {sameEval
           ? `Apenas uma avaliação registrada (${lDate}). Realize uma nova avaliação para visualizar a evolução.`
-          : `Inicial: ${fDate} (${firstScore}/100) • Atual: ${lDate} (${lastScore}/100)`}
+          : isComparable
+            ? `Inicial: ${fDate} (${pmFirst.score}/100) • Atual: ${lDate} (${pmLast.score}/100)`
+            : `Inicial: ${fDate} (${pmFirst.partial ? "—" : `${pmFirst.score}/100`}) • Atual: ${lDate} (${pmLast.partial ? "—" : `${pmLast.score}/100`}) • Requer ao menos 1 teste em cada área para comparar`}
       </p>
       <div className="h-80 w-full">
         <ResponsiveContainer>
@@ -1206,11 +1240,10 @@ function TimelineTab({ data, studentId, student, tenantName, onOpenPortal, onVie
       <ol className="relative space-y-4 border-l border-border pl-5">
         {ordered.map((ev, idx) => {
           const cls = ev.classifications ?? {};
-          const filled = Object.values(cls).filter(Boolean).length;
-          const hasResult = filled > 0;
-          const score = hasResult ? prometricIndex(cls).score : null;
+          const pm = prometricIndex(cls);
+          const hasResult = pm.filledDimensions > 0;
           const ov = hasResult ? overallScore(cls) : null;
-          const partial = filled < 9;
+          const partial = pm.partial;
           return (
             <li key={ev.id} className="relative">
               <span aria-hidden className="absolute -left-[26px] top-1 grid h-4 w-4 place-items-center rounded-full border border-border bg-card text-[10px]">
@@ -1219,17 +1252,17 @@ function TimelineTab({ data, studentId, student, tenantName, onOpenPortal, onVie
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="text-xs font-semibold">{formatDateBR(ev.evaluated_at)}</span>
                 {idx === 0 && <span className="text-[10px] uppercase text-primary">mais recente</span>}
-                {ov?.label && (
+                {!partial && ov?.label && (
                   <span className={cn("rounded-full border px-2 py-0.5 text-[10px]", zoneColor(ov.label))}>
                     Perfil: {ov.label}
                   </span>
                 )}
                 <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
-                  {score == null ? "Sem classificação" : `Índice ${score}`}
+                  {!hasResult ? "Sem classificação" : partial ? "Índice —" : `Índice ${pm.score}`}
                 </span>
-                {partial && (
+                {partial && hasResult && (
                   <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
-                    Parcial {filled}/9
+                    {pm.filledDimensions} de 5 áreas avaliadas
                   </span>
                 )}
               </div>
@@ -1587,15 +1620,13 @@ function ProMetricHero({ last, effective }: { last: EvalRow; effective?: Classif
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[280px_1fr]">
       <div className="rounded-2xl border border-primary/30 bg-gradient-brand p-6 text-primary-foreground shadow-glow">
         <div className="text-[10px] uppercase tracking-wide opacity-80">Índice ProMetric</div>
-        <div className="mt-1 font-display text-5xl font-bold leading-none">{pm.score}</div>
-        <div className="mt-1 text-xs opacity-80">de 100</div>
-        {pm.category ? (
+        <div className="mt-1 font-display text-5xl font-bold leading-none">{pm.partial ? "—" : pm.score}</div>
+        <div className="mt-1 text-xs opacity-80">
+          {pm.partial ? `${pm.filledDimensions} de 5 áreas avaliadas` : "de 100"}
+        </div>
+        {!pm.partial && pm.category && (
           <div className="mt-4 inline-flex rounded-full bg-background/15 px-3 py-1 text-xs font-medium backdrop-blur">
             {pm.category}
-          </div>
-        ) : (
-          <div className="mt-4 inline-flex max-w-[240px] rounded-full bg-background/15 px-3 py-1 text-[11px] font-medium backdrop-blur">
-            Dados insuficientes ({pm.filledTests}/9 testes)
           </div>
         )}
       </div>
@@ -1629,6 +1660,7 @@ function ProMetricHero({ last, effective }: { last: EvalRow; effective?: Classif
 // RANKING — Posição do aluno na turma por indicador + Índice geral
 // ===========================================================================
 function RankingPanel({ last, classEvals }: { last: EvalRow; classEvals: EvalRow[] }) {
+  const lastPm = prometricIndex(last.classifications ?? {});
   const rows = useMemo(() => {
     if (classEvals.length === 0) return [];
     // Inclui o próprio aluno se não estiver presente
@@ -1694,6 +1726,11 @@ function RankingPanel({ last, classEvals }: { last: EvalRow; classEvals: EvalRow
               <div className="font-display text-sm font-semibold">
                 {r.value != null ? `${r.value}${r.unit ? ` ${r.unit}` : ""}` : "—"}
               </div>
+              {r.label === "Índice ProMetric (geral)" && lastPm.partial && (
+                <div className="text-[10px] text-muted-foreground">
+                  {lastPm.filledDimensions} de 5 áreas avaliadas
+                </div>
+              )}
             </div>
             <span className={cn("ml-2 shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold", podiumTone(r.position, r.total))}>
               {r.position != null ? `${r.position}º de ${r.total}` : "—"}

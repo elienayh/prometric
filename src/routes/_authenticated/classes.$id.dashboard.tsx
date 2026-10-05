@@ -73,7 +73,7 @@ function ClassDashboard() {
       subtitle: [header.grade, header.school_name].filter(Boolean).join(" • ") || undefined,
       agg,
       rankings: [
-        { title: "Top 10 — Índice ProMetric", rows: agg.students.slice(0, 10).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
+        { title: "Top 10 — Índice ProMetric", rows: agg.topStudents.slice(0, 10).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
         { title: "Top 10 — Maior Evolução", rows: agg.topGains.map((s) => ({ full_name: s.full_name, value: `${(s.evolution ?? 0) >= 0 ? "+" : ""}${s.evolution}`, unit: "pts" })) },
         { title: "Top 10 — Velocidade 20m", rows: topByIndicator(students_latest, "sprint_20m_s", false).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(2), unit: "s" })) },
         { title: "Top 10 — Potência (Salto)", rows: topByIndicator(students_latest, "horizontal_jump_cm", true).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "cm" })) },
@@ -84,7 +84,7 @@ function ClassDashboard() {
 
   const exportCSV = () => {
     const headers = ["Aluno", "Score", "Categoria", "Evolução"];
-    const rows = agg.students.map((s) => [s.full_name, String(s.score), s.category ?? "", String(s.evolution ?? "")]);
+    const rows = agg.students.map((s) => [s.full_name, s.partial ? "—" : String(s.score), s.partial ? "" : (s.category ?? ""), String(s.evolution ?? "")]);
     const csv = [headers, ...rows].map((r) => r.map((v) => `"${(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -197,11 +197,19 @@ function ClassDashboard() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{s.full_name}</div>
-                    <div className="text-[11px] text-muted-foreground">Índice {s.score}/100</div>
+                    {s.partial ? (
+                      <div className="text-[11px] text-muted-foreground">
+                        Índice — <span className="text-[10px] text-muted-foreground/80">({s.filledDimensions} de 5 áreas avaliadas)</span>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-muted-foreground">Índice {s.score}/100</div>
+                    )}
                   </div>
-                  <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-semibold", categoryColor(s.category))}>
-                    {s.category ?? "—"}
-                  </span>
+                  {!s.partial && s.category && (
+                    <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-semibold", categoryColor(s.category))}>
+                      {s.category}
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>
@@ -213,7 +221,7 @@ function ClassDashboard() {
             <RankingTable
               title="Top 10 — Índice ProMetric"
               valueLabel="Score"
-              rows={agg.students.slice(0, 10).map((s) => ({ student_id: s.student_id, full_name: s.full_name, value: s.score, unit: "/100", badge: s.category ?? undefined, badgeClass: categoryColor(s.category) }))}
+              rows={agg.topStudents.slice(0, 10).map((s) => ({ student_id: s.student_id, full_name: s.full_name, value: s.score, unit: "/100", badge: s.category ?? undefined, badgeClass: categoryColor(s.category) }))}
             />
             <RankingTable
               title="Top 10 — Maior Evolução"

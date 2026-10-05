@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   ageFromBirth, overallScore, zoneScore, ZONES, TEST_META,
   type Classifications, type Zone, type ClassificationKey,
+  isEarlyChildhoodAge,
 } from "@/lib/proesp";
 import { imcBand, imcAdultBand, imcFamilyGuidance, IMC_CLINICAL_DISCLAIMER } from "@/lib/imc-reference";
 import { prometricIndex, categoryColor, type PMDimension } from "@/lib/prometric-method";
@@ -207,11 +208,14 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
   const headerGradient = `linear-gradient(135deg, ${brand.primaryColor}, ${brand.secondaryColor})`;
 
   // Evolução
-  const evolution = clinicalEvaluations.map((e) => ({
-    date: formatDateBR(e.evaluated_at, { month: "short", year: "2-digit" }),
-    score: prometricIndex(e.classifications ?? {}).score,
-  }));
-  const diff = pm && pmFirst ? pm.score - pmFirst.score : 0;
+  const evolution = clinicalEvaluations.map((e) => {
+    const idx = prometricIndex(e.classifications ?? {});
+    return {
+      date: formatDateBR(e.evaluated_at, { month: "short", year: "2-digit" }),
+      score: idx.partial ? null : idx.score,
+    };
+  });
+  const diff = pm && pmFirst && !pm.partial && !pmFirst.partial ? pm.score - pmFirst.score : 0;
 
   // Insights
   const insights = (() => {
@@ -305,11 +309,18 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                     <span className="font-display text-4xl font-black sm:text-5xl">{pm.partial ? "—" : pm.score}</span>
                     {!pm.partial && <span className="text-sm opacity-80">/100</span>}
                   </div>
+                  {pm.partial && (
+                    <div className="mt-1 text-xs opacity-90">{pm.filledDimensions} de 5 áreas avaliadas</div>
+                  )}
                 </div>
-                <SituationBadge situation={situation} size="md" className="bg-white/95 !text-foreground" />
+                {!pm.partial && situation && (
+                  <SituationBadge situation={situation} size="md" className="bg-white/95 !text-foreground" />
+                )}
               </div>
               <p className="mt-3 text-sm leading-relaxed">
-                {situationSentence(situation, `O desenvolvimento físico de ${firstName}`)}
+                {pm.partial
+                  ? `Avaliação em andamento (${pm.filledDimensions} de 5 áreas avaliadas). A nota e o perfil geral serão gerados após a conclusão de todas as áreas.`
+                  : situationSentence(situation, `O desenvolvimento físico de ${firstName}`)}
               </p>
             </div>
           )}
@@ -637,6 +648,25 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
             </div>
           )}
         </section>
+
+        {/* ─── AVISO MOTOR (6 E 7 ANOS) ─────────────────────────── */}
+        {isEarlyChildhoodAge(age) && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 text-left dark:border-amber-900/50 dark:bg-amber-950/20">
+            <div className="flex items-start gap-3">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-amber-200/80 text-xs font-bold text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                i
+              </span>
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                  Nota sobre o desenvolvimento motor (6 e 7 anos)
+                </h4>
+                <p className="mt-1 text-xs leading-relaxed text-amber-800/90 dark:text-amber-300/80">
+                  Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ─── 10. FOOTER ───────────────────────────────────────── */}
         <footer className="pt-4 text-center text-[11px] text-muted-foreground">
