@@ -140,20 +140,21 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
   // Nota de desenvolvimento para 6 e 7 anos
   const ageY = ev.age_years ?? (ev.student.birth_date ? ageInYears(ev.student.birth_date, ev.evaluated_at) : null);
   if (isEarlyChildhoodAge(ageY)) {
-    const noteY = PH - 23;
+    const noteY = PH - 25;
+    const noteH = 9.5;
     doc.setFillColor(254, 243, 199);
     doc.setDrawColor(245, 158, 11);
     doc.setLineWidth(0.3);
-    doc.roundedRect(12, noteY, W - 24, 7, 1.5, 1.5, "FD");
-    doc.setFont("helvetica", "bold").setFontSize(6.8);
+    doc.roundedRect(12, noteY, W - 24, noteH, 1.5, 1.5, "FD");
+    doc.setFont("helvetica", "bold").setFontSize(7.5);
     doc.setTextColor(180, 83, 9);
-    doc.text("Nota de Desenvolvimento (6 e 7 anos):", 15, noteY + 4.5);
-    doc.setFont("helvetica", "normal").setFontSize(6.2);
+    doc.text("Nota sobre o Desenvolvimento Motor (6 e 7 anos):", 15, noteY + 3.8);
+    doc.setFont("helvetica", "normal").setFontSize(6.4);
     doc.setTextColor(120, 53, 15);
     doc.text(
-      "Nessa idade a musculatura está sendo desenvolvida, sendo comum haver maior divergência entre um teste e outro.",
-      64,
-      noteY + 4.5,
+      "Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.",
+      15,
+      noteY + 7.2,
     );
   }
 
@@ -613,14 +614,15 @@ export function generateEvaluationPDFComplete(
   doc.addPage();
   header(doc, "Evolução Temporal", ev.student.full_name, BR, logo);
   const hist = (extras.history ?? []).slice().sort((a, b) => a.evaluated_at.localeCompare(b.evaluated_at));
-  if (hist.length >= 2) {
+  const classifiedHist = hist.filter((h) => !prometricIndex(h.classifications ?? {}).partial);
+  if (classifiedHist.length >= 2) {
     doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(40);
     doc.text("Índice ProMetric ao longo do tempo (0–100)", 16, 32);
     drawLineChart(
       doc,
       24, 38, W - 36, 50,
-      hist.map((h) => formatDateBR(h.evaluated_at, { day: "2-digit", month: "2-digit" })),
-      hist.map((h) => overallScore(h.classifications ?? {}).score),
+      classifiedHist.map((h) => formatDateBR(h.evaluated_at, { day: "2-digit", month: "2-digit" })),
+      classifiedHist.map((h) => prometricIndex(h.classifications ?? {}).score),
       100,
       BR,
     );
@@ -641,7 +643,7 @@ export function generateEvaluationPDFComplete(
     });
   } else {
     doc.setFontSize(10).setTextColor(80);
-    doc.text("Histórico insuficiente para análise evolutiva. Realize novas avaliações periódicas.", 12, 36);
+    doc.text("Histórico insuficiente de avaliações completas (5 áreas) para traçar a curva evolutiva do Índice ProMetric.", 12, 36);
   }
 
   // ---------- Página 5 — Comparativos ----------
@@ -724,21 +726,22 @@ export function generateEvaluationPDFComplete(
 
   const ageVal = ev.age_years ?? (ev.student.birth_date ? ageInYears(ev.student.birth_date, ev.evaluated_at) : null);
   if (isEarlyChildhoodAge(ageVal)) {
-    const tableFinalY = (doc as any).lastAutoTable?.finalY ?? (PH - 40);
-    const noteY = Math.min(tableFinalY + 6, PH - 28);
+    const tableFinalY = (doc as any).lastAutoTable?.finalY ?? (PH - 45);
+    const noteY = Math.min(tableFinalY + 6, PH - 30);
+    const noteH = 9.5;
     doc.setFillColor(254, 243, 199);
     doc.setDrawColor(245, 158, 11);
     doc.setLineWidth(0.3);
-    doc.roundedRect(12, noteY, W - 24, 7.5, 1.5, 1.5, "FD");
-    doc.setFont("helvetica", "bold").setFontSize(7.2);
+    doc.roundedRect(12, noteY, W - 24, noteH, 1.5, 1.5, "FD");
+    doc.setFont("helvetica", "bold").setFontSize(7.5);
     doc.setTextColor(180, 83, 9);
-    doc.text("Nota de Desenvolvimento (6 e 7 anos):", 15, noteY + 5);
-    doc.setFont("helvetica", "normal").setFontSize(6.5);
+    doc.text("Nota sobre o Desenvolvimento Motor (6 e 7 anos):", 15, noteY + 3.8);
+    doc.setFont("helvetica", "normal").setFontSize(6.4);
     doc.setTextColor(120, 53, 15);
     doc.text(
-      "Nessa idade a musculatura está sendo desenvolvida, sendo comum haver maior divergência entre um teste e outro.",
-      65,
-      noteY + 5,
+      "Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.",
+      15,
+      noteY + 7.2,
     );
   }
 

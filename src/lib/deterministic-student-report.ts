@@ -6,7 +6,7 @@ import {
 import {
   type PMCategory,
 } from "@/lib/prometric-method";
-import { TEST_META, type ClassificationKey, type Zone } from "@/lib/proesp";
+import { TEST_META, type ClassificationKey, type Zone, isEarlyChildhoodAge } from "@/lib/proesp";
 import {
   buildStudentConsolidatedPackage,
   type StudentConsolidatedPackage,
@@ -124,9 +124,13 @@ export function buildDeterministicStudentReport(
     dimHighlights.push(`oportunidades de desenvolvimento nas dimensões ${attentionDims.map((d) => `'${d.dimension}'`).join(", ")}`);
   }
 
+  const indiceMsg = pkg.index.partial
+    ? `Seu histórico atual contempla uma avaliação em andamento (${pkg.index.filledDimensions} de 5 áreas corporais avaliadas). O Índice ProMetric® consolidado e sua respectiva categoria oficial exigem a conclusão de testes em todas as 5 áreas metodológicas.`
+    : `Seu Índice ProMetric® consolidado é de ${pkg.index.score}/100 pontos, situando seu perfil geral de aptidão física na categoria '${overallCategory}'.`;
+
   const resumo_geral = [
     `${art} ${pkg.student.fullName}, ${currentAge ? `${currentAge} anos, ` : ""}possui um histórico de ${totalRegistered} avaliação(ões) física(s) registrada(s) no sistema ProMetric® (${classifiedCount} classificadas e ${partialCount} parciais), compreendendo o período de ${firstDate}${totalRegistered > 1 ? ` a ${lastDate}` : ""}.`,
-    `Seu Índice ProMetric® consolidado é de ${pkg.index.score}/100 pontos, situando seu perfil geral de aptidão física na categoria '${overallCategory}'.`,
+    indiceMsg,
     antropoParts.length > 0
       ? `Na dimensão de Saúde Corporal mais recente, apresenta ${antropoParts.join(", ")}.`
       : "",
@@ -439,12 +443,17 @@ export function buildDeterministicStudentReport(
   // ───────────────────────────────────────────────────────────────────────────
   // 6. CONCLUSÃO
   // ───────────────────────────────────────────────────────────────────────────
-  const statusGeralTexto =
-    overallCategory === "Excelente" || overallCategory === "Bom"
-      ? `um nível consistente e satisfatório de aptidão física geral (Índice ProMetric® de ${pkg.index.score}/100)`
-      : `um perfil de desenvolvimento em construção, com Índice ProMetric® consolidado de ${pkg.index.score}/100`;
+  const statusGeralTexto = pkg.index.partial
+    ? `um perfil em avaliação parcial (${pkg.index.filledDimensions} de 5 áreas corporais avaliadas), sem cálculo de Índice geral consolidado até a realização de testes nas 5 áreas metodológicas`
+    : overallCategory === "Excelente" || overallCategory === "Bom"
+    ? `um nível consistente e satisfatório de aptidão física geral (Índice ProMetric® de ${pkg.index.score}/100)`
+    : `um perfil de desenvolvimento em construção, com Índice ProMetric® consolidado de ${pkg.index.score}/100`;
 
-  const conclusao = `${art} ${student.full_name} apresenta ${statusGeralTexto}. Os registros cronológicos armazenados no Método ProMetric® fornecem à coordenação pedagógica, aos professores e aos responsáveis subsídios objetivos para orientar as práticas de Educação Física de forma segura, motivadora e personalizada. A implementação contínua das orientações pedagógicas aqui estabelecidas promoverá tanto a consolidação dos pontos fortes quanto a superação das valências em desenvolvimento, contribuindo de forma decisiva para a saúde integral e o bem-estar do aluno.\n\nNota técnica: ${pkg.disclaimers.imc}`;
+  let conclusao = `${art} ${student.full_name} apresenta ${statusGeralTexto}. Os registros cronológicos armazenados no Método ProMetric® fornecem à coordenação pedagógica, aos professores e aos responsáveis subsídios objetivos para orientar as práticas de Educação Física de forma segura, motivadora e personalizada. A implementação contínua das orientações pedagógicas aqui estabelecidas promoverá tanto a consolidação dos pontos fortes quanto a superação das valências em desenvolvimento, contribuindo de forma decisiva para a saúde integral e o bem-estar do aluno.\n\nNota técnica: ${pkg.disclaimers.imc}`;
+
+  if (isEarlyChildhoodAge(currentAge)) {
+    conclusao += `\n\nNota sobre o desenvolvimento motor (6 e 7 anos): Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.`;
+  }
 
   return {
     resumo_geral,

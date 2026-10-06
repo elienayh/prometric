@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTenant } from "@/hooks/use-tenant";
 import { PageHeader, EmptyState } from "@/components/layout/page-header";
 import {
-  TEST_META, ageFromBirth, calcImc, calcRce, classifyAll, overallScore, zoneColor,
+  TEST_META, ageFromBirth, calcImc, calcRce, classifyAll, overallScore, zoneColor, isEarlyChildhoodAge,
   type Classifications, type Sex,
 } from "@/lib/proesp";
 import { prometricIndex, categoryColor } from "@/lib/prometric-method";
@@ -612,6 +612,24 @@ function EvaluationDetail({
                 <p className="text-xs text-muted-foreground">Gere um diagnóstico técnico personalizado com base nos resultados.</p>
               )}
             </div>
+
+            {isEarlyChildhoodAge(ev.age_years) && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-left dark:border-amber-900/50 dark:bg-amber-950/20">
+                <div className="flex items-start gap-2.5">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-amber-200/80 text-[10px] font-bold text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                    i
+                  </span>
+                  <div>
+                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                      Nota sobre o desenvolvimento motor (6 e 7 anos)
+                    </h4>
+                    <p className="mt-0.5 text-xs leading-relaxed text-amber-800/90 dark:text-amber-300/80">
+                      Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <DialogFooter className="flex-wrap gap-2 sm:gap-2">
               <Button variant="ghost" onClick={() => onDelete(id)} className="text-destructive">

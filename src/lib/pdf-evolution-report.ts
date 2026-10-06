@@ -891,19 +891,20 @@ export async function downloadStudentEvolutionPDF(
   // ── Early childhood development note (6 and 7 years old) ───────────
   if (isEarlyAge) {
     const noteY = stripY + stripH + 2.5;
+    const noteH = 9.5;
     doc.setFillColor(254, 243, 199); // soft amber
     doc.setDrawColor(245, 158, 11);  // amber border
     doc.setLineWidth(0.3);
-    doc.roundedRect(M, noteY, W - 2 * M, 6.8, 1.5, 1.5, "FD");
-    doc.setFont("helvetica", "bold").setFontSize(6.8);
+    doc.roundedRect(M, noteY, W - 2 * M, noteH, 1.5, 1.5, "FD");
+    doc.setFont("helvetica", "bold").setFontSize(7.5);
     doc.setTextColor(180, 83, 9);
-    doc.text("Nota de Desenvolvimento (6 e 7 anos):", M + 3, noteY + 4.5);
-    doc.setFont("helvetica", "normal").setFontSize(6.2);
+    doc.text("Nota sobre o Desenvolvimento Motor (6 e 7 anos):", M + 3, noteY + 3.8);
+    doc.setFont("helvetica", "normal").setFontSize(6.4);
     doc.setTextColor(120, 53, 15);
     doc.text(
-      "Nessa idade a musculatura está sendo desenvolvida, sendo comum haver maior divergência entre um teste e outro.",
-      M + 50,
-      noteY + 4.5,
+      "Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.",
+      M + 3,
+      noteY + 7.2,
     );
   }
 

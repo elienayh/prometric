@@ -215,7 +215,7 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
       score: idx.partial ? null : idx.score,
     };
   });
-  const diff = pm && pmFirst && !pm.partial && !pmFirst.partial ? pm.score - pmFirst.score : 0;
+  const diff = pm && pmFirst && !pm.partial && !pmFirst.partial ? pm.score - pmFirst.score : null;
 
   // Insights
   const insights = (() => {
@@ -614,9 +614,17 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                             {formatDateBR(e.evaluated_at, { day: "2-digit", month: "long", year: "numeric" })}
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <span className="font-mono font-semibold tabular-nums text-foreground">{epm.score}/100</span>
-                            <SituationBadge situation={esit} />
-                            {eo.label && <span className="text-[10px]">{eo.label}</span>}
+                            {epm.partial ? (
+                              <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+                                Índice — ({epm.filledDimensions} de 5 áreas)
+                              </span>
+                            ) : (
+                              <>
+                                <span className="font-mono font-semibold tabular-nums text-foreground">{epm.score}/100</span>
+                                <SituationBadge situation={esit} />
+                                {eo.label && <span className="text-[10px]">{eo.label}</span>}
+                              </>
+                            )}
                           </div>
                         </div>
                         <Button

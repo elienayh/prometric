@@ -131,6 +131,7 @@ export type StudentConsolidatedPackage = {
     situation: PRSituation | null;
     partial: boolean;
     filledTests: number;
+    filledDimensions: number;
     totalPossibleTests: number;
     expectedRange: { min: number; max: number };
   };
@@ -372,21 +373,27 @@ export function buildStudentConsolidatedPackage(
       currentDimsPresent.every((d) => baseDimsPresent.includes(d));
 
     const baseIndex = prometricIndex(baseConsolidated);
-    baseScore = baseIndex.score;
-    deltaScore = pmIndex.score - baseScore;
+    baseScore = baseIndex.partial ? null : baseIndex.score;
 
-    if (!isSameComposition) {
+    if (pmIndex.partial || baseIndex.partial) {
       trajectory = "incomparable";
-      summaryText = `A composição de testes mudou entre as avaliações (de ${baseDimsPresent.length} para ${currentDimsPresent.length} dimensões avaliadas). A variação de pontuação reflete a inclusão de novas capacidades corporais, e não puramente ganho ou perda física.`;
-    } else if (deltaScore > 0) {
-      trajectory = "positive";
-      summaryText = `Evolução positiva: o Índice ProMetric avançou de ${baseScore} para ${pmIndex.score} pontos (+${deltaScore} pts) mantendo a mesma base de dimensões corporais.`;
-    } else if (deltaScore < 0) {
-      trajectory = "negative";
-      summaryText = `Atenção: o Índice ProMetric oscilou de ${baseScore} para ${pmIndex.score} pontos (${deltaScore} pts) na mesma composição dimensional, indicando necessidade de suporte direcionado.`;
+      deltaScore = null;
+      summaryText = `Avaliação atual em andamento (${pmIndex.filledDimensions} de 5 áreas avaliadas). A comparação longitudinal do Índice ProMetric exige dados completos (5 áreas) nas avaliações analisadas.`;
     } else {
-      trajectory = "stable";
-      summaryText = `Desempenho estável: manutenção do Índice ProMetric em ${pmIndex.score} pontos com as mesmas dimensões avaliadas.`;
+      deltaScore = pmIndex.score - baseIndex.score;
+      if (!isSameComposition) {
+        trajectory = "incomparable";
+        summaryText = `A composição de testes mudou entre as avaliações (de ${baseDimsPresent.length} para ${currentDimsPresent.length} dimensões avaliadas). A variação de pontuação reflete a inclusão de novas capacidades corporais, e não puramente ganho ou perda física.`;
+      } else if (deltaScore > 0) {
+        trajectory = "positive";
+        summaryText = `Evolução positiva: o Índice ProMetric avançou de ${baseScore} para ${pmIndex.score} pontos (+${deltaScore} pts) mantendo a mesma base de dimensões corporais.`;
+      } else if (deltaScore < 0) {
+        trajectory = "negative";
+        summaryText = `Atenção: o Índice ProMetric oscilou de ${baseScore} para ${pmIndex.score} pontos (${deltaScore} pts) na mesma composição dimensional, indicando necessidade de suporte direcionado.`;
+      } else {
+        trajectory = "stable";
+        summaryText = `Desempenho estável: manutenção do Índice ProMetric em ${pmIndex.score} pontos com as mesmas dimensões avaliadas.`;
+      }
     }
   } else if (totalRegistered <= 1 || !firstClassified) {
     trajectory = "baseline";
@@ -415,11 +422,12 @@ export function buildStudentConsolidatedPackage(
     indicatorsList,
     dimensions,
     index: {
-      score: pmIndex.score,
+      score: pmIndex.partial ? 0 : pmIndex.score,
       category: pmIndex.category,
       situation: scoreToSituation(pmIndex.score, pmIndex.partial),
       partial: pmIndex.partial,
       filledTests: pmIndex.filledTests,
+      filledDimensions: pmIndex.filledDimensions,
       totalPossibleTests: 9,
       expectedRange: EXPECTED_INDEX_RANGE,
     },

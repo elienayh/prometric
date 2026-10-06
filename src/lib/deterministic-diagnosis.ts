@@ -1,6 +1,6 @@
 import { PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
 import { prometricIndex, zoneToCategory } from "@/lib/prometric-method";
-import { TEST_META, type ClassificationKey, type Zone, type Classifications, type Sex } from "@/lib/proesp";
+import { TEST_META, type ClassificationKey, type Zone, type Classifications, type Sex, isEarlyChildhoodAge } from "@/lib/proesp";
 import {
   imcBand,
   imcAdultBand,
@@ -100,7 +100,9 @@ export function buildDeterministicDiagnosis(
 
   // 1. Parecer técnico (destinado a professores e coordenação escolar)
   const technicalParts: string[] = [
-    `Avaliação física diagnóstica de ${studentName} (${row.age_years ?? "—"} anos). Índice ProMetric® registrado em ${pIndex.score}/100 pontos, perfil consolidado '${overallCategory}'.`,
+    pIndex.partial
+      ? `Avaliação física diagnóstica de ${studentName} (${row.age_years ?? "—"} anos). Avaliação em andamento com dados parciais (${pIndex.filledDimensions} de 5 áreas corporais avaliadas). O cálculo do Índice ProMetric® consolidado requer a realização de testes nas 5 áreas metodológicas.`
+      : `Avaliação física diagnóstica de ${studentName} (${row.age_years ?? "—"} anos). Índice ProMetric® registrado em ${pIndex.score}/100 pontos, perfil consolidado '${overallCategory}'.`,
   ];
   if (row.imc != null) {
     technicalParts.push(`Antropometria: IMC ${row.imc.toFixed(1)} kg/m² (${imcClinicalLabel ?? "—"} — OMS 2007), RCE ${row.rce ? row.rce.toFixed(2) : "—"}.`);
@@ -114,13 +116,18 @@ export function buildDeterministicDiagnosis(
     technicalParts.push(`Valências com margem para desenvolvimento: ${devTests.map((t) => `${t.name} ('${t.cat}')`).join(", ")}.`);
   }
   technicalParts.push(`Recomenda-se programa motor diversificado com ênfase nas valências deficitárias e nova bateria de controle em 90 a 120 dias.`);
+  if (isEarlyChildhoodAge(row.age_years)) {
+    technicalParts.push(`Nota sobre o desenvolvimento motor (6 e 7 anos): Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.`);
+  }
   technicalParts.push(`Nota clínica: ${IMC_CLINICAL_DISCLAIMER} Critérios de classificação do IMC alinhados às curvas de crescimento da OMS 2007.`);
 
   const technical = technicalParts.join(" ");
 
   // 2. Parecer para a família (linguagem acolhedora, encorajadora e sem termos patológicos)
   const familyParts: string[] = [
-    `${art} ${studentName} participou da avaliação física do ProMetric®. Seu resultado geral alcançou a categoria '${overallCategory}' (${pIndex.score}/100 pontos).`,
+    pIndex.partial
+      ? `${art} ${studentName} participou da avaliação física do ProMetric®, registrando dados em ${pIndex.filledDimensions} de 5 áreas corporais até o momento.`
+      : `${art} ${studentName} participou da avaliação física do ProMetric®. Seu resultado geral alcançou a categoria '${overallCategory}' (${pIndex.score}/100 pontos).`,
     strongTests.length > 0
       ? `Parabenizamos pelo excelente desempenho observado em ${strongTests.map((t) => t.name.toLowerCase()).join(" e ")}, que mostram dedicação e boa aptidão física.`
       : `Demonstrou excelente disposição e engajamento na execução dos testes propostos.`,
@@ -136,11 +143,18 @@ export function buildDeterministicDiagnosis(
   familyParts.push(
     `O apoio da família em incentivar o movimento diário e limitar o tempo de telas é fundamental para seu desenvolvimento contínuo.`
   );
+  if (isEarlyChildhoodAge(row.age_years)) {
+    familyParts.push(
+      `Nota sobre o desenvolvimento motor (6 e 7 anos): Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.`
+    );
+  }
 
   const family = familyParts.join(" ");
 
   // 3. Diagnóstico curto
-  const diagnosis = `${art} ${studentName} apresenta Índice ProMetric® de ${pIndex.score}/100 (${overallCategory}). ${strongTests.length > 0 ? `Pontos fortes: ${strongTests.map((t) => t.name).join(", ")}. ` : ""}${warnTests.length > 0 ? `Atenção: ${warnTests.map((t) => t.name).join(", ")}. ` : ""}${imcClinicalLabel ? `Estado nutricional: ${imcClinicalLabel}. ` : ""}Plano pedagógico focado em estímulos motores contínuos e reavaliação periódica.`;
+  const diagnosis = pIndex.partial
+    ? `${art} ${studentName} apresenta avaliação parcial (${pIndex.filledDimensions} de 5 áreas avaliadas). ${strongTests.length > 0 ? `Pontos fortes: ${strongTests.map((t) => t.name).join(", ")}. ` : ""}${warnTests.length > 0 ? `Atenção: ${warnTests.map((t) => t.name).join(", ")}. ` : ""}${imcClinicalLabel ? `Estado nutricional: ${imcClinicalLabel}. ` : ""}Plano pedagógico focado em estímulos motores contínuos e complementação das demais áreas.${isEarlyChildhoodAge(row.age_years) ? " Faixa etária de 6 e 7 anos com musculatura em desenvolvimento e maior divergência esperada entre testes." : ""}`
+    : `${art} ${studentName} apresenta Índice ProMetric® de ${pIndex.score}/100 (${overallCategory}). ${strongTests.length > 0 ? `Pontos fortes: ${strongTests.map((t) => t.name).join(", ")}. ` : ""}${warnTests.length > 0 ? `Atenção: ${warnTests.map((t) => t.name).join(", ")}. ` : ""}${imcClinicalLabel ? `Estado nutricional: ${imcClinicalLabel}. ` : ""}Plano pedagógico focado em estímulos motores contínuos e reavaliação periódica.${isEarlyChildhoodAge(row.age_years) ? " Faixa etária de 6 e 7 anos com musculatura em desenvolvimento e maior divergência esperada entre testes." : ""}`;
 
   // 4. Metas progressivas
   const focusNames = [...warnTests, ...devTests].map((t) => t.name);

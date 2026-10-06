@@ -1,6 +1,6 @@
 import { formatDateBR } from "./age";
 import { PROMETRIC_PROMPT_VERSION } from "@/lib/ai/prometric-system-prompt";
-import type { Zone } from "@/lib/proesp";
+import { type Zone, isEarlyChildhoodAge } from "@/lib/proesp";
 import {
   type EvalLike,
 } from "@/lib/student-metrics";
@@ -92,9 +92,13 @@ export function buildDeterministicPortalReport(
   // ───────────────────────────────────────────────────────────────────────────
   // 1. PARECER (Linguagem acolhedora e acessível à família)
   // ───────────────────────────────────────────────────────────────────────────
+  const indiceMsg = pkg.index.partial
+    ? `Atualmente, ${firstName} conta com dados parciais (${pkg.index.filledDimensions} de 5 áreas corporais avaliadas). O Índice ProMetric® consolidado e o perfil geral serão gerados após a conclusão de todas as áreas.`
+    : `Atualmente, ${firstName} conta com ${totalRegistered} avaliação(ões) registrada(s) na escola (${classifiedCount} classificadas e ${partialCount} parciais). Seu Índice ProMetric® consolidado é de ${pkg.index.score}/100 pontos, situando seu perfil geral na categoria '${overallCategory}'.`;
+
   const parecerParts: string[] = [
     `Olá, família! É uma satisfação compartilhar o acompanhamento físico de ${firstName}. No Método ProMetric®, nosso foco é orientar a saúde, o bem-estar e o desenvolvimento motor de forma motivadora e acolhedora.`,
-    `Atualmente, ${firstName} conta com ${totalRegistered} avaliação(ões) registrada(s) na escola (${classifiedCount} classificadas e ${partialCount} parciais). Seu Índice ProMetric® consolidado é de ${pkg.index.score}/100 pontos, situando seu perfil geral na categoria '${overallCategory}'.`,
+    indiceMsg,
   ];
 
   if (strongDims.length > 0) {
@@ -125,6 +129,12 @@ export function buildDeterministicPortalReport(
   parecerParts.push(
     `Lembramos que cada jovem possui seu próprio ritmo biológico de maturação e que a participação contínua nas aulas de Educação Física e o incentivo familiar são os pilares essenciais para o seu crescimento saudável.`
   );
+
+  if (isEarlyChildhoodAge(pkg.student.age?.years)) {
+    parecerParts.push(
+      `Nota sobre o desenvolvimento motor (6 e 7 anos): Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.`
+    );
+  }
 
   parecerParts.push(
     `Nota informativa: ${pkg.disclaimers.imc}`

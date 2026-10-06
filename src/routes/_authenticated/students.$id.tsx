@@ -783,6 +783,24 @@ function EvaluationDetailDialog({
             );
           })}
         </div>
+
+        {isEarlyChildhoodAge(ev.age_years ?? age) && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-left dark:border-amber-900/50 dark:bg-amber-950/20">
+            <div className="flex items-start gap-2.5">
+              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-amber-200/80 text-[10px] font-bold text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                i
+              </span>
+              <div>
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                  Nota sobre o desenvolvimento motor (6 e 7 anos)
+                </h4>
+                <p className="mt-0.5 text-xs leading-relaxed text-amber-800/90 dark:text-amber-300/80">
+                  Nessa faixa etária, a musculatura está sendo desenvolvida e entre um teste e outro podem ocorrer maiores divergências de rendimento. Essa oscilação é comum e esperada para a idade.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1639,10 +1657,10 @@ function ProMetricHero({ last, effective }: { last: EvalRow; effective?: Classif
               <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
                 <div
                   className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${d.score}%` }}
+                  style={{ width: d.category ? `${d.score}%` : "0%" }}
                 />
               </div>
-              <span className="w-10 shrink-0 text-right text-xs font-medium tabular-nums">{d.score}</span>
+              <span className="w-10 shrink-0 text-right text-xs font-medium tabular-nums">{d.category ? d.score : "—"}</span>
               {d.category && (
                 <span className={cn("rounded-full border px-2 py-0.5 text-[10px]", categoryColor(d.category))}>
                   {d.category}
