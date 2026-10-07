@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  ageFromBirth, overallScore, zoneScore, ZONES, TEST_META,
+  ageFromBirth, overallScore, zoneScore, ZONES, TEST_META, calcWingspanHeightRatio,
   type Classifications, type Zone, type ClassificationKey,
   isEarlyChildhoodAge,
 } from "@/lib/proesp";
@@ -54,7 +54,8 @@ function PortalAlunoRoute() {
 
 type EvalRow = {
   id: string; evaluated_at: string; age_years: number | null;
-  weight_kg: number | null; height_cm: number | null; imc: number | null; rce: number | null;
+  weight_kg: number | null; height_cm: number | null; waist_cm?: number | null; wingspan_cm?: number | null;
+  imc: number | null; rce: number | null;
   sit_and_reach_cm: number | null; abdominal_reps: number | null; horizontal_jump_cm: number | null;
   medicine_ball_m: number | null; square_test_s: number | null; sprint_20m_s: number | null;
   run_6min_m: number | null; classifications: Classifications;
@@ -85,16 +86,27 @@ type PortalData = {
   branding?: { tenant: BrandRow; school: BrandRow; group: BrandRow };
 };
 
-const INDICATORS: { key: ClassificationKey; label: string; valueField: keyof EvalRow }[] = [
-  { key: "imc", label: "IMC", valueField: "imc" },
-  { key: "rce", label: "RCE", valueField: "rce" },
-  { key: "flex", label: "Flexibilidade", valueField: "sit_and_reach_cm" },
-  { key: "abdo", label: "Resistência abdominal", valueField: "abdominal_reps" },
-  { key: "run6", label: "Corrida 6min", valueField: "run_6min_m" },
-  { key: "jump", label: "Salto horizontal", valueField: "horizontal_jump_cm" },
-  { key: "mball", label: "Potência (medicine ball)", valueField: "medicine_ball_m" },
-  { key: "square", label: "Agilidade", valueField: "square_test_s" },
-  { key: "sprint", label: "Velocidade 20m", valueField: "sprint_20m_s" },
+type PortalIndicator = {
+  key: ClassificationKey | "waist" | "wingspan" | "wingspan_ratio";
+  label: string;
+  valueField?: keyof EvalRow;
+  unit: string;
+  computed?: (ev: EvalRow) => number | null;
+};
+
+const INDICATORS: PortalIndicator[] = [
+  { key: "imc", label: "IMC", valueField: "imc", unit: "kg/m²" },
+  { key: "rce", label: "RCE", valueField: "rce", unit: "" },
+  { key: "waist", label: "Cintura", valueField: "waist_cm", unit: "cm" },
+  { key: "wingspan", label: "Envergadura", valueField: "wingspan_cm", unit: "cm" },
+  { key: "wingspan_ratio", label: "Relação Envergadura/Altura", unit: "", computed: (ev) => calcWingspanHeightRatio(ev.wingspan_cm, ev.height_cm) },
+  { key: "flex", label: "Flexibilidade", valueField: "sit_and_reach_cm", unit: "cm" },
+  { key: "abdo", label: "Resistência abdominal", valueField: "abdominal_reps", unit: "reps" },
+  { key: "run6", label: "Corrida 6min", valueField: "run_6min_m", unit: "m" },
+  { key: "jump", label: "Salto horizontal", valueField: "horizontal_jump_cm", unit: "cm" },
+  { key: "mball", label: "Potência (medicine ball)", valueField: "medicine_ball_m", unit: "m" },
+  { key: "square", label: "Agilidade", valueField: "square_test_s", unit: "s" },
+  { key: "sprint", label: "Velocidade 20m", valueField: "sprint_20m_s", unit: "s" },
 ];
 
 function avgScore(rows: Classifications[], key: ClassificationKey): number {
@@ -248,13 +260,15 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
   })();
 
   // Radar comparativo (Ref / Aluno / Turma / Escola)
-  const radarData = INDICATORS.map((i) => ({
-    metric: i.label.split(" ")[0],
-    Referência: 4, // zoneScore "Bom" como referência mínima esperada
-    Aluno: last ? zoneScore(last.classifications?.[i.key] as Zone) : 0,
-    Turma: avgScore(class_latest ?? [], i.key),
-    Escola: avgScore(school_latest ?? [], i.key),
-  }));
+  const radarData = INDICATORS
+    .filter((i): i is PortalIndicator & { key: ClassificationKey } => !["waist", "wingspan", "wingspan_ratio"].includes(i.key))
+    .map((i) => ({
+      metric: i.label.split(" ")[0],
+      Referência: 4, // zoneScore "Bom" como referência mínima esperada
+      Aluno: last ? zoneScore(last.classifications?.[i.key] as Zone) : 0,
+      Turma: avgScore(class_latest ?? [], i.key),
+      Escola: avgScore(school_latest ?? [], i.key),
+    }));
 
   const share = (kind: "copy" | "whatsapp" | "email") => {
     const msg = `Acompanhe a evolução de ${student.full_name} no ProMetric: ${portalUrl}`;
@@ -291,9 +305,18 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                 {student.class_name && ` • ${student.class_name}`}
               </p>
               {last && (
-                <p className="mt-0.5 flex items-center gap-1 text-[11px] opacity-80">
-                  <Calendar className="h-3 w-3" />
-                  Última avaliação: {formatDateBR(last.evaluated_at)}
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] opacity-80">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Última avaliação: {formatDateBR(last.evaluated_at)}
+                  </span>
+                  {last.height_cm != null && <span>• {last.height_cm} cm</span>}
+                  {last.weight_kg != null && <span>• {last.weight_kg} kg</span>}
+                  {last.waist_cm != null && <span>• Cintura {last.waist_cm} cm</span>}
+                  {last.wingspan_cm != null && <span>• Envergadura {last.wingspan_cm} cm</span>}
+                  {calcWingspanHeightRatio(last.wingspan_cm, last.height_cm) != null && (
+                    <span>• Env/Alt {calcWingspanHeightRatio(last.wingspan_cm, last.height_cm)!.toFixed(2).replace(".", ",")}</span>
+                  )}
                 </p>
               )}
             </div>
@@ -429,9 +452,9 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
               <div className="mt-5 space-y-4">
                 <h3 className="text-sm font-semibold">Capacidades individuais</h3>
                 {INDICATORS.map((i) => {
-                  const z = last.classifications?.[i.key] as Zone | undefined;
-                  const raw = last[i.valueField];
-                  if (!z && (i.key !== "imc" || raw == null)) return null;
+                  const z = last.classifications?.[i.key as ClassificationKey] as Zone | undefined;
+                  const raw = i.computed ? i.computed(last) : (i.valueField ? last[i.valueField] : null);
+                  if (!z && raw == null) return null;
 
                   let familyGuidance: string | null = null;
                   if (i.key === "imc" && raw != null) {
@@ -442,7 +465,17 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                       const band = age >= 20 ? imcAdultBand(Number(raw)) : imcBand(Number(raw), student.sex, months);
                       familyGuidance = imcFamilyGuidance(band);
                     }
+                  } else if (i.key === "waist" && raw != null) {
+                    familyGuidance = "Medida corporal utilizada na avaliação clínica";
+                  } else if (i.key === "wingspan" && raw != null) {
+                    familyGuidance = "Extensão total dos membros superiores";
+                  } else if (i.key === "wingspan_ratio" && raw != null) {
+                    familyGuidance = "Proporção envergadura ÷ altura";
                   }
+
+                  const formattedValue = i.key === "wingspan_ratio" && typeof raw === "number"
+                    ? raw.toFixed(2).replace(".", ",")
+                    : (raw as number | null);
 
                   return (
                     <div key={i.key}>
@@ -454,7 +487,7 @@ export function PortalAluno({ lookupKey }: { lookupKey: string }) {
                           </span>
                         )}
                       </div>
-                      <ReferenceBar zone={z} value={raw as number | null} unit={TEST_META[i.key].unit} />
+                      <ReferenceBar zone={z} value={formattedValue} unit={i.unit} />
                     </div>
                   );
                 })}

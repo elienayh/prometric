@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTenant } from "@/hooks/use-tenant";
 import { PageHeader } from "@/components/layout/page-header";
-import { TEST_META, ZONES, type Classifications, type Zone, zoneColor, overallScore } from "@/lib/proesp";
+import { TEST_META, ZONES, type Classifications, type Zone, zoneColor, overallScore, calcWingspanHeightRatio } from "@/lib/proesp";
 import { imcBand, imcAdultBand, IMC_BAND_LABEL } from "@/lib/imc-reference";
 import { prometricIndex } from "@/lib/prometric-method";
 import { scoreToSituation } from "@/lib/prometric-reference";
@@ -24,6 +24,7 @@ export type EvalReportItem = {
   weight_kg: number | null;
   height_cm: number | null;
   waist_cm?: number | null;
+  wingspan_cm?: number | null;
   imc?: number | null;
   rce?: number | null;
   sit_and_reach_cm?: number | null;
@@ -51,6 +52,8 @@ export function buildExportRows(evals: EvalReportItem[]) {
       imcCategory = IMC_BAND_LABEL[band] ?? "";
     }
 
+    const wingspanRatio = calcWingspanHeightRatio(e.wingspan_cm, e.height_cm);
+
     return {
       "Aluno": e.student.full_name,
       "Sexo": e.student.sex === "male" ? "M" : "F",
@@ -60,6 +63,8 @@ export function buildExportRows(evals: EvalReportItem[]) {
       "Peso (kg)": e.weight_kg ?? "",
       "Estatura (cm)": e.height_cm ?? "",
       "Cintura (cm)": e.waist_cm ?? "",
+      "Envergadura (cm)": e.wingspan_cm ?? "",
+      "Relação Envergadura/Altura": wingspanRatio != null ? wingspanRatio.toFixed(2).replace(".", ",") : "",
       "IMC (kg/m²)": e.imc ?? "",
       "Classificação IMC (OMS 2007)": imcCategory,
       "RCE": e.rce ?? "",
@@ -133,7 +138,7 @@ function ReportsPage() {
     queryFn: async () => {
       let q = supabase
         .from("evaluations")
-        .select("id,evaluated_at,age_years,age_months,weight_kg,height_cm,waist_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications,student:students!inner(full_name,sex,birth_date,class_id)")
+        .select("id,evaluated_at,age_years,age_months,weight_kg,height_cm,waist_cm,wingspan_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications,student:students!inner(full_name,sex,birth_date,class_id)")
         .eq("tenant_id", tenantId!);
       if (classId !== "all") q = q.eq("student.class_id", classId);
       const { data, error } = await q.order("evaluated_at", { ascending: false });

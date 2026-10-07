@@ -1,7 +1,7 @@
 import { formatDateBR } from "./age";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { TEST_META, ZONES, type Classifications, type Zone, type Sex, overallScore, isEarlyChildhoodAge } from "./proesp";
+import { TEST_META, ZONES, type Classifications, type Zone, type Sex, overallScore, isEarlyChildhoodAge, calcWingspanHeightRatio } from "./proesp";
 import { prometricIndex } from "./prometric-method";
 import { ageInYears } from "./age";
 import { imcBand, imcAdultBand, IMC_BAND_LABEL, IMC_CLINICAL_DISCLAIMER } from "./imc-reference";
@@ -67,6 +67,9 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
     imcText = `${ev.imc.toFixed(1)} kg/m² (${label} — OMS 2007)`;
   }
 
+  const ratio = calcWingspanHeightRatio(ev.wingspan_cm, ev.height_cm);
+  const ratioText = ratio != null ? ratio.toFixed(2).replace(".", ",") : "—";
+
   // Antropometria
   autoTable(doc, {
     startY: 50,
@@ -75,10 +78,11 @@ export function generateEvaluationPDF(tenantName: string, ev: ReportEval) {
       ["Peso (kg)", ev.weight_kg != null ? `${ev.weight_kg} kg` : "—"],
       ["Estatura (cm)", ev.height_cm != null ? `${ev.height_cm} cm` : "—"],
       ["Envergadura (cm)", ev.wingspan_cm != null ? `${ev.wingspan_cm} cm` : "—"],
+      ["Relação Envergadura/Altura", ratioText],
       ["Cintura (cm)", ev.waist_cm != null ? `${ev.waist_cm} cm` : "—"],
       ["Quadril (cm)", ev.hip_cm != null ? `${ev.hip_cm} cm` : "—"],
       ["IMC", imcText],
-      ["RCE", ev.rce != null ? ev.rce.toFixed(2) : "—"],
+      ["RCE", ev.rce != null ? ev.rce.toFixed(2).replace(".", ",") : "—"],
     ],
     theme: "striped",
     headStyles: { fillColor: PRIMARY, textColor: 255, fontStyle: "bold" },
@@ -518,6 +522,9 @@ export function generateEvaluationPDFComplete(
     imcReportText = `${ev.imc.toFixed(1)} kg/m² (${label} — OMS 2007)`;
   }
 
+  const completeRatio = calcWingspanHeightRatio(ev.wingspan_cm, ev.height_cm);
+  const completeRatioText = completeRatio != null ? completeRatio.toFixed(2).replace(".", ",") : "—";
+
   autoTable(doc, {
     startY: 28,
     head: [["Antropometria", "Valor"]],
@@ -525,10 +532,11 @@ export function generateEvaluationPDFComplete(
       ["Peso (kg)", ev.weight_kg != null ? `${ev.weight_kg} kg` : "—"],
       ["Estatura (cm)", ev.height_cm != null ? `${ev.height_cm} cm` : "—"],
       ["Envergadura (cm)", ev.wingspan_cm != null ? `${ev.wingspan_cm} cm` : "—"],
+      ["Relação Envergadura/Altura", completeRatioText],
       ["Cintura (cm)", ev.waist_cm != null ? `${ev.waist_cm} cm` : "—"],
       ["Quadril (cm)", ev.hip_cm != null ? `${ev.hip_cm} cm` : "—"],
       ["IMC", imcReportText],
-      ["RCE", ev.rce != null ? ev.rce.toFixed(2) : "—"],
+      ["RCE", ev.rce != null ? ev.rce.toFixed(2).replace(".", ",") : "—"],
     ],
     theme: "striped",
     headStyles: { fillColor: BR, textColor: 255, fontStyle: "bold" },

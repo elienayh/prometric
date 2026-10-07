@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  TEST_META, ageFromBirth, expectedRangeFor, overallScore, zoneColor, zoneScore,
+  TEST_META, ageFromBirth, calcWingspanHeightRatio, expectedRangeFor, overallScore, zoneColor, zoneScore,
   isEarlyChildhoodAge,
   type Classifications, type ClassificationKey, type Zone,
 } from "@/lib/proesp";
@@ -49,7 +49,7 @@ export const Route = createFileRoute("/_authenticated/students/$id")({
 
 type EvalRow = {
   id: string; evaluated_at: string; student_id?: string; age_years: number | null;
-  weight_kg: number | null; height_cm: number | null; imc: number | null; rce: number | null;
+  weight_kg: number | null; height_cm: number | null; waist_cm: number | null; wingspan_cm: number | null; imc: number | null; rce: number | null;
   sit_and_reach_cm: number | null; abdominal_reps: number | null; horizontal_jump_cm: number | null;
   medicine_ball_m: number | null; square_test_s: number | null; sprint_20m_s: number | null; run_6min_m: number | null;
   /** Estado consolidado até a data desta avaliação (fonte única de leitura). */
@@ -59,11 +59,23 @@ type EvalRow = {
   recorded_values?: Record<string, number | null>;
 };
 
-type Indicator = { key: ClassificationKey; field: keyof EvalRow; label: string; unit: string; higherBetter: boolean };
+type IndicatorKey = ClassificationKey | "waist" | "wingspan" | "wingspan_ratio";
+
+type Indicator = {
+  key: IndicatorKey;
+  field?: keyof EvalRow;
+  label: string;
+  unit: string;
+  higherBetter: boolean;
+  computed?: (ev: EvalRow | null | undefined) => number | null;
+};
 
 const INDICATORS: Indicator[] = [
   { key: "imc",    field: "imc",                label: "IMC",           unit: "kg/m²", higherBetter: false },
   { key: "rce",    field: "rce",                label: "RCE",           unit: "",      higherBetter: false },
+  { key: "waist",  field: "waist_cm",           label: "Cintura",       unit: "cm",    higherBetter: false },
+  { key: "wingspan", field: "wingspan_cm",      label: "Envergadura",   unit: "cm",    higherBetter: true  },
+  { key: "wingspan_ratio", label: "Relação Envergadura/Altura", unit: "", higherBetter: true, computed: (ev) => calcWingspanHeightRatio(ev?.wingspan_cm, ev?.height_cm) },
   { key: "flex",   field: "sit_and_reach_cm",   label: "Flexibilidade", unit: "cm",    higherBetter: true  },
   { key: "abdo",   field: "abdominal_reps",     label: "Resistência",   unit: "reps",  higherBetter: true  },
   { key: "run6",   field: "run_6min_m",         label: "Corrida 6min",  unit: "m",     higherBetter: true  },
@@ -77,6 +89,13 @@ function num(ev: EvalRow | null | undefined, f: keyof EvalRow): number | null {
   if (!ev) return null;
   const v = (ev as unknown as Record<string, unknown>)[f as string];
   return typeof v === "number" ? v : null;
+}
+
+function getIndicatorValue(ev: EvalRow | null | undefined, ind: Indicator): number | null {
+  if (!ev) return null;
+  if (ind.computed) return ind.computed(ev);
+  if (ind.field) return num(ev, ind.field);
+  return null;
 }
 
 // A leitura oficial dos resultados vive em `@/lib/student-metrics`
@@ -125,7 +144,7 @@ function StudentDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("evaluations")
-        .select("id,evaluated_at,age_years,weight_kg,height_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications")
+        .select("id,evaluated_at,age_years,weight_kg,height_cm,waist_cm,wingspan_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications")
         .eq("student_id", id)
         .order("evaluated_at", { ascending: true });
       if (error) throw error;
@@ -178,7 +197,7 @@ function StudentDetail() {
   const [tab, setTab] = useState("painel");
   const [quickMeasureOpen, setQuickMeasureOpen] = useState(false);
   const [viewEval, setViewEval] = useState<EvalRow | null>(null);
-  const [testKey, setTestKey] = useState<ClassificationKey | null>(null);
+  const [testKey, setTestKey] = useState<IndicatorKey | null>(null);
   const s = student.data;
 
 
@@ -411,7 +430,7 @@ async function fetchLatestForStudents(sids: string[]): Promise<EvalRow[]> {
   if (!sids.length) return [];
   const { data } = await supabase
     .from("evaluations")
-    .select("id,student_id,evaluated_at,age_years,weight_kg,height_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications")
+    .select("id,student_id,evaluated_at,age_years,weight_kg,height_cm,waist_cm,wingspan_cm,imc,rce,sit_and_reach_cm,abdominal_reps,horizontal_jump_cm,medicine_ball_m,square_test_s,sprint_20m_s,run_6min_m,classifications")
     .in("student_id", sids).order("evaluated_at", { ascending: false });
   const rows = ((data ?? []) as unknown as EvalRow[]);
   // Mesma fonte única do painel individual: a avaliação clínica mais recente
@@ -458,20 +477,21 @@ const STATUS_STYLE: Record<ClinicalStatus, { dot: string; text: string; label: s
   unknown:   { dot: "bg-muted-foreground/40", text: "text-muted-foreground",          label: "Sem dado",  bar: "bg-muted-foreground/40" },
 };
 
-const CLINICAL_GROUPS: { title: string; keys: ClassificationKey[] }[] = [
-  { title: "Saúde Corporal",       keys: ["imc", "rce"] },
+const CLINICAL_GROUPS: { title: string; keys: IndicatorKey[] }[] = [
+  { title: "Saúde Corporal",       keys: ["imc", "rce", "waist", "wingspan", "wingspan_ratio"] },
   { title: "Mobilidade",           keys: ["flex"] },
   { title: "Resistência",          keys: ["abdo", "run6"] },
   { title: "Potência",             keys: ["jump", "mball"] },
   { title: "Velocidade & Agilidade", keys: ["square", "sprint"] },
 ];
 
-function formatNumber(v: number, unit: string): string {
-  if (unit === "kg/m²" || unit === "" || unit === "s" || unit === "m") return v.toFixed(unit === "" ? 2 : 1);
-  return String(Math.round(v));
+function formatNumber(v: number, unit: string, isRatio = false): string {
+  if (isRatio || (unit === "" && v <= 5)) return v.toFixed(2).replace(".", ",");
+  if (unit === "kg/m²" || unit === "" || unit === "s" || unit === "m") return v.toFixed(unit === "" ? 2 : 1).replace(".", ",");
+  return v % 1 === 0 ? String(v) : v.toFixed(1).replace(".", ",");
 }
 
-function IndicatorsGrid({ last, first, data, sex, onSelectTest }: { last: EvalRow; first: EvalRow | null; data: EvalRow[]; sex: "male" | "female"; onSelectTest: (k: ClassificationKey) => void }) {
+function IndicatorsGrid({ last, first, data, sex, onSelectTest }: { last: EvalRow; first: EvalRow | null; data: EvalRow[]; sex: "male" | "female"; onSelectTest: (k: IndicatorKey) => void }) {
   const age = last.age_years ?? 0;
   return (
     <section className="rounded-2xl border border-border bg-card shadow-soft">
@@ -543,19 +563,19 @@ function ClinicalCard({
   // conter este teste — nesse caso usamos o registro mais recente que o contém.
   const withValue = data.filter((ev) => {
     const rec = ev.recorded_values;
-    if (rec) return rec[ind.field] != null;
-    return num(ev, ind.field) != null;
+    if (ind.field && rec) return rec[ind.field as string] != null;
+    return getIndicatorValue(ev, ind) != null;
   });
   const source = withValue[withValue.length - 1] ?? last;
   const baseline = withValue.length > 1 ? withValue[0] : (first && first.id !== source.id ? first : null);
 
-  const value = num(source, ind.field);
-  const base = baseline && baseline.id !== source.id ? num(baseline, ind.field) : null;
+  const value = getIndicatorValue(source, ind);
+  const base = baseline && baseline.id !== source.id ? getIndicatorValue(baseline, ind) : null;
   const { diff, positive } = pct(value, base, ind.higherBetter);
-  const zone = source.classifications?.[ind.key];
+  const zone = source.classifications?.[ind.key as ClassificationKey];
   const status = zoneToClinical(zone);
   const styles = STATUS_STYLE[status];
-  const range = expectedRangeFor(ind.key, source.age_years ?? age, sex, (source as any).age_months ?? undefined);
+  const range = expectedRangeFor(ind.key as ClassificationKey, source.age_years ?? age, sex, (source as any).age_months ?? undefined);
 
   let displayLabel = styles.label;
   let displayInterpretation =
@@ -563,6 +583,9 @@ function ClinicalCard({
     : status === "attention" ? "Abaixo do esperado — recomenda-se estímulo direcionado."
     : status === "critical" ? "Muito abaixo do esperado — atenção prioritária."
     : "Sem dado registrado nesta avaliação.";
+
+  let activeDot = styles.dot;
+  let activeText = styles.text;
 
   if (ind.key === "imc") {
     const evAge = source.age_years ?? age;
@@ -579,6 +602,36 @@ function ClinicalCard({
           : band === "magreza"
           ? "IMC abaixo do percentil esperado. (IMC é triagem, não diagnóstico)"
           : "IMC acima do percentil esperado. (IMC é triagem, não diagnóstico)";
+    }
+  } else if (ind.key === "waist") {
+    if (value != null) {
+      displayLabel = "Medida corporal";
+      displayInterpretation = "Circunferência da cintura utilizada no cálculo do RCE.";
+      activeDot = "bg-primary";
+      activeText = "text-foreground font-semibold";
+    } else {
+      displayLabel = "Sem dado";
+      displayInterpretation = "Sem registro de cintura nesta avaliação.";
+    }
+  } else if (ind.key === "wingspan") {
+    if (value != null) {
+      displayLabel = "Medida corporal";
+      displayInterpretation = "Envergadura total de ponta a ponta dos membros superiores.";
+      activeDot = "bg-primary";
+      activeText = "text-foreground font-semibold";
+    } else {
+      displayLabel = "Sem dado";
+      displayInterpretation = "Sem registro de envergadura nesta avaliação.";
+    }
+  } else if (ind.key === "wingspan_ratio") {
+    if (value != null) {
+      displayLabel = "Índice morfológico";
+      displayInterpretation = "Proporção entre envergadura e altura (envergadura ÷ altura).";
+      activeDot = "bg-primary";
+      activeText = "text-foreground font-semibold";
+    } else {
+      displayLabel = "Sem dado";
+      displayInterpretation = "Requer medidas de envergadura e altura na avaliação.";
     }
   }
 
@@ -617,9 +670,9 @@ function ClinicalCard({
       {/* Valor */}
       <div className="mt-2 flex items-baseline gap-1.5">
         <span className="font-display text-3xl font-bold tabular-nums text-foreground">
-          {value != null ? formatNumber(value, ind.unit) : "—"}
+          {value != null ? formatNumber(value, ind.unit, ind.key === "wingspan_ratio") : "—"}
         </span>
-        <span className="text-xs text-muted-foreground">{ind.unit}</span>
+        {ind.unit && <span className="text-xs text-muted-foreground">{ind.unit}</span>}
       </div>
       {value != null && source.id !== last.id && (
         <div className="mt-0.5 text-[10px] text-muted-foreground/80">
@@ -638,9 +691,9 @@ function ClinicalCard({
 
       {/* Estado + interpretação */}
       <div className="mt-3 flex items-start gap-2 border-t border-border pt-2.5">
-        <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", styles.dot)} />
+        <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", activeDot)} />
         <div className="min-w-0">
-          <div className={cn("text-[11px] font-semibold", styles.text)}>{displayLabel}</div>
+          <div className={cn("text-[11px] font-semibold", activeText)}>{displayLabel}</div>
           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{displayInterpretation}</p>
         </div>
       </div>
@@ -700,12 +753,13 @@ function EvaluationDetailDialog({
   sex: "male" | "female";
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onOpenTest: (key: ClassificationKey) => void;
+  onOpenTest: (key: IndicatorKey) => void;
 }) {
   if (!ev) return null;
   const idx = prometricIndex(ev.classifications ?? {});
   const ov = overallScore(ev.classifications ?? {});
   const age = ev.age_years ?? 0;
+  const wingspanRatio = calcWingspanHeightRatio(ev.wingspan_cm, ev.height_cm);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -731,20 +785,28 @@ function EvaluationDetailDialog({
           )}
           {ev.weight_kg != null && <span className="text-muted-foreground">Peso {ev.weight_kg} kg</span>}
           {ev.height_cm != null && <span className="text-muted-foreground">Altura {ev.height_cm} cm</span>}
+          {ev.waist_cm != null && <span className="text-muted-foreground">Cintura {ev.waist_cm} cm</span>}
+          {ev.wingspan_cm != null && <span className="text-muted-foreground">Envergadura {ev.wingspan_cm} cm</span>}
+          {wingspanRatio != null && (
+            <span className="text-muted-foreground">
+              Env/Alt {formatNumber(wingspanRatio, "", true)}
+            </span>
+          )}
           {age ? <span className="text-muted-foreground">{age} anos</span> : null}
         </div>
 
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {INDICATORS.map((ind) => {
-            const value = num(ev, ind.field);
+            const value = getIndicatorValue(ev, ind);
             // Zona exibida por teste = a efetivamente registrada nesta avaliação.
-            const zone = (ev.recorded_classifications ?? ev.classifications)?.[ind.key];
+            const zone = (ev.recorded_classifications ?? ev.classifications)?.[ind.key as ClassificationKey];
 
             const evAge = ev.age_years ?? age;
             const status = zoneToClinical(zone);
             const styles = STATUS_STYLE[status];
-            const range = expectedRangeFor(ind.key, evAge, sex, (ev as any).age_months ?? undefined);
+            const range = expectedRangeFor(ind.key as ClassificationKey, evAge, sex, (ev as any).age_months ?? undefined);
             let indLabel = styles.label;
+            let activeText = styles.text;
             if (ind.key === "imc") {
               if (evAge < 5) {
                 indLabel = "Sem referência";
@@ -752,6 +814,16 @@ function EvaluationDetailDialog({
                 const months = (ev as any).age_months ?? (evAge >= 20 ? 240 : evAge * 12 + 6);
                 const band = evAge >= 20 ? imcAdultBand(value) : imcBand(value, sex, months);
                 indLabel = IMC_BAND_LABEL[band];
+              }
+            } else if (ind.key === "waist" || ind.key === "wingspan") {
+              if (value != null) {
+                indLabel = "Medida corporal";
+                activeText = "text-foreground font-semibold";
+              }
+            } else if (ind.key === "wingspan_ratio") {
+              if (value != null) {
+                indLabel = "Índice morfológico";
+                activeText = "text-foreground font-semibold";
               }
             }
             return (
@@ -765,13 +837,13 @@ function EvaluationDetailDialog({
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {ind.label}
                   </span>
-                  <span className={cn("text-[10px] font-semibold", styles.text)}>{indLabel}</span>
+                  <span className={cn("text-[10px] font-semibold", activeText)}>{indLabel}</span>
                 </div>
                 <div className="mt-1 flex items-baseline gap-1.5">
                   <span className="font-display text-2xl font-bold tabular-nums">
-                    {value != null ? formatNumber(value, ind.unit) : "—"}
+                    {value != null ? formatNumber(value, ind.unit, ind.key === "wingspan_ratio") : "—"}
                   </span>
-                  <span className="text-[11px] text-muted-foreground">{ind.unit}</span>
+                  {ind.unit && <span className="text-[11px] text-muted-foreground">{ind.unit}</span>}
                 </div>
                 <div className="mt-2">
                   <ClinicalBar value={value} range={range} status={status} />
@@ -812,7 +884,7 @@ function EvaluationDetailDialog({
 function TestEvolutionDialog({
   testKey, data, sex, open, onOpenChange,
 }: {
-  testKey: ClassificationKey | null;
+  testKey: IndicatorKey | null;
   data: EvalRow[];
   sex: "male" | "female";
   open: boolean;
@@ -823,19 +895,16 @@ function TestEvolutionDialog({
     if (!ind) return [] as { id: string; date: string; label: string; value: number | null; zone: Zone | undefined; age_years?: number | null; age_months?: number | null }[];
     return data
       .filter((ev) => {
-        const rec = ev.recorded_values;
-        if (rec) return rec[ind.field] != null;
-        return num(ev, ind.field) != null;
+        return getIndicatorValue(ev, ind) != null;
       })
       .map((ev) => {
-        const rec = ev.recorded_values;
-        const v = rec ? rec[ind.field] : num(ev, ind.field);
+        const v = getIndicatorValue(ev, ind);
         return {
           id: ev.id,
           date: ev.evaluated_at,
           label: formatDateBR(ev.evaluated_at, { day: "2-digit", month: "2-digit", year: "2-digit" }),
           value: v,
-          zone: (ev.recorded_classifications ?? ev.classifications)?.[ind.key],
+          zone: (ev.recorded_classifications ?? ev.classifications)?.[ind.key as ClassificationKey],
           age_years: ev.age_years,
           age_months: (ev as any).age_months,
         };
@@ -844,7 +913,7 @@ function TestEvolutionDialog({
 
   if (!ind) return null;
   const lastEv = data[data.length - 1];
-  const range = expectedRangeFor(ind.key, lastEv?.age_years ?? 0, sex, (lastEv as any)?.age_months ?? undefined);
+  const range = expectedRangeFor(ind.key as ClassificationKey, lastEv?.age_years ?? 0, sex, (lastEv as any)?.age_months ?? undefined);
   const first = rows[0]?.value ?? null;
   const latest = rows[rows.length - 1]?.value ?? null;
   const { diff, positive } = pct(latest, rows.length > 1 ? first : null, ind.higherBetter);
@@ -895,6 +964,7 @@ function TestEvolutionDialog({
           {[...rows].reverse().map((r) => {
             const styles = STATUS_STYLE[zoneToClinical(r.zone)];
             let rowLabel = r.zone ?? styles.label;
+            let activeText = styles.text;
             if (ind.key === "imc" && r.value != null) {
               const evAge = r.age_years ?? lastEv?.age_years ?? 0;
               if (evAge < 5) {
@@ -904,14 +974,24 @@ function TestEvolutionDialog({
                 const band = evAge >= 20 ? imcAdultBand(r.value) : imcBand(r.value, sex, months);
                 rowLabel = IMC_BAND_LABEL[band];
               }
+            } else if (ind.key === "waist" || ind.key === "wingspan") {
+              if (r.value != null) {
+                rowLabel = "Medida corporal";
+                activeText = "text-foreground font-semibold";
+              }
+            } else if (ind.key === "wingspan_ratio") {
+              if (r.value != null) {
+                rowLabel = "Índice morfológico";
+                activeText = "text-foreground font-semibold";
+              }
             }
             return (
               <div key={r.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
                 <span className="text-muted-foreground">{formatDateBR(r.date)}</span>
                 <span className="font-mono font-semibold tabular-nums">
-                  {r.value != null ? formatNumber(r.value, ind.unit) : "—"} {ind.unit}
+                  {r.value != null ? formatNumber(r.value, ind.unit, ind.key === "wingspan_ratio") : "—"}{ind.unit ? ` ${ind.unit}` : ""}
                 </span>
-                <span className={cn("text-[10px] font-semibold", styles.text)}>{rowLabel}</span>
+                <span className={cn("text-[10px] font-semibold", activeText)}>{rowLabel}</span>
               </div>
             );
           })}
@@ -952,10 +1032,12 @@ function InsightsPanel({ data, last, prev, classEvals }: { data: EvalRow[]; last
     const peerClassEvals = classEvals.filter((e) => e.student_id !== last.student_id && e.id !== last.id);
     const poolClass = peerClassEvals.length > 0 ? peerClassEvals : classEvals;
     if (poolClass.length >= 2) {
-      const motorInds = INDICATORS.filter((i) => i.key !== "imc" && i.key !== "rce");
+      const motorInds = INDICATORS.filter(
+        (i) => !["imc", "rce", "waist", "wingspan", "wingspan_ratio"].includes(i.key)
+      );
       for (const ind of motorInds) {
-        const v = num(last, ind.field);
-        const vals = poolClass.map((e) => num(e, ind.field)).filter((x): x is number => x != null);
+        const v = getIndicatorValue(last, ind);
+        const vals = poolClass.map((e) => getIndicatorValue(e, ind)).filter((x): x is number => x != null);
         if (v == null || !vals.length) continue;
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
         if (avg === 0) continue;
@@ -1000,7 +1082,7 @@ function InsightsPanel({ data, last, prev, classEvals }: { data: EvalRow[]; last
 // EVOLUÇÃO — Gráfico com seletor de métrica
 // ===========================================================================
 function EvolutionChart({ data }: { data: EvalRow[] }) {
-  const [metric, setMetric] = useState<ClassificationKey | "prometric">("prometric");
+  const [metric, setMetric] = useState<IndicatorKey | "prometric">("prometric");
   const ind = metric === "prometric" ? null : INDICATORS.find((i) => i.key === metric)!;
   const label = ind ? ind.label : "Índice ProMetric";
   const unit = ind ? ind.unit : "/100";
@@ -1009,8 +1091,7 @@ function EvolutionChart({ data }: { data: EvalRow[] }) {
   const series = data.map((e) => {
     let valor: number | null = null;
     if (ind) {
-      const rec = e.recorded_values;
-      valor = rec ? rec[ind.field] : num(e, ind.field);
+      valor = getIndicatorValue(e, ind);
     } else {
       const pm = prometricIndex(e.classifications ?? {});
       valor = pm.partial ? null : pm.score;
@@ -1041,7 +1122,7 @@ function EvolutionChart({ data }: { data: EvalRow[] }) {
             </p>
           )}
         </div>
-        <Select value={metric} onValueChange={(v) => setMetric(v as ClassificationKey | "prometric")}>
+        <Select value={metric} onValueChange={(v) => setMetric(v as IndicatorKey | "prometric")}>
           <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="prometric">Índice ProMetric</SelectItem>
@@ -1153,9 +1234,9 @@ function ComparativeTab({ last, classEvals, schoolEvals }: { last: EvalRow; clas
   const poolClass = peerClassEvals.length > 0 ? peerClassEvals : classEvals;
 
   const rows = INDICATORS.map((ind) => {
-    const v = num(last, ind.field);
-    const cVals = poolClass.map((e) => num(e, ind.field)).filter((x): x is number => x != null);
-    const sVals = schoolEvals.map((e) => num(e, ind.field)).filter((x): x is number => x != null);
+    const v = getIndicatorValue(last, ind);
+    const cVals = poolClass.map((e) => getIndicatorValue(e, ind)).filter((x): x is number => x != null);
+    const sVals = schoolEvals.map((e) => getIndicatorValue(e, ind)).filter((x): x is number => x != null);
     const cAvg = cVals.length ? cVals.reduce((a, b) => a + b, 0) / cVals.length : null;
     const sAvg = sVals.length ? sVals.reduce((a, b) => a + b, 0) / sVals.length : null;
     const cDiff = pct(v, cAvg, ind.higherBetter);
@@ -1198,9 +1279,9 @@ function ComparativeTab({ last, classEvals, schoolEvals }: { last: EvalRow; clas
             {rows.map((r) => (
               <tr key={r.key}>
                 <td className="px-4 py-3 font-medium">{r.label}</td>
-                <td className="px-4 py-3 text-right font-mono">{r.v != null ? `${formatNumber(r.v, r.unit)}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
-                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.cAvg != null ? `${formatNumber(r.cAvg, r.unit)}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
-                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.sAvg != null ? `${formatNumber(r.sAvg, r.unit)}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
+                <td className="px-4 py-3 text-right font-mono">{r.v != null ? `${formatNumber(r.v, r.unit, r.key === "wingspan_ratio")}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
+                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.cAvg != null ? `${formatNumber(r.cAvg, r.unit, r.key === "wingspan_ratio")}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
+                <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.sAvg != null ? `${formatNumber(r.sAvg, r.unit, r.key === "wingspan_ratio")}${r.unit ? ` ${r.unit}` : ""}` : "—"}</td>
                 <td className="px-4 py-3 text-right">
                   {r.cDiff.diff != null ? (
                     <span className={cn(
@@ -1685,16 +1766,18 @@ function RankingPanel({ last, classEvals }: { last: EvalRow; classEvals: EvalRow
     const pool = classEvals.some((e) => e.id === last.id) ? classEvals : [...classEvals, last];
     const total = pool.length;
 
-    // Por indicador (apenas testes motores funcionais — IMC e RCE são parâmetros clínicos de saúde/triagem, não competição esportiva)
-    const motorIndicators = INDICATORS.filter((ind) => ind.key !== "imc" && ind.key !== "rce");
+    // Por indicador (apenas testes motores funcionais — parâmetros clínicos/morfológicos não são competição esportiva)
+    const motorIndicators = INDICATORS.filter(
+      (ind) => !["imc", "rce", "waist", "wingspan", "wingspan_ratio"].includes(ind.key)
+    );
     const indRows = motorIndicators.map((ind) => {
       const vals = pool
-        .map((e) => ({ id: e.id, v: num(e, ind.field) }))
+        .map((e) => ({ id: e.id, v: getIndicatorValue(e, ind) }))
         .filter((x): x is { id: string; v: number } => x.v != null);
-      if (!vals.length) return { label: ind.label, position: null as number | null, total: vals.length, unit: ind.unit, value: num(last, ind.field) };
+      if (!vals.length) return { label: ind.label, position: null as number | null, total: vals.length, unit: ind.unit, value: getIndicatorValue(last, ind) };
       vals.sort((a, b) => (ind.higherBetter ? b.v - a.v : a.v - b.v));
       const idx = vals.findIndex((x) => x.id === last.id);
-      return { label: ind.label, position: idx >= 0 ? idx + 1 : null, total: vals.length, unit: ind.unit, value: num(last, ind.field) };
+      return { label: ind.label, position: idx >= 0 ? idx + 1 : null, total: vals.length, unit: ind.unit, value: getIndicatorValue(last, ind) };
     });
 
     // Índice geral (apenas para avaliações com dados suficientes)
@@ -1916,7 +1999,7 @@ function QuickMeasureDialog({
   open, onOpenChange, studentId, tenantId, student, onSaved,
 }: {
   open: boolean;
-  onOpenChange: (b: boolean) => void;
+  onOpenChange: (open: boolean) => void;
   studentId: string;
   tenantId: string | null;
   student: { full_name: string; sex: "male" | "female"; birth_date: string };
@@ -1925,15 +2008,16 @@ function QuickMeasureDialog({
   const [weight, setWeight] = useState("");
   const [height, setHeight] = useState("");
   const [waist, setWaist] = useState("");
+  const [wingspan, setWingspan] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setWeight(""); setHeight(""); setWaist("");
+    setWeight(""); setHeight(""); setWaist(""); setWingspan("");
     (async () => {
       const { data } = await supabase
         .from("evaluations")
-        .select("weight_kg,height_cm,waist_cm")
+        .select("weight_kg,height_cm,waist_cm,wingspan_cm")
         .eq("student_id", studentId)
         .order("evaluated_at", { ascending: false })
         .limit(1).maybeSingle();
@@ -1942,6 +2026,8 @@ function QuickMeasureDialog({
         if (data.height_cm != null) setHeight(String(data.height_cm));
         const w = (data as { waist_cm: number | null }).waist_cm;
         if (w != null) setWaist(String(w));
+        const wg = (data as { wingspan_cm: number | null }).wingspan_cm;
+        if (wg != null) setWingspan(String(wg));
       }
     })();
   }, [open, studentId]);
@@ -1955,7 +2041,8 @@ function QuickMeasureDialog({
     const w = weight ? parseVal(weight) : null;
     let h = height ? parseVal(height) : null;
     const c = waist ? parseVal(waist) : null;
-    if (w == null && h == null && c == null) { toast.error("Preencha ao menos um campo"); return; }
+    const wg = wingspan ? parseVal(wingspan) : null;
+    if (w == null && h == null && c == null && wg == null) { toast.error("Preencha ao menos um campo"); return; }
 
     if (h != null) {
       const hNorm = normalizeHeight(h);
@@ -1976,6 +2063,10 @@ function QuickMeasureDialog({
       const v = validateField("waist_cm", c);
       if (!v.valid) { toast.error(v.message); return; }
     }
+    if (wg != null) {
+      const v = validateField("wingspan_cm", wg);
+      if (!v.valid) { toast.error(v.message); return; }
+    }
 
     setSaving(true);
     try {
@@ -1991,6 +2082,7 @@ function QuickMeasureDialog({
       if (w != null) payload.weight_kg = w;
       if (h != null) payload.height_cm = h;
       if (c != null) payload.waist_cm = c;
+      if (wg != null) payload.wingspan_cm = wg;
       if (imc != null) payload.imc = imc;
       if (rce != null) payload.rce = rce;
       const { error } = await supabase
@@ -2009,13 +2101,13 @@ function QuickMeasureDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Atualizar peso, altura e cintura</DialogTitle>
+          <DialogTitle>Atualizar medidas corporais</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">{student.full_name} — registro de hoje</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Peso (kg)</Label>
               <Input type="number" step="0.1" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} />
@@ -2040,6 +2132,10 @@ function QuickMeasureDialog({
             <div className="space-y-1.5">
               <Label className="text-xs">Cintura (cm)</Label>
               <Input type="number" step="0.1" inputMode="decimal" value={waist} onChange={(e) => setWaist(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Envergadura (cm)</Label>
+              <Input type="number" step="0.1" inputMode="decimal" value={wingspan} onChange={(e) => setWingspan(e.target.value)} />
             </div>
           </div>
         </div>

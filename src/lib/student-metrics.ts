@@ -120,6 +120,8 @@ export function latestRecordedValue<T extends EvalLike>(
 export const NUMERIC_EVAL_FIELDS = [
   "weight_kg",
   "height_cm",
+  "waist_cm",
+  "wingspan_cm",
   "waist_circumference_cm",
   "imc",
   "rce",

@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTenant } from "@/hooks/use-tenant";
 import { PageHeader, EmptyState } from "@/components/layout/page-header";
 import {
-  TEST_META, ageFromBirth, calcImc, calcRce, classifyAll, overallScore, zoneColor, isEarlyChildhoodAge,
+  TEST_META, ageFromBirth, calcImc, calcRce, calcWingspanHeightRatio, classifyAll, overallScore, zoneColor, isEarlyChildhoodAge,
   type Classifications, type Sex,
 } from "@/lib/proesp";
 import { prometricIndex, categoryColor } from "@/lib/prometric-method";
@@ -594,6 +594,22 @@ function EvaluationDetail({
                   </div>
                 );
               })}
+              <div className="rounded-lg border border-border bg-gradient-card p-2">
+                <div className="text-[10px] uppercase text-muted-foreground">Cintura</div>
+                <div className="font-display text-sm font-bold">{(ev as any).waist_cm ?? "—"}<span className="text-[10px] font-normal text-muted-foreground"> cm</span></div>
+              </div>
+              <div className="rounded-lg border border-border bg-gradient-card p-2">
+                <div className="text-[10px] uppercase text-muted-foreground">Envergadura</div>
+                <div className="font-display text-sm font-bold">{(ev as any).wingspan_cm ?? "—"}<span className="text-[10px] font-normal text-muted-foreground"> cm</span></div>
+              </div>
+              <div className="rounded-lg border border-border bg-gradient-card p-2">
+                <div className="text-[10px] uppercase text-muted-foreground">Relação Env/Alt</div>
+                <div className="font-display text-sm font-bold">
+                  {calcWingspanHeightRatio((ev as any).wingspan_cm, (ev as any).height_cm) != null
+                    ? calcWingspanHeightRatio((ev as any).wingspan_cm, (ev as any).height_cm)!.toFixed(2).replace(".", ",")
+                    : "—"}
+                </div>
+              </div>
             </div>
 
             <div className="rounded-xl border border-border bg-gradient-card p-3">

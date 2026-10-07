@@ -108,6 +108,8 @@ type EvalLite = {
   age_months?: number | null;
   weight_kg?: number | null;
   height_cm?: number | null;
+  waist_cm?: number | null;
+  wingspan_cm?: number | null;
   imc?: number | null;
   rce?: number | null;
   classifications: Classifications | null;
@@ -188,7 +190,7 @@ export async function downloadStudentEvolutionPDF(
       .maybeSingle(),
     supabase
       .from("evaluations")
-      .select("id, evaluated_at, age_years, age_months, weight_kg, height_cm, imc, rce, classifications")
+      .select("id, evaluated_at, age_years, age_months, weight_kg, height_cm, waist_cm, wingspan_cm, imc, rce, classifications")
       .eq("student_id", studentId)
       .order("evaluated_at", { ascending: true }),
     supabase
@@ -480,6 +482,9 @@ export async function downloadStudentEvolutionPDF(
     const parts: string[] = [];
     if (last.height_cm) parts.push(`${last.height_cm} cm`);
     if (last.weight_kg) parts.push(`${last.weight_kg} kg`);
+    if (last.waist_cm) parts.push(`Cintura ${last.waist_cm} cm`);
+    if (last.wingspan_cm) parts.push(`Envergadura ${last.wingspan_cm} cm`);
+    if (last.wingspan_cm && last.height_cm) parts.push(`Env/Alt ${(last.wingspan_cm / last.height_cm).toFixed(2).replace(".", ",")}`);
     if (last.imc != null) {
       const a = ageY ?? 10;
       const m = ageM ?? (a >= 20 ? 240 : a * 12 + 6);

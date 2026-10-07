@@ -88,6 +88,11 @@ export function calcRce(waistCm?: number | null, heightCm?: number | null): numb
   return +(waistCm / heightCm).toFixed(3);
 }
 
+export function calcWingspanHeightRatio(wingspanCm?: number | null, heightCm?: number | null): number | null {
+  if (!wingspanCm || !heightCm || wingspanCm <= 0 || heightCm <= 0) return null;
+  return +(wingspanCm / heightCm).toFixed(2);
+}
+
 /**
  * IMC zonas (saúde) — referência oficial OMS 2007 (61–228 meses) por idade e sexo.
  * Fora de 61–228 meses: sem referência oficial (retorna null). Adultos (20+): faixas de adulto.
