@@ -22,6 +22,8 @@ export const Route = createFileRoute("/sitemap.xml")({
           { path: "/blog/como-calcular-imc-escolar", changefreq: "monthly", priority: "0.7" },
           { path: "/blog/avaliacao-fisica-educacao-fisica-escolar", changefreq: "monthly", priority: "0.7" },
           { path: "/blog/beneficios-avaliacao-fisica-escolas", changefreq: "monthly", priority: "0.7" },
+          { path: "/politica-de-privacidade", changefreq: "monthly", priority: "0.6" },
+          { path: "/termos-de-servico", changefreq: "monthly", priority: "0.6" },
         ];
 
         const urls = entries

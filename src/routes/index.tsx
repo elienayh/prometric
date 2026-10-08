@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PrometricIcon } from "@/components/brand/prometric-logo";
+import { SiteHeader } from "@/components/layout/site-header";
+import { SiteFooter } from "@/components/layout/site-footer";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useHomePageConfig } from "@/hooks/use-homepage-config";
@@ -143,40 +145,6 @@ function Landing() {
       {config.visibility.showFooter && <SiteFooter footer={config.footer} />}
       <FloatingWhatsAppButton whatsapp={config.whatsapp} />
     </div>
-  );
-}
-
-/* ---------- Header ---------- */
-function SiteHeader() {
-  return (
-    <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        <Link to="/" className="flex items-center gap-2.5" aria-label="ProMetric — página inicial">
-          <PrometricIcon className="h-9 w-9" />
-          <span className="font-display text-lg font-bold tracking-tight">
-            Pro<span className="text-gradient-brand">Metric</span>
-          </span>
-        </Link>
-
-        <nav aria-label="Principal" className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
-          <a href="#o-que-e" className="transition-colors hover:text-foreground">O que é</a>
-          <a href="#metodo" className="transition-colors hover:text-foreground">Método</a>
-          <a href="#como-funciona" className="transition-colors hover:text-foreground">Como funciona</a>
-          <Link to="/blog" className="transition-colors hover:text-foreground">Blog</Link>
-          <a href="#faq" className="transition-colors hover:text-foreground">FAQ</a>
-        </nav>
-
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link to="/login">Entrar</Link>
-          </Button>
-          <Button asChild size="sm" className="bg-gradient-brand text-primary-foreground shadow-glow hover:opacity-90">
-            <Link to="/register">Criar conta</Link>
-          </Button>
-        </div>
-      </div>
-    </header>
   );
 }
 
@@ -761,36 +729,6 @@ function CtaBanner({ cta }: { cta?: HomePageConfig["ctaBanner"] }) {
         )}
       </div>
     </section>
-  );
-}
-
-/* ---------- Footer ---------- */
-function SiteFooter({ footer }: { footer?: HomePageConfig["footer"] }) {
-  const brandTagline = footer?.brandTagline || "ProMetric — Avaliação Física Inteligente com IA.";
-  const copyrightText = footer?.copyrightText || `© ${new Date().getFullYear()} ProMetric`;
-
-  return (
-    <footer className="border-t border-border bg-secondary/30">
-      <div className="mx-auto max-w-7xl px-6 py-10">
-        <div className="flex flex-col items-center justify-between gap-3 md:flex-row">
-          <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-            <PrometricIcon className="h-5 w-5" />
-            <span>{brandTagline}</span>
-          </div>
-          <nav aria-label="Rodapé" className="flex items-center gap-5 text-xs text-muted-foreground">
-            <Link to="/blog" className="hover:text-foreground">Blog</Link>
-            <Link to="/login" className="hover:text-foreground">Entrar</Link>
-            <a href="#faq" className="hover:text-foreground">FAQ</a>
-            <span>{copyrightText}</span>
-          </nav>
-        </div>
-        <p className="mx-auto mt-6 max-w-3xl text-center text-[11px] leading-relaxed text-muted-foreground/80">
-          O Método ProMetric® foi desenvolvido com base em referências científicas e protocolos
-          reconhecidos de avaliação física, ampliados com tecnologia, automação e inteligência
-          artificial.
-        </p>
-      </div>
-    </footer>
   );
 }
 
