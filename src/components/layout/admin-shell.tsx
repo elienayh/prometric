@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import {
   ArrowLeft, BarChart3, Building2, ChevronDown, DollarSign, FileText, FlaskConical,
-  LayoutDashboard, LifeBuoy, LogOut, Menu, Receipt, Shield, ShieldCheck, X,
+  Globe, LayoutDashboard, LifeBuoy, LogOut, Menu, Receipt, Shield, ShieldCheck, X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh bg-background">
       <aside className="relative z-10 hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar/95 backdrop-blur lg:flex lg:flex-col">
-        <SidebarContent items={items} />
+        <SidebarContent items={items} isSuperAdmin={perms.isSuperAdmin} />
       </aside>
 
       <AnimatePresence>
@@ -64,7 +64,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <SidebarContent items={items} onNavigate={() => setOpen(false)} />
+              <SidebarContent items={items} isSuperAdmin={perms.isSuperAdmin} onNavigate={() => setOpen(false)} />
             </motion.aside>
           </>
         )}
@@ -95,7 +95,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
   );
 }
 
-function SidebarContent({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
+function SidebarContent({
+  items,
+  isSuperAdmin,
+  onNavigate,
+}: {
+  items: NavItem[];
+  isSuperAdmin?: boolean;
+  onNavigate?: () => void;
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <>
@@ -127,6 +135,27 @@ function SidebarContent({ items, onNavigate }: { items: NavItem[]; onNavigate?: 
             </Link>
           );
         })}
+
+        {isSuperAdmin && (
+          <div className="pt-3 mt-3 border-t border-sidebar-border/60">
+            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-sidebar-foreground/50">
+              Site
+            </div>
+            <Link
+              to="/admin/homepage"
+              onClick={onNavigate}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                (pathname === "/admin/homepage" || pathname.startsWith("/admin/homepage/"))
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+              )}
+            >
+              <Globe className={cn("h-4 w-4 shrink-0", (pathname === "/admin/homepage" || pathname.startsWith("/admin/homepage/")) && "text-primary")} />
+              <span className="truncate">Editar Home</span>
+            </Link>
+          </div>
+        )}
       </nav>
     </>
   );

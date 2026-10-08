@@ -13,70 +13,54 @@ import { PrometricIcon } from "@/components/brand/prometric-logo";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useHomePageConfig } from "@/hooks/use-homepage-config";
-import type { HomePageConfig } from "@/lib/homepage-cms";
+import { DEFAULT_HOMEPAGE_CONFIG, type HomePageConfig } from "@/lib/homepage-cms";
 
 const SITE_URL = typeof window !== "undefined" ? window.location.origin : (process.env.APP_URL || "");
 const OG_IMAGE = "/og-cover.jpg";
 
-const FAQ_ITEMS: { q: string; a: string }[] = [
-  { q: "O que é o Método ProMetric®?", a: "É a metodologia proprietária do ProMetric para Avaliação Física Integrada. Combina antropometria, testes motores e cardiorrespiratórios em 5 dimensões (Saúde Corporal, Resistência, Mobilidade, Potência e Velocidade & Agilidade), gerando o Índice ProMetric® de 0 a 100." },
-  { q: "Como funciona o Índice ProMetric®?", a: "O Índice ProMetric® é um score de 0 a 100 que sintetiza o desempenho do aluno em 5 dimensões. Os resultados são classificados em 5 categorias: Crítico, Atenção, Em Desenvolvimento, Bom e Excelente — sempre considerando idade e sexo." },
-  { q: "Como realizar uma avaliação física escolar?", a: "Cadastre a turma, aplique os testes da Avaliação Física Integrada ProMetric em até duas aulas, registre os resultados pelo celular e o sistema gera o Índice ProMetric® e o relatório individual automaticamente." },
-  { q: "Como calcular o IMC escolar?", a: "IMC = peso (kg) ÷ altura² (m). Em escolares, a classificação considera idade e sexo. O ProMetric faz o cálculo e a interpretação automaticamente dentro da dimensão Saúde Corporal." },
-  { q: "Como gerar relatórios de avaliação física?", a: "Após registrar as avaliações, basta clicar em Gerar Relatório. O ProMetric monta um PDF profissional individual, por turma ou por escola, em segundos — com o Índice ProMetric® e o Perfil de Desenvolvimento Físico de cada aluno." },
-  { q: "Posso usar o ProMetric em academias?", a: "Sim. Personal trainers e academias usam o ProMetric para padronizar avaliações físicas, acompanhar evolução e entregar relatórios profissionais aos alunos." },
-  { q: "Posso usar em clubes esportivos?", a: "Sim. Clubes utilizam para triagem de atletas, controle de cargas e relatórios de desempenho por categoria." },
-  { q: "Como funciona a avaliação em lote?", a: "O Modo Quadra permite avaliar a turma inteira em sequência, sem retrabalho: digitou, salvou, próximo aluno." },
-  { q: "Como acompanhar a evolução dos alunos?", a: "Cada aluno tem histórico cronológico com Radar ProMetric® comparativo, permitindo medir o impacto pedagógico ao longo do ano." },
-  { q: "O sistema funciona pelo celular?", a: "Sim. O ProMetric é mobile-first e otimizado para uso na quadra, mesmo em conexões instáveis." },
-  { q: "O sistema gera PDF?", a: "Sim. Relatórios individuais, por turma e institucionais em PDF profissional, prontos para enviar à família e à direção." },
-  { q: "O sistema possui inteligência artificial?", a: "Sim. A IA gera parecer técnico, mensagem para a família e metas personalizadas de 30/60/90 dias por aluno." },
-  { q: "Como funciona o histórico do aluno?", a: "Cada avaliação fica registrada cronologicamente, com Perfil de Desenvolvimento Físico ProMetric em cada momento." },
-  { q: "Posso cadastrar turmas?", a: "Sim. Você organiza alunos por turma, série, escola ou clube, com filtros e permissões por professor." },
-  { q: "Existe versão gratuita e como funcionam os planos?", a: "Sim. O ProMetric oferece plano Gratuito livre para sempre até 30 alunos/usuários, sem necessidade de cartão de crédito. Para turmas maiores e recursos avançados, o plano Pro oferece alunos ilimitados, relatórios completos e suporte prioritário. A tabela completa de planos está disponível na sua conta." },
-];
-
-const STRUCTURED_DATA = [
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    name: "ProMetric",
-    url: SITE_URL,
-    logo: `${SITE_URL}/prometric-icon.png`,
-    description: "Plataforma de Avaliação Física Integrada baseada no Método ProMetric®.",
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: "ProMetric",
-    url: SITE_URL,
-    inLanguage: "pt-BR",
-    potentialAction: {
-      "@type": "SearchAction",
-      target: `${SITE_URL}/blog?q={search_term_string}`,
-      "query-input": "required name=search_term_string",
+function getStructuredData(faqItems: { q: string; a: string }[]) {
+  return [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "ProMetric",
+      url: SITE_URL,
+      logo: `${SITE_URL}/prometric-icon.png`,
+      description: "Plataforma de Avaliação Física Integrada baseada no Método ProMetric®.",
     },
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "ProMetric",
-    applicationCategory: "EducationalApplication",
-    operatingSystem: "Web Browser",
-    description: "Sistema de Avaliação Física Inteligente com IA. Método ProMetric®, Índice 0–100, relatórios automáticos e diagnóstico por IA.",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "BRL" },
-    aggregateRating: { "@type": "AggregateRating", ratingValue: "4.9", ratingCount: "120" },
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: FAQ_ITEMS.map((it) => ({
-      "@type": "Question",
-      name: it.q,
-      acceptedAnswer: { "@type": "Answer", text: it.a },
-    })),
-  },
-];
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "ProMetric",
+      url: SITE_URL,
+      inLanguage: "pt-BR",
+      potentialAction: {
+        "@type": "SearchAction",
+        target: `${SITE_URL}/blog?q={search_term_string}`,
+        "query-input": "required name=search_term_string",
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "ProMetric",
+      applicationCategory: "EducationalApplication",
+      operatingSystem: "Web Browser",
+      description: "Sistema de Avaliação Física Inteligente com IA. Método ProMetric®, Índice 0–100, relatórios automáticos e diagnóstico por IA.",
+      offers: { "@type": "Offer", price: "0", priceCurrency: "BRL" },
+      aggregateRating: { "@type": "AggregateRating", ratingValue: "4.9", ratingCount: "120" },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: (faqItems || []).map((it) => ({
+        "@type": "Question",
+        name: it.q,
+        acceptedAnswer: { "@type": "Answer", text: it.a },
+      })),
+    },
+  ];
+}
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -94,7 +78,7 @@ export const Route = createFileRoute("/")({
       { name: "twitter:image", content: OG_IMAGE },
     ],
     links: [{ rel: "canonical", href: SITE_URL }],
-    scripts: STRUCTURED_DATA.map((d) => ({
+    scripts: getStructuredData(DEFAULT_HOMEPAGE_CONFIG.faq.items).map((d) => ({
       type: "application/ld+json",
       children: JSON.stringify(d),
     })),
@@ -116,9 +100,20 @@ export const Route = createFileRoute("/")({
 
 function Landing() {
   const { config } = useHomePageConfig();
+  const currentFaqItems = config.faq?.items?.length ? config.faq.items : DEFAULT_HOMEPAGE_CONFIG.faq.items;
+  const structuredData = getStructuredData(currentFaqItems);
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
+      {/* JSON-LD Schema sincronizado com CMS */}
+      {structuredData.map((d, idx) => (
+        <script
+          key={idx}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(d) }}
+        />
+      ))}
+
       {config.visibility.showAnnouncement && config.announcement.text && (
         <div className="bg-primary px-3 py-2 text-center text-xs font-medium text-primary-foreground">
           <span>{config.announcement.text} </span>
@@ -146,6 +141,7 @@ function Landing() {
         {config.visibility.showCtaBanner && <CtaBanner cta={config.ctaBanner} />}
       </main>
       {config.visibility.showFooter && <SiteFooter footer={config.footer} />}
+      <FloatingWhatsAppButton whatsapp={config.whatsapp} />
     </div>
   );
 }
@@ -687,7 +683,7 @@ function Faq({ faq }: { faq?: HomePageConfig["faq"] }) {
   const description =
     faq?.description ||
     "Tire suas dúvidas sobre o Método ProMetric®, Avaliação Física Integrada e o uso da plataforma.";
-  const items = faq?.items?.length ? faq.items : FAQ_ITEMS.map((it, i) => ({ id: "f" + i, q: it.q, a: it.a }));
+  const items = faq?.items?.length ? faq.items : DEFAULT_HOMEPAGE_CONFIG.faq.items;
 
   return (
     <section id="faq" className="border-t border-border">
@@ -808,5 +804,43 @@ function SectionHeader({
       <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl">{title}</h2>
       <p className="mt-3 text-base leading-relaxed text-muted-foreground">{description}</p>
     </div>
+  );
+}
+
+/* ---------- Botão Flutuante Discreto WhatsApp ---------- */
+function FloatingWhatsAppButton({ whatsapp }: { whatsapp?: HomePageConfig["whatsapp"] }) {
+  if (!whatsapp?.enabled) return null;
+
+  const rawNumber = (whatsapp.phoneNumber || "").replace(/\D/g, "");
+  const defaultText = whatsapp.defaultMessage || "Olá! Gostaria de saber mais sobre o ProMetric.";
+  const encodedMessage = encodeURIComponent(defaultText);
+  const href = rawNumber
+    ? `https://wa.me/${rawNumber}?text=${encodedMessage}`
+    : `https://wa.me/?text=${encodedMessage}`;
+
+  return (
+    <aside aria-label="Atendimento via WhatsApp" className="fixed bottom-6 right-6 z-50 animate-fade-in">
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Falar conosco via WhatsApp"
+        className="group flex items-center gap-2.5 rounded-full bg-[#25D366] px-4 py-3 text-white shadow-lg transition-all duration-300 hover:scale-105 hover:bg-[#20ba5a] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          stroke="currentColor"
+          strokeWidth="0"
+          fill="currentColor"
+          className="h-5 w-5 fill-white"
+          aria-hidden="true"
+        >
+          <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.65 3.742-.983zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+        </svg>
+        <span className="text-xs font-semibold tracking-wide">WhatsApp</span>
+      </a>
+    </aside>
   );
 }

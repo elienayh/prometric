@@ -48,9 +48,102 @@ import {
   Award,
   DollarSign,
   AlertCircle,
+  Building2,
+  HeartPulse,
+  Timer,
+  Dumbbell,
+  Megaphone,
+  Compass,
+  Phone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PrometricIcon } from "@/components/brand/prometric-logo";
+
+function StringListEditor({
+  title,
+  items = [],
+  onChange,
+  placeholder = "Novo item...",
+  addButtonLabel = "Adicionar",
+}: {
+  title: string;
+  items?: string[];
+  onChange: (items: string[]) => void;
+  placeholder?: string;
+  addButtonLabel?: string;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const handleAdd = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onChange([...items, trimmed]);
+    setDraft("");
+  };
+
+  const handleUpdate = (idx: number, val: string) => {
+    const next = [...items];
+    next[idx] = val;
+    onChange(next);
+  };
+
+  const handleRemove = (idx: number) => {
+    onChange(items.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="space-y-1.5 pt-1">
+      <div className="flex items-center justify-between">
+        <Label className="text-[11px] font-semibold">{title}</Label>
+        <span className="text-[10px] text-muted-foreground">{items.length} itens</span>
+      </div>
+      <div className="space-y-1.5">
+        {items.map((it, idx) => (
+          <div key={idx} className="flex items-center gap-1.5">
+            <Input
+              className="h-7 text-xs flex-1"
+              value={it}
+              onChange={(e) => handleUpdate(idx, e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+              onClick={() => handleRemove(idx)}
+              title="Remover item"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        <div className="flex items-center gap-1.5 pt-0.5">
+          <Input
+            className="h-7 text-xs flex-1"
+            placeholder={placeholder}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleAdd();
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs shrink-0"
+            onClick={handleAdd}
+          >
+            <Plus className="mr-1 h-3 w-3" /> {addButtonLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function HomepageVisualEditor() {
   const { config: initialConfig, isSaving, saveConfig, resetConfig } = useHomePageConfig();
@@ -97,6 +190,33 @@ export function HomepageVisualEditor() {
         ...prev.visibility,
         [key]: val,
       },
+      ...(key === "showWhatsapp"
+        ? {
+            whatsapp: {
+              ...prev.whatsapp,
+              enabled: val,
+            },
+          }
+        : {}),
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const updateWhatsapp = (patch: Partial<HomePageConfig["whatsapp"]>) => {
+    setForm((prev) => ({
+      ...prev,
+      whatsapp: {
+        ...prev.whatsapp,
+        ...patch,
+      },
+      ...(patch.enabled !== undefined
+        ? {
+            visibility: {
+              ...prev.visibility,
+              showWhatsapp: patch.enabled,
+            },
+          }
+        : {}),
     }));
     setHasUnsavedChanges(true);
   };
@@ -296,7 +416,7 @@ export function HomepageVisualEditor() {
             </Button>
           </label>
 
-          {/* Restaurar */}
+          {/* Restaurar padrão */}
           <Button
             type="button"
             variant="ghost"
@@ -306,18 +426,18 @@ export function HomepageVisualEditor() {
             title="Restaurar padrão original ProMetric"
           >
             <RotateCcw className="mr-1 h-3.5 w-3.5" />
-            Padrão
+            Restaurar padrão
           </Button>
 
-          {/* Abrir Home */}
+          {/* Visualizar Home */}
           <Button asChild variant="outline" size="sm" className="h-8 text-xs">
             <a href="/" target="_blank" rel="noreferrer">
               <ExternalLink className="mr-1 h-3.5 w-3.5" />
-              Ver no Site
+              Visualizar Home
             </a>
           </Button>
 
-          {/* Salvar */}
+          {/* Salvar e publicar */}
           <Button
             type="button"
             size="sm"
@@ -326,7 +446,7 @@ export function HomepageVisualEditor() {
             className="h-8 bg-gradient-brand text-xs font-semibold text-primary-foreground shadow-glow hover:opacity-95"
           >
             {isSaving ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
-            Salvar e Publicar
+            Salvar e publicar
           </Button>
         </div>
       </div>
@@ -351,27 +471,29 @@ export function HomepageVisualEditor() {
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Layers className="h-4 w-4 text-indigo-500" />
-                      Visibilidade das Seções (Ligar/Desligar)
+                      Visibilidade dos Blocos (Ligar / Desligar)
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
                     <p className="text-xs text-muted-foreground">
-                      Controle quais blocos aparecem publicamente na página inicial:
+                      Ative ou desative a exibição dos blocos na página inicial pública:
                     </p>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       {[
-                        { key: "showHero", label: "Hero Principal" },
-                        { key: "showStats", label: "Métricas & Stats" },
+                        { key: "showAnnouncement", label: "Aviso do Topo" },
+                        { key: "showHero", label: "Hero (Capa)" },
+                        { key: "showStats", label: "Indicadores & Métricas" },
                         { key: "showWhatIs", label: "O que é o ProMetric" },
-                        { key: "showMethodology", label: "5 Dimensões" },
+                        { key: "showMethodology", label: "Método (5 Dimensões)" },
                         { key: "showHowItWorks", label: "Como Funciona" },
                         { key: "showForSchools", label: "Para Escolas" },
                         { key: "showForTeachers", label: "Para Professores" },
                         { key: "showTestimonials", label: "Depoimentos" },
                         { key: "showPricing", label: "Planos & Preços" },
                         { key: "showFaq", label: "FAQ / Dúvidas" },
-                        { key: "showCtaBanner", label: "Banner Final CTA" },
-                        { key: "showAnnouncement", label: "Barra de Aviso Topo" },
+                        { key: "showCtaBanner", label: "CTA de Conversão" },
+                        { key: "showFooter", label: "Rodapé" },
+                        { key: "showWhatsapp", label: "Botão WhatsApp" },
                       ].map((s) => (
                         <label
                           key={s.key}
@@ -388,7 +510,59 @@ export function HomepageVisualEditor() {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 2. Hero Principal */}
+                {/* 2. Aviso (Announcement Bar) */}
+                <AccordionItem value="announcement" className="rounded-xl border border-border/80 px-3">
+                  <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Megaphone className="h-4 w-4 text-amber-500" />
+                      Aviso do Topo
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Aviso no Topo</span>
+                        <p className="text-[11px] text-muted-foreground">Barra destacada acima do menu</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showAnnouncement}
+                        onCheckedChange={(val) => updateVisibility("showAnnouncement", val)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Texto do Aviso</Label>
+                      <Textarea
+                        rows={2}
+                        className="mt-1 text-xs"
+                        value={form.announcement.text}
+                        onChange={(e) => updateSection("announcement", { text: e.target.value })}
+                        placeholder="Mensagem do anúncio..."
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Texto do Link</Label>
+                        <Input
+                          className="mt-1 h-8 text-xs"
+                          value={form.announcement.linkText}
+                          onChange={(e) => updateSection("announcement", { linkText: e.target.value })}
+                          placeholder="Saiba mais"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">URL do Link</Label>
+                        <Input
+                          className="mt-1 h-8 text-xs"
+                          value={form.announcement.linkUrl}
+                          onChange={(e) => updateSection("announcement", { linkUrl: e.target.value })}
+                          placeholder="#metodo ou /register"
+                        />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                {/* 3. Hero Principal */}
                 <AccordionItem value="hero" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
@@ -397,6 +571,16 @@ export function HomepageVisualEditor() {
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Hero</span>
+                        <p className="text-[11px] text-muted-foreground">Seção principal de abertura</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showHero}
+                        onCheckedChange={(val) => updateVisibility("showHero", val)}
+                      />
+                    </div>
                     <div>
                       <Label className="text-xs">Badge Superior</Label>
                       <Input
@@ -467,6 +651,15 @@ export function HomepageVisualEditor() {
                         />
                       </div>
                     </div>
+
+                    <StringListEditor
+                      title="Tags de Destaque no Hero"
+                      items={form.hero.tags || []}
+                      onChange={(newTags) => updateSection("hero", { tags: newTags })}
+                      placeholder="Ex: Gratuito até 30 alunos..."
+                      addButtonLabel="Adicionar Tag"
+                    />
+
                     <div>
                       <Label className="text-xs">Nota de Rodapé do Hero</Label>
                       <Input
@@ -478,18 +671,37 @@ export function HomepageVisualEditor() {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 3. Métricas e Estatísticas */}
+                {/* 4. Indicadores & Estatísticas */}
                 <AccordionItem value="stats" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Activity className="h-4 w-4 text-emerald-500" />
-                      Estatísticas & Métricas de Impacto
+                      Indicadores & Métricas
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Indicadores</span>
+                        <p className="text-[11px] text-muted-foreground">Números e métricas de impacto</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showStats}
+                        onCheckedChange={(val) => updateVisibility("showStats", val)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Título da Seção de Indicadores</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        value={form.stats.title || ""}
+                        onChange={(e) => updateSection("stats", { title: e.target.value })}
+                      />
+                    </div>
+
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-lg border border-border/70 p-2.5 bg-muted/20">
-                        <Label className="text-[11px] font-semibold">Métrica 1 (Valor)</Label>
+                        <Label className="text-[11px] font-semibold">Indicador 1 (Valor)</Label>
                         <Input
                           className="mt-1 h-7 text-xs font-bold text-primary"
                           value={form.stats.item1.value}
@@ -509,10 +721,20 @@ export function HomepageVisualEditor() {
                             })
                           }
                         />
+                        <Label className="mt-1.5 block text-[11px]">Sub-rótulo</Label>
+                        <Input
+                          className="mt-1 h-7 text-xs"
+                          value={form.stats.item1.sublabel || ""}
+                          onChange={(e) =>
+                            updateSection("stats", {
+                              item1: { ...form.stats.item1, sublabel: e.target.value },
+                            })
+                          }
+                        />
                       </div>
 
                       <div className="rounded-lg border border-border/70 p-2.5 bg-muted/20">
-                        <Label className="text-[11px] font-semibold">Métrica 2 (Valor)</Label>
+                        <Label className="text-[11px] font-semibold">Indicador 2 (Valor)</Label>
                         <Input
                           className="mt-1 h-7 text-xs font-bold text-primary"
                           value={form.stats.item2.value}
@@ -532,10 +754,20 @@ export function HomepageVisualEditor() {
                             })
                           }
                         />
+                        <Label className="mt-1.5 block text-[11px]">Sub-rótulo</Label>
+                        <Input
+                          className="mt-1 h-7 text-xs"
+                          value={form.stats.item2.sublabel || ""}
+                          onChange={(e) =>
+                            updateSection("stats", {
+                              item2: { ...form.stats.item2, sublabel: e.target.value },
+                            })
+                          }
+                        />
                       </div>
 
                       <div className="rounded-lg border border-border/70 p-2.5 bg-muted/20">
-                        <Label className="text-[11px] font-semibold">Métrica 3 (Valor)</Label>
+                        <Label className="text-[11px] font-semibold">Indicador 3 (Valor)</Label>
                         <Input
                           className="mt-1 h-7 text-xs font-bold text-primary"
                           value={form.stats.item3.value}
@@ -555,10 +787,20 @@ export function HomepageVisualEditor() {
                             })
                           }
                         />
+                        <Label className="mt-1.5 block text-[11px]">Sub-rótulo</Label>
+                        <Input
+                          className="mt-1 h-7 text-xs"
+                          value={form.stats.item3.sublabel || ""}
+                          onChange={(e) =>
+                            updateSection("stats", {
+                              item3: { ...form.stats.item3, sublabel: e.target.value },
+                            })
+                          }
+                        />
                       </div>
 
                       <div className="rounded-lg border border-border/70 p-2.5 bg-muted/20">
-                        <Label className="text-[11px] font-semibold">Métrica 4 (Valor)</Label>
+                        <Label className="text-[11px] font-semibold">Indicador 4 (Valor)</Label>
                         <Input
                           className="mt-1 h-7 text-xs font-bold text-primary"
                           value={form.stats.item4.value}
@@ -578,20 +820,40 @@ export function HomepageVisualEditor() {
                             })
                           }
                         />
+                        <Label className="mt-1.5 block text-[11px]">Sub-rótulo</Label>
+                        <Input
+                          className="mt-1 h-7 text-xs"
+                          value={form.stats.item4.sublabel || ""}
+                          onChange={(e) =>
+                            updateSection("stats", {
+                              item4: { ...form.stats.item4, sublabel: e.target.value },
+                            })
+                          }
+                        />
                       </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 4. O que é o ProMetric */}
+                {/* 5. O que é o ProMetric */}
                 <AccordionItem value="whatis" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Award className="h-4 w-4 text-blue-500" />
-                      Seção "O que é o ProMetric"
+                      O que é o ProMetric
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir "O que é"</span>
+                        <p className="text-[11px] text-muted-foreground">Âncora #o-que-e</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showWhatIs}
+                        onCheckedChange={(val) => updateVisibility("showWhatIs", val)}
+                      />
+                    </div>
                     <div>
                       <Label className="text-xs">Badge</Label>
                       <Input
@@ -618,44 +880,44 @@ export function HomepageVisualEditor() {
                       />
                     </div>
                     <div className="space-y-2 pt-2 border-t border-border/60">
-                      <div className="p-2 rounded-lg bg-muted/20">
+                      <div className="p-2.5 rounded-lg bg-muted/20 space-y-1.5">
                         <Label className="text-[11px] font-semibold">Card 1 (Título & Descrição)</Label>
                         <Input
-                          className="mt-1 h-7 text-xs font-medium"
+                          className="h-7 text-xs font-medium"
                           value={form.whatIs.card1Title}
                           onChange={(e) => updateSection("whatIs", { card1Title: e.target.value })}
                         />
                         <Textarea
                           rows={2}
-                          className="mt-1 text-xs"
+                          className="text-xs"
                           value={form.whatIs.card1Desc}
                           onChange={(e) => updateSection("whatIs", { card1Desc: e.target.value })}
                         />
                       </div>
-                      <div className="p-2 rounded-lg bg-muted/20">
+                      <div className="p-2.5 rounded-lg bg-muted/20 space-y-1.5">
                         <Label className="text-[11px] font-semibold">Card 2 (Título & Descrição)</Label>
                         <Input
-                          className="mt-1 h-7 text-xs font-medium"
+                          className="h-7 text-xs font-medium"
                           value={form.whatIs.card2Title}
                           onChange={(e) => updateSection("whatIs", { card2Title: e.target.value })}
                         />
                         <Textarea
                           rows={2}
-                          className="mt-1 text-xs"
+                          className="text-xs"
                           value={form.whatIs.card2Desc}
                           onChange={(e) => updateSection("whatIs", { card2Desc: e.target.value })}
                         />
                       </div>
-                      <div className="p-2 rounded-lg bg-muted/20">
+                      <div className="p-2.5 rounded-lg bg-muted/20 space-y-1.5">
                         <Label className="text-[11px] font-semibold">Card 3 (Título & Descrição)</Label>
                         <Input
-                          className="mt-1 h-7 text-xs font-medium"
+                          className="h-7 text-xs font-medium"
                           value={form.whatIs.card3Title}
                           onChange={(e) => updateSection("whatIs", { card3Title: e.target.value })}
                         />
                         <Textarea
                           rows={2}
-                          className="mt-1 text-xs"
+                          className="text-xs"
                           value={form.whatIs.card3Desc}
                           onChange={(e) => updateSection("whatIs", { card3Desc: e.target.value })}
                         />
@@ -664,72 +926,353 @@ export function HomepageVisualEditor() {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 5. Para Escolas e Professores */}
-                <AccordionItem value="audiences" className="rounded-xl border border-border/80 px-3">
+                {/* 6. Método ProMetric® (5 Dimensões) */}
+                <AccordionItem value="methodology" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-purple-500" />
-                      Públicos: Escolas & Professores
+                      <Compass className="h-4 w-4 text-violet-500" />
+                      Método ProMetric® (5 Dimensões)
                     </span>
                   </AccordionTrigger>
-                  <AccordionContent className="pt-2 pb-4 space-y-4">
-                    <div className="rounded-lg border border-border/70 p-3 bg-muted/10 space-y-2">
-                      <span className="text-xs font-bold text-foreground">Soluções para Escolas</span>
+                  <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
                       <div>
-                        <Label className="text-[11px]">Título</Label>
-                        <Input
-                          className="mt-1 h-7 text-xs"
-                          value={form.forSchools.title}
-                          onChange={(e) => updateSection("forSchools", { title: e.target.value })}
-                        />
+                        <span className="text-xs font-semibold">Exibir Metodologia</span>
+                        <p className="text-[11px] text-muted-foreground">Âncora #metodo</p>
                       </div>
-                      <div>
-                        <Label className="text-[11px]">Descrição</Label>
-                        <Textarea
-                          rows={2}
-                          className="mt-1 text-xs"
-                          value={form.forSchools.description}
-                          onChange={(e) => updateSection("forSchools", { description: e.target.value })}
-                        />
-                      </div>
+                      <Switch
+                        checked={form.visibility.showMethodology}
+                        onCheckedChange={(val) => updateVisibility("showMethodology", val)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Badge</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        value={form.methodology.badge}
+                        onChange={(e) => updateSection("methodology", { badge: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Título da Metodologia</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs font-semibold"
+                        value={form.methodology.title}
+                        onChange={(e) => updateSection("methodology", { title: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Descrição Geral</Label>
+                      <Textarea
+                        rows={2}
+                        className="mt-1 text-xs"
+                        value={form.methodology.description}
+                        onChange={(e) => updateSection("methodology", { description: e.target.value })}
+                      />
                     </div>
 
-                    <div className="rounded-lg border border-border/70 p-3 bg-muted/10 space-y-2">
-                      <span className="text-xs font-bold text-foreground">Para Professores & Treinadores</span>
-                      <div>
-                        <Label className="text-[11px]">Título</Label>
+                    <div className="space-y-2 pt-2 border-t border-border/60">
+                      <div className="p-2.5 rounded-lg bg-muted/20 space-y-1.5">
+                        <Label className="text-[11px] font-semibold">Dimensão 1: Saúde Corporal & Antropometria</Label>
                         <Input
-                          className="mt-1 h-7 text-xs"
-                          value={form.forTeachers.title}
-                          onChange={(e) => updateSection("forTeachers", { title: e.target.value })}
+                          className="h-7 text-xs font-medium"
+                          value={form.methodology.dim1Title}
+                          onChange={(e) => updateSection("methodology", { dim1Title: e.target.value })}
                         />
-                      </div>
-                      <div>
-                        <Label className="text-[11px]">Descrição</Label>
                         <Textarea
                           rows={2}
-                          className="mt-1 text-xs"
-                          value={form.forTeachers.description}
-                          onChange={(e) => updateSection("forTeachers", { description: e.target.value })}
+                          className="text-xs"
+                          value={form.methodology.dim1Desc}
+                          onChange={(e) => updateSection("methodology", { dim1Desc: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-muted/20 space-y-1.5">
+                        <Label className="text-[11px] font-semibold">Dimensão 2: Resistência</Label>
+                        <Input
+                          className="h-7 text-xs font-medium"
+                          value={form.methodology.dim2Title}
+                          onChange={(e) => updateSection("methodology", { dim2Title: e.target.value })}
+                        />
+                        <Textarea
+                          rows={2}
+                          className="text-xs"
+                          value={form.methodology.dim2Desc}
+                          onChange={(e) => updateSection("methodology", { dim2Desc: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-muted/20 space-y-1.5">
+                        <Label className="text-[11px] font-semibold">Dimensão 3: Mobilidade & Flexibilidade</Label>
+                        <Input
+                          className="h-7 text-xs font-medium"
+                          value={form.methodology.dim3Title}
+                          onChange={(e) => updateSection("methodology", { dim3Title: e.target.value })}
+                        />
+                        <Textarea
+                          rows={2}
+                          className="text-xs"
+                          value={form.methodology.dim3Desc}
+                          onChange={(e) => updateSection("methodology", { dim3Desc: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-muted/20 space-y-1.5">
+                        <Label className="text-[11px] font-semibold">Dimensão 4: Potência & Força</Label>
+                        <Input
+                          className="h-7 text-xs font-medium"
+                          value={form.methodology.dim4Title}
+                          onChange={(e) => updateSection("methodology", { dim4Title: e.target.value })}
+                        />
+                        <Textarea
+                          rows={2}
+                          className="text-xs"
+                          value={form.methodology.dim4Desc}
+                          onChange={(e) => updateSection("methodology", { dim4Desc: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-muted/20 space-y-1.5">
+                        <Label className="text-[11px] font-semibold">Dimensão 5: Velocidade & Agilidade</Label>
+                        <Input
+                          className="h-7 text-xs font-medium"
+                          value={form.methodology.dim5Title}
+                          onChange={(e) => updateSection("methodology", { dim5Title: e.target.value })}
+                        />
+                        <Textarea
+                          rows={2}
+                          className="text-xs"
+                          value={form.methodology.dim5Desc}
+                          onChange={(e) => updateSection("methodology", { dim5Desc: e.target.value })}
                         />
                       </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 6. Depoimentos (Prova Social) */}
+                {/* 7. Como Funciona */}
+                <AccordionItem value="howItWorks" className="rounded-xl border border-border/80 px-3">
+                  <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Timer className="h-4 w-4 text-emerald-500" />
+                      Como Funciona
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir "Como Funciona"</span>
+                        <p className="text-[11px] text-muted-foreground">Âncora #como-funciona (4 passos estruturais)</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showHowItWorks}
+                        onCheckedChange={(val) => updateVisibility("showHowItWorks", val)}
+                      />
+                    </div>
+                    <div className="rounded-lg border border-border/60 p-3 bg-muted/10 text-xs text-muted-foreground space-y-1">
+                      <p><strong>1. Cadastre os alunos:</strong> Importe planilha ou cadastre em minutos.</p>
+                      <p><strong>2. Realize as avaliações:</strong> Modo Quadra no celular sem retrabalho.</p>
+                      <p><strong>3. Gere os relatórios:</strong> PDFs com Índice 0–100 e Radar.</p>
+                      <p><strong>4. Acompanhe a evolução:</strong> Diagnóstico contínuo e laudos IA.</p>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                {/* 8. Para Escolas */}
+                <AccordionItem value="forSchools" className="rounded-xl border border-border/80 px-3">
+                  <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-purple-500" />
+                      Para Escolas & Gestão
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Bloco "Para Escolas"</span>
+                        <p className="text-[11px] text-muted-foreground">Foco em coordenação e direção</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showForSchools}
+                        onCheckedChange={(val) => updateVisibility("showForSchools", val)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Badge</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        value={form.forSchools.badge}
+                        onChange={(e) => updateSection("forSchools", { badge: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Título</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs font-semibold"
+                        value={form.forSchools.title}
+                        onChange={(e) => updateSection("forSchools", { title: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Descrição</Label>
+                      <Textarea
+                        rows={2}
+                        className="mt-1 text-xs"
+                        value={form.forSchools.description}
+                        onChange={(e) => updateSection("forSchools", { description: e.target.value })}
+                      />
+                    </div>
+
+                    <StringListEditor
+                      title="Benefícios / Itens da Lista"
+                      items={form.forSchools.bullets || []}
+                      onChange={(newBullets) => updateSection("forSchools", { bullets: newBullets })}
+                      placeholder="Novo benefício para escolas..."
+                    />
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <Label className="text-xs">Texto do Botão CTA</Label>
+                        <Input
+                          className="mt-1 h-8 text-xs"
+                          value={form.forSchools.ctaText}
+                          onChange={(e) => updateSection("forSchools", { ctaText: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Link do Botão CTA</Label>
+                        <Input
+                          className="mt-1 h-8 text-xs"
+                          value={form.forSchools.ctaLink}
+                          onChange={(e) => updateSection("forSchools", { ctaLink: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                {/* 9. Para Professores */}
+                <AccordionItem value="forTeachers" className="rounded-xl border border-border/80 px-3">
+                  <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-emerald-500" />
+                      Para Professores & Treinadores
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Bloco "Para Professores"</span>
+                        <p className="text-[11px] text-muted-foreground">Foco no dia a dia da quadra</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showForTeachers}
+                        onCheckedChange={(val) => updateVisibility("showForTeachers", val)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Badge</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        value={form.forTeachers.badge}
+                        onChange={(e) => updateSection("forTeachers", { badge: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Título</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs font-semibold"
+                        value={form.forTeachers.title}
+                        onChange={(e) => updateSection("forTeachers", { title: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Descrição</Label>
+                      <Textarea
+                        rows={2}
+                        className="mt-1 text-xs"
+                        value={form.forTeachers.description}
+                        onChange={(e) => updateSection("forTeachers", { description: e.target.value })}
+                      />
+                    </div>
+
+                    <StringListEditor
+                      title="Benefícios / Itens da Lista"
+                      items={form.forTeachers.bullets || []}
+                      onChange={(newBullets) => updateSection("forTeachers", { bullets: newBullets })}
+                      placeholder="Novo benefício para professores..."
+                    />
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <Label className="text-xs">Texto do Botão CTA</Label>
+                        <Input
+                          className="mt-1 h-8 text-xs"
+                          value={form.forTeachers.ctaText}
+                          onChange={(e) => updateSection("forTeachers", { ctaText: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Link do Botão CTA</Label>
+                        <Input
+                          className="mt-1 h-8 text-xs"
+                          value={form.forTeachers.ctaLink}
+                          onChange={(e) => updateSection("forTeachers", { ctaLink: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                {/* 10. Depoimentos */}
                 <AccordionItem value="testimonials" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
                       <MessageSquare className="h-4 w-4 text-rose-500" />
-                      Depoimentos & Prova Social ({form.testimonials.items.length})
+                      Depoimentos ({form.testimonials.items.length})
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-muted-foreground">Depoimentos reais exibidos na home:</p>
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Depoimentos</span>
+                        <p className="text-[11px] text-muted-foreground">Prova social com avaliadores</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showTestimonials}
+                        onCheckedChange={(val) => updateVisibility("showTestimonials", val)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Badge</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        value={form.testimonials.badge}
+                        onChange={(e) => updateSection("testimonials", { badge: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Título</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs font-semibold"
+                        value={form.testimonials.title}
+                        onChange={(e) => updateSection("testimonials", { title: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Descrição</Label>
+                      <Textarea
+                        rows={2}
+                        className="mt-1 text-xs"
+                        value={form.testimonials.description}
+                        onChange={(e) => updateSection("testimonials", { description: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <Label className="text-xs font-semibold">Lista de Depoimentos</Label>
                       <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={addTestimonialItem}>
-                        <Plus className="mr-1 h-3 w-3" /> Adicionar
+                        <Plus className="mr-1 h-3 w-3" /> Adicionar Depoimento
                       </Button>
                     </div>
 
@@ -758,7 +1301,7 @@ export function HomepageVisualEditor() {
                               />
                             </div>
                             <div>
-                              <Label className="text-[11px]">Cargo / Escola</Label>
+                              <Label className="text-[11px]">Cargo / Instituição</Label>
                               <Input
                                 className="mt-1 h-7 text-xs"
                                 value={it.role}
@@ -781,17 +1324,24 @@ export function HomepageVisualEditor() {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 7. Planos & Preços */}
+                {/* 11. Planos & Preços */}
                 <AccordionItem value="pricing" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
                       <DollarSign className="h-4 w-4 text-emerald-500" />
-                      Planos & Preços (Gratuito e Pro)
+                      Planos & Preços
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
-                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-[11px] text-muted-foreground">
-                      O sistema opera exclusivamente com 2 planos: <strong>Gratuito</strong> (até 30 alunos/usuários, R$ 0) e <strong>Pro</strong> (a partir de 30 alunos, R$ 189,90/mês). Não existem outros planos.
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Seção de Planos</span>
+                        <p className="text-[11px] text-muted-foreground">Gratuito até 30 alunos / Pro a partir de 30</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showPricing}
+                        onCheckedChange={(val) => updateVisibility("showPricing", val)}
+                      />
                     </div>
                     <div>
                       <Label className="text-xs">Badge da Seção</Label>
@@ -819,27 +1369,30 @@ export function HomepageVisualEditor() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <div className="rounded-lg border border-border/70 p-2.5 bg-muted/20 space-y-2">
+                    <div className="grid grid-cols-1 gap-3 pt-2">
+                      {/* Plano Gratuito */}
+                      <div className="rounded-lg border border-border/70 p-3 bg-muted/20 space-y-2">
                         <span className="text-xs font-bold text-foreground">Plano Gratuito (até 30 usuários)</span>
-                        <div>
-                          <Label className="text-[11px]">Título do Plano</Label>
-                          <Input
-                            className="mt-1 h-7 text-xs font-medium"
-                            value={form.pricing.freeTitle}
-                            onChange={(e) => updateSection("pricing", { freeTitle: e.target.value })}
-                          />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[11px]">Título do Plano</Label>
+                            <Input
+                              className="mt-1 h-7 text-xs font-medium"
+                              value={form.pricing.freeTitle}
+                              onChange={(e) => updateSection("pricing", { freeTitle: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[11px]">Preço Exibido</Label>
+                            <Input
+                              className="mt-1 h-7 text-xs font-bold text-foreground"
+                              value={form.pricing.freePrice}
+                              onChange={(e) => updateSection("pricing", { freePrice: e.target.value })}
+                            />
+                          </div>
                         </div>
                         <div>
-                          <Label className="text-[11px]">Exibição de Preço</Label>
-                          <Input
-                            className="mt-1 h-7 text-xs font-bold text-foreground"
-                            value={form.pricing.freePrice}
-                            onChange={(e) => updateSection("pricing", { freePrice: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-[11px]">Descrição Breve</Label>
+                          <Label className="text-[11px]">Descrição</Label>
                           <Textarea
                             rows={2}
                             className="mt-1 text-xs"
@@ -847,28 +1400,45 @@ export function HomepageVisualEditor() {
                             onChange={(e) => updateSection("pricing", { freeDesc: e.target.value })}
                           />
                         </div>
+                        <StringListEditor
+                          title="Benefícios do Plano Gratuito"
+                          items={form.pricing.freeBullets || []}
+                          onChange={(newBullets) => updateSection("pricing", { freeBullets: newBullets })}
+                          placeholder="Novo benefício do plano gratuito..."
+                        />
                       </div>
 
-                      <div className="rounded-lg border border-primary/30 p-2.5 bg-primary/5 space-y-2">
-                        <span className="text-xs font-bold text-primary">Plano Pro (a partir de 30 usuários)</span>
-                        <div>
-                          <Label className="text-[11px]">Título do Plano</Label>
+                      {/* Plano Pro */}
+                      <div className="rounded-lg border border-primary/30 p-3 bg-primary/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-primary">Plano Pro (a partir de 30 usuários)</span>
                           <Input
-                            className="mt-1 h-7 text-xs font-medium"
-                            value={form.pricing.proTitle}
-                            onChange={(e) => updateSection("pricing", { proTitle: e.target.value })}
+                            className="h-6 w-32 text-[10px] bg-background font-semibold"
+                            value={form.pricing.proTag}
+                            onChange={(e) => updateSection("pricing", { proTag: e.target.value })}
+                            placeholder="Tag (ex: Mais Popular)"
                           />
                         </div>
-                        <div>
-                          <Label className="text-[11px]">Exibição de Preço</Label>
-                          <Input
-                            className="mt-1 h-7 text-xs font-bold text-primary"
-                            value={form.pricing.proPrice}
-                            onChange={(e) => updateSection("pricing", { proPrice: e.target.value })}
-                          />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[11px]">Título do Plano</Label>
+                            <Input
+                              className="mt-1 h-7 text-xs font-medium"
+                              value={form.pricing.proTitle}
+                              onChange={(e) => updateSection("pricing", { proTitle: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[11px]">Preço Exibido</Label>
+                            <Input
+                              className="mt-1 h-7 text-xs font-bold text-primary"
+                              value={form.pricing.proPrice}
+                              onChange={(e) => updateSection("pricing", { proPrice: e.target.value })}
+                            />
+                          </div>
                         </div>
                         <div>
-                          <Label className="text-[11px]">Descrição Breve</Label>
+                          <Label className="text-[11px]">Descrição</Label>
                           <Textarea
                             rows={2}
                             className="mt-1 text-xs"
@@ -876,28 +1446,70 @@ export function HomepageVisualEditor() {
                             onChange={(e) => updateSection("pricing", { proDesc: e.target.value })}
                           />
                         </div>
+                        <StringListEditor
+                          title="Benefícios do Plano Pro"
+                          items={form.pricing.proBullets || []}
+                          onChange={(newBullets) => updateSection("pricing", { proBullets: newBullets })}
+                          placeholder="Novo benefício do plano pro..."
+                        />
                       </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 8. FAQ (Perguntas Frequentes) */}
+                {/* 12. FAQ (Perguntas Frequentes) */}
                 <AccordionItem value="faq" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
                       <HelpCircle className="h-4 w-4 text-cyan-500" />
-                      FAQ (Perguntas Frequentes) ({form.faq.items.length})
+                      FAQ / Perguntas Frequentes ({form.faq.items.length})
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-muted-foreground">Perguntas com acordeão interativo:</p>
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir FAQ</span>
+                        <p className="text-[11px] text-muted-foreground">Alimenta visual da Home e JSON-LD Schema</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showFaq}
+                        onCheckedChange={(val) => updateVisibility("showFaq", val)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Badge</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        value={form.faq.badge}
+                        onChange={(e) => updateSection("faq", { badge: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Título</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs font-semibold"
+                        value={form.faq.title}
+                        onChange={(e) => updateSection("faq", { title: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Descrição</Label>
+                      <Textarea
+                        rows={2}
+                        className="mt-1 text-xs"
+                        value={form.faq.description}
+                        onChange={(e) => updateSection("faq", { description: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                      <Label className="text-xs font-semibold">Lista de Perguntas & Respostas</Label>
                       <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={addFaqItem}>
                         <Plus className="mr-1 h-3 w-3" /> Nova Pergunta
                       </Button>
                     </div>
 
-                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                    <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
                       {form.faq.items.map((it, idx) => (
                         <div key={it.id} className="rounded-xl border border-border/80 p-3 bg-muted/20 space-y-2">
                           <div className="flex items-center justify-between">
@@ -912,34 +1524,58 @@ export function HomepageVisualEditor() {
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                          <Input
-                            className="h-7 text-xs font-medium"
-                            value={it.q}
-                            onChange={(e) => updateFaqItem(it.id, "q", e.target.value)}
-                            placeholder="Pergunta..."
-                          />
-                          <Textarea
-                            rows={2}
-                            className="text-xs"
-                            value={it.a}
-                            onChange={(e) => updateFaqItem(it.id, "a", e.target.value)}
-                            placeholder="Resposta..."
-                          />
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground">Pergunta</Label>
+                            <Input
+                              className="mt-0.5 h-7 text-xs font-medium"
+                              value={it.q}
+                              onChange={(e) => updateFaqItem(it.id, "q", e.target.value)}
+                              placeholder="Pergunta..."
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground">Resposta</Label>
+                            <Textarea
+                              rows={2}
+                              className="mt-0.5 text-xs"
+                              value={it.a}
+                              onChange={(e) => updateFaqItem(it.id, "a", e.target.value)}
+                              placeholder="Resposta..."
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 8. Banner Final de Conversão (CTA) */}
+                {/* 13. Banner Final CTA */}
                 <AccordionItem value="cta" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-emerald-500" />
-                      Banner de Ação Final (CTA)
+                      Banner de Chamada Final (CTA)
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Banner CTA Final</span>
+                        <p className="text-[11px] text-muted-foreground">Seção antes do rodapé</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showCtaBanner}
+                        onCheckedChange={(val) => updateVisibility("showCtaBanner", val)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Badge</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        value={form.ctaBanner.badge}
+                        onChange={(e) => updateSection("ctaBanner", { badge: e.target.value })}
+                      />
+                    </div>
                     <div>
                       <Label className="text-xs">Título Chamativo</Label>
                       <Input
@@ -959,7 +1595,7 @@ export function HomepageVisualEditor() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <Label className="text-xs">Texto do Botão</Label>
+                        <Label className="text-xs">Texto do Botão Principal</Label>
                         <Input
                           className="mt-1 h-8 text-xs"
                           value={form.ctaBanner.buttonText}
@@ -967,11 +1603,29 @@ export function HomepageVisualEditor() {
                         />
                       </div>
                       <div>
-                        <Label className="text-xs">Link de Destino</Label>
+                        <Label className="text-xs">Link do Botão Principal</Label>
                         <Input
                           className="mt-1 h-8 text-xs"
                           value={form.ctaBanner.buttonLink}
                           onChange={(e) => updateSection("ctaBanner", { buttonLink: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Texto do Botão Secundário</Label>
+                        <Input
+                          className="mt-1 h-8 text-xs"
+                          value={form.ctaBanner.secondaryButtonText}
+                          onChange={(e) => updateSection("ctaBanner", { secondaryButtonText: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Link do Botão Secundário</Label>
+                        <Input
+                          className="mt-1 h-8 text-xs"
+                          value={form.ctaBanner.secondaryButtonLink}
+                          onChange={(e) => updateSection("ctaBanner", { secondaryButtonLink: e.target.value })}
                         />
                       </div>
                     </div>
@@ -986,15 +1640,25 @@ export function HomepageVisualEditor() {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 9. Rodapé & Contatos */}
+                {/* 14. Rodapé & Informações */}
                 <AccordionItem value="footer" className="rounded-xl border border-border/80 px-3">
                   <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Shield className="h-4 w-4 text-slate-500" />
-                      Rodapé & Contato
+                      Rodapé & Informações Institucionais
                     </span>
                   </AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Exibir Rodapé</span>
+                        <p className="text-[11px] text-muted-foreground">Copyright e links institucionais</p>
+                      </div>
+                      <Switch
+                        checked={form.visibility.showFooter}
+                        onCheckedChange={(val) => updateVisibility("showFooter", val)}
+                      />
+                    </div>
                     <div>
                       <Label className="text-xs">Slogan / Descrição do Rodapé</Label>
                       <Input
@@ -1013,7 +1677,7 @@ export function HomepageVisualEditor() {
                         />
                       </div>
                       <div>
-                        <Label className="text-xs">WhatsApp de Suporte</Label>
+                        <Label className="text-xs">WhatsApp de Contato (Rodapé)</Label>
                         <Input
                           className="mt-1 h-8 text-xs"
                           value={form.footer.contactWhatsapp}
@@ -1022,12 +1686,69 @@ export function HomepageVisualEditor() {
                       </div>
                     </div>
                     <div>
+                      <Label className="text-xs">Endereço / Localização</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        value={form.footer.addressText}
+                        onChange={(e) => updateSection("footer", { addressText: e.target.value })}
+                      />
+                    </div>
+                    <div>
                       <Label className="text-xs">Texto de Direitos / Copyright</Label>
                       <Input
                         className="mt-1 h-8 text-xs text-muted-foreground"
                         value={form.footer.copyrightText}
                         onChange={(e) => updateSection("footer", { copyrightText: e.target.value })}
                       />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                {/* 15. WhatsApp Flutuante */}
+                <AccordionItem value="whatsapp" className="rounded-xl border border-border/80 px-3">
+                  <AccordionTrigger className="py-2.5 text-xs font-semibold hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-emerald-500" />
+                      Atendimento WhatsApp Flutuante
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2 pb-4 space-y-3">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5">
+                      <div>
+                        <span className="text-xs font-semibold">Ativar Botão Flutuante do WhatsApp</span>
+                        <p className="text-[11px] text-muted-foreground">Exibe botão verde discreto no canto inferior direito da Home</p>
+                      </div>
+                      <Switch
+                        checked={form.whatsapp?.enabled ?? form.visibility.showWhatsapp ?? false}
+                        onCheckedChange={(val) => updateWhatsapp({ enabled: val })}
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Número de WhatsApp (com DDD e código do país)</Label>
+                      <Input
+                        className="mt-1 h-8 text-xs font-medium"
+                        value={form.whatsapp?.phoneNumber || form.footer.contactWhatsapp || ""}
+                        onChange={(e) => updateWhatsapp({ phoneNumber: e.target.value })}
+                        placeholder="+55 (11) 99999-9999"
+                      />
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Usado para gerar o link oficial wa.me (somente números serão considerados no envio).
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Mensagem Padrão Pré-preenchida</Label>
+                      <Textarea
+                        rows={2}
+                        className="mt-1 text-xs"
+                        value={form.whatsapp?.defaultMessage || ""}
+                        onChange={(e) => updateWhatsapp({ defaultMessage: e.target.value })}
+                        placeholder="Ex: Olá! Gostaria de saber mais sobre o ProMetric."
+                      />
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        A mensagem será codificada automaticamente na URL wa.me.
+                      </p>
                     </div>
                   </AccordionContent>
                 </AccordionItem>

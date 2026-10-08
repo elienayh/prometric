@@ -26,6 +26,12 @@ export type FeatureHighlight = {
   tag?: string;
 };
 
+export type WhatsAppConfig = {
+  enabled: boolean;
+  phoneNumber: string;
+  defaultMessage: string;
+};
+
 export type HomePageConfig = {
   version: number;
   updatedAt: string;
@@ -47,6 +53,7 @@ export type HomePageConfig = {
     showFaq: boolean;
     showCtaBanner: boolean;
     showFooter: boolean;
+    showWhatsapp: boolean;
   };
   announcement: {
     text: string;
@@ -157,6 +164,7 @@ export type HomePageConfig = {
     contactWhatsapp: string;
     addressText: string;
   };
+  whatsapp: WhatsAppConfig;
 };
 
 export const DEFAULT_HOMEPAGE_CONFIG: HomePageConfig = {
@@ -180,6 +188,7 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomePageConfig = {
     showFaq: true,
     showCtaBanner: true,
     showFooter: true,
+    showWhatsapp: false,
   },
   announcement: {
     text: "Novidade: Recálculo automático de IMC OMS 2007 e Laudos com Inteligência Artificial integrados.",
@@ -356,32 +365,77 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomePageConfig = {
       {
         id: "f1",
         q: "O que é o Método ProMetric®?",
-        a: "É a metodologia proprietária do ProMetric para Avaliação Física Integrada. Combina antropometria, testes motores e cardiorrespiratórios em 5 dimensões, gerando o Índice ProMetric® sintetizado de 0 a 100.",
+        a: "É a metodologia proprietária do ProMetric para Avaliação Física Integrada. Combina antropometria, testes motores e cardiorrespiratórios em 5 dimensões (Saúde Corporal, Resistência, Mobilidade, Potência e Velocidade & Agilidade), gerando o Índice ProMetric® de 0 a 100.",
       },
       {
         id: "f2",
-        q: "Como funciona a classificação de IMC em escolares?",
-        a: "O ProMetric utiliza a referência oficial da OMS 2007 calculada com base na idade exata em meses e sexo do estudante, diferenciando magreza, eutrofia, sobrepeso e obesidade conforme curvas de crescimento da OMS.",
+        q: "Como funciona o Índice ProMetric®?",
+        a: "O Índice ProMetric® é um score de 0 a 100 que sintetiza o desempenho do aluno em 5 dimensões. Os resultados são classificados em 5 categorias: Crítico, Atenção, Em Desenvolvimento, Bom e Excelente — sempre considerando idade e sexo.",
       },
       {
         id: "f3",
-        q: "Preciso de internet na quadra durante a aula?",
-        a: "O ProMetric é otimizado como aplicação web progressiva (PWA), permitindo carregar a turma e registrar com estabilidade mesmo em redes móveis ou Wi-Fi fraco da escola.",
+        q: "Como realizar uma avaliação física escolar?",
+        a: "Cadastre a turma, aplique os testes da Avaliação Física Integrada ProMetric em até duas aulas, registre os resultados pelo celular e o sistema gera o Índice ProMetric® e o relatório individual automaticamente.",
       },
       {
         id: "f4",
-        q: "Como o sistema gera os laudos e relatórios em PDF?",
-        a: "Após salvar os dados dos testes, basta clicar em 'Gerar Relatório'. O sistema renderiza instantaneamente relatórios individuais ou consolidados da turma em PDF de alta qualidade com gráficos, radar e parecer técnico.",
+        q: "Como calcular o IMC escolar?",
+        a: "IMC = peso (kg) ÷ altura² (m). Em escolares, a classificação considera idade e sexo. O ProMetric faz o cálculo e a interpretação automaticamente dentro da dimensão Saúde Corporal.",
       },
       {
         id: "f5",
-        q: "Como funcionam os planos e existe versão gratuita?",
-        a: "O ProMetric possui modelo transparente com plano Gratuito livre para sempre até 30 alunos/usuários, sem necessidade de cartão de crédito. Para turmas maiores, o plano Pro oferece alunos ilimitados, relatórios comparativos completos e suporte prioritário. A tabela detalhada de planos está disponível dentro da sua conta.",
+        q: "Como gerar relatórios de avaliação física?",
+        a: "Após registrar as avaliações, basta clicar em Gerar Relatório. O ProMetric monta um PDF profissional individual, por turma ou por escola, em segundos — com o Índice ProMetric® e o Perfil de Desenvolvimento Físico de cada aluno.",
       },
       {
         id: "f6",
-        q: "Posso convidar outros professores da minha escola?",
-        a: "Sim. O sistema possui suporte multi-usuário para equipes escolares, permitindo que a coordenação convide professores avaliadores com papéis e permissões seguras.",
+        q: "Posso usar o ProMetric em academias?",
+        a: "Sim. Personal trainers e academias usam o ProMetric para padronizar avaliações físicas, acompanhar evolução e entregar relatórios profissionais aos alunos.",
+      },
+      {
+        id: "f7",
+        q: "Posso usar em clubes esportivos?",
+        a: "Sim. Clubes utilizam para triagem de atletas, controle de cargas e relatórios de desempenho por categoria.",
+      },
+      {
+        id: "f8",
+        q: "Como funciona a avaliação em lote?",
+        a: "O Modo Quadra permite avaliar a turma inteira em sequência, sem retrabalho: digitou, salvou, próximo aluno.",
+      },
+      {
+        id: "f9",
+        q: "Como acompanhar a evolução dos alunos?",
+        a: "Cada aluno tem histórico cronológico com Radar ProMetric® comparativo, permitindo medir o impacto pedagógico ao longo do ano.",
+      },
+      {
+        id: "f10",
+        q: "O sistema funciona pelo celular?",
+        a: "Sim. O ProMetric é mobile-first e otimizado para uso na quadra, mesmo em conexões instáveis.",
+      },
+      {
+        id: "f11",
+        q: "O sistema gera PDF?",
+        a: "Sim. Relatórios individuais, por turma e institucionais em PDF profissional, prontos para enviar à família e à direção.",
+      },
+      {
+        id: "f12",
+        q: "O sistema possui inteligência artificial?",
+        a: "Sim. A IA gera parecer técnico, mensagem para a família e metas personalizadas de 30/60/90 dias por aluno.",
+      },
+      {
+        id: "f13",
+        q: "Como funciona o histórico do aluno?",
+        a: "Cada avaliação fica registrada cronologicamente, com Perfil de Desenvolvimento Físico ProMetric em cada momento.",
+      },
+      {
+        id: "f14",
+        q: "Posso cadastrar turmas?",
+        a: "Sim. Você organiza alunos por turma, série, escola ou clube, com filtros e permissões por professor.",
+      },
+      {
+        id: "f15",
+        q: "Existe versão gratuita e como funcionam os planos?",
+        a: "Sim. O ProMetric oferece plano Gratuito livre para sempre até 30 alunos/usuários, sem necessidade de cartão de crédito. Para turmas maiores e recursos avançados, o plano Pro oferece alunos ilimitados, relatórios completos e suporte prioritário. A tabela completa de planos está disponível na sua conta.",
       },
     ],
   },
@@ -402,6 +456,11 @@ export const DEFAULT_HOMEPAGE_CONFIG: HomePageConfig = {
     contactEmail: "contato@prometric.app",
     contactWhatsapp: "+55 (11) 99999-9999",
     addressText: "São Paulo, Brasil · Conectando ciência e prática pedagógica",
+  },
+  whatsapp: {
+    enabled: false,
+    phoneNumber: "+55 (11) 99999-9999",
+    defaultMessage: "Olá! Gostaria de saber mais sobre o ProMetric.",
   },
 };
 
@@ -524,6 +583,16 @@ export function mergeWithDefaultConfig(partial?: Partial<HomePageConfig> | null)
     footer: {
       ...DEFAULT_HOMEPAGE_CONFIG.footer,
       ...(partial.footer || {}),
+    },
+    whatsapp: {
+      enabled: partial.whatsapp?.enabled ?? partial.visibility?.showWhatsapp ?? DEFAULT_HOMEPAGE_CONFIG.whatsapp.enabled,
+      phoneNumber:
+        partial.whatsapp?.phoneNumber ||
+        partial.footer?.contactWhatsapp ||
+        DEFAULT_HOMEPAGE_CONFIG.whatsapp.phoneNumber,
+      defaultMessage:
+        partial.whatsapp?.defaultMessage ||
+        DEFAULT_HOMEPAGE_CONFIG.whatsapp.defaultMessage,
     },
   };
 }
