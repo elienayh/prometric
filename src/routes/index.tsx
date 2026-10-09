@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useHomePageConfig } from "@/hooks/use-homepage-config";
 import { DEFAULT_HOMEPAGE_CONFIG, type HomePageConfig } from "@/lib/homepage-cms";
+import { getPublishedHomePageConfig } from "@/lib/homepage-cms.functions";
 
 const SITE_URL = typeof window !== "undefined" ? window.location.origin : (process.env.APP_URL || "");
 const OG_IMAGE = "/og-cover.jpg";
@@ -85,6 +86,13 @@ export const Route = createFileRoute("/")({
       children: JSON.stringify(d),
     })),
   }),
+  loader: async () => {
+    try {
+      return await getPublishedHomePageConfig();
+    } catch {
+      return DEFAULT_HOMEPAGE_CONFIG;
+    }
+  },
   beforeLoad: async () => {
     if (typeof window === "undefined") return;
     const { data } = await supabase.auth.getSession();
@@ -101,7 +109,8 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
-  const { config } = useHomePageConfig();
+  const loaderConfig = Route.useLoaderData();
+  const { config } = useHomePageConfig(loaderConfig);
   const currentFaqItems = config.faq?.items?.length ? config.faq.items : DEFAULT_HOMEPAGE_CONFIG.faq.items;
   const structuredData = getStructuredData(currentFaqItems);
 

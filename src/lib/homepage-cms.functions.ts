@@ -6,7 +6,7 @@ import {
   mergeWithDefaultConfig,
 } from "./homepage-cms";
 
-const CONFIG_METRIC_KEY = "homepage_cms_config";
+const CONFIG_METRIC_DATE = "1970-01-01";
 
 /**
  * Função pública para obter a configuração ativa da página inicial.
@@ -16,11 +16,11 @@ export const getPublishedHomePageConfig = createServerFn({ method: "GET" })
   .handler(async () => {
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      // Busca a versão mais recente em system_metrics usando o payload
+      // Busca a versão mais recente em system_metrics usando o payload com data sentinela
       const { data, error } = await supabaseAdmin
         .from("system_metrics" as never)
         .select("payload, created_at")
-        .eq("metric_date" as never, CONFIG_METRIC_KEY)
+        .eq("metric_date" as never, CONFIG_METRIC_DATE)
         .order("created_at" as never, { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -79,28 +79,43 @@ export const savePublishedHomePageConfig = createServerFn({ method: "POST" })
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
       // Atualiza ou insere o registro em system_metrics
-      const { data: existing } = await supabaseAdmin
+      const { data: existing, error: findError } = await supabaseAdmin
         .from("system_metrics" as never)
         .select("id")
-        .eq("metric_date" as never, CONFIG_METRIC_KEY)
+        .eq("metric_date" as never, CONFIG_METRIC_DATE)
         .limit(1)
         .maybeSingle();
 
+      if (findError) {
+        console.error("[savePublishedHomePageConfig] Erro ao buscar registro existente:", findError);
+        throw new Error(`Falha ao acessar banco de dados: ${findError.message}`);
+      }
+
       if ((existing as any)?.id) {
-        await supabaseAdmin
+        const { error: updateError } = await supabaseAdmin
           .from("system_metrics" as never)
           .update({
             payload: merged,
             created_at: new Date().toISOString(),
           } as never)
           .eq("id" as never, (existing as any).id);
+
+        if (updateError) {
+          console.error("[savePublishedHomePageConfig] Erro ao atualizar no banco:", updateError);
+          throw new Error(`Falha ao atualizar página inicial no banco: ${updateError.message}`);
+        }
       } else {
-        await supabaseAdmin
+        const { error: insertError } = await supabaseAdmin
           .from("system_metrics" as never)
           .insert({
-            metric_date: CONFIG_METRIC_KEY,
+            metric_date: CONFIG_METRIC_DATE,
             payload: merged,
           } as never);
+
+        if (insertError) {
+          console.error("[savePublishedHomePageConfig] Erro ao inserir no banco:", insertError);
+          throw new Error(`Falha ao inserir página inicial no banco: ${insertError.message}`);
+        }
       }
 
       // 3. Registrar no log de auditoria
@@ -117,8 +132,8 @@ export const savePublishedHomePageConfig = createServerFn({ method: "POST" })
 
       return { success: true, config: merged };
     } catch (err: any) {
-      console.warn("[savePublishedHomePageConfig] Erro ao salvar no banco, mantendo local:", err);
-      return { success: true, config: merged, warning: "Salvo localmente (banco indisponível)" };
+      console.error("[savePublishedHomePageConfig] Falha crítica ao salvar no banco:", err);
+      throw new Error(err?.message || "Erro desconhecido ao salvar página inicial no banco.");
     }
   });
 
@@ -143,13 +158,19 @@ export const resetPublishedHomePageConfig = createServerFn({ method: "POST" })
         throw new Error("Apenas Super Administradores podem restaurar a página inicial.");
       }
 
-      await supabaseAdmin
+      const { error: delError } = await supabaseAdmin
         .from("system_metrics" as never)
         .delete()
-        .eq("metric_date" as never, CONFIG_METRIC_KEY);
+        .eq("metric_date" as never, CONFIG_METRIC_DATE);
+
+      if (delError) {
+        console.error("[resetPublishedHomePageConfig] Erro ao deletar do banco:", delError);
+        throw new Error(`Falha ao restaurar padrão no banco: ${delError.message}`);
+      }
 
       return { success: true, config: DEFAULT_HOMEPAGE_CONFIG };
     } catch (err: any) {
-      return { success: true, config: DEFAULT_HOMEPAGE_CONFIG };
+      console.error("[resetPublishedHomePageConfig] Erro ao restaurar:", err);
+      throw new Error(err?.message || "Erro ao restaurar configurações no banco.");
     }
   });

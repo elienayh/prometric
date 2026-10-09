@@ -20,12 +20,14 @@ export const HOMEPAGE_CONFIG_QUERY_KEY = ["homepage-cms-config"];
  * Hook para obter a configuração ativa da página inicial (pública ou admin).
  * Combina banco de dados com cache local para carregamento instantâneo sem piscar.
  */
-export function useHomePageConfig() {
+export function useHomePageConfig(initialServerConfig?: HomePageConfig) {
   const qc = useQueryClient();
 
   const query = useQuery<HomePageConfig>({
     queryKey: HOMEPAGE_CONFIG_QUERY_KEY,
-    initialData: () => getLocalHomePageConfig(),
+    initialData: () => initialServerConfig || getLocalHomePageConfig(),
+    // Se veio do servidor com dados reais, considera recente; senão força revalidação imediata
+    initialDataUpdatedAt: initialServerConfig ? Date.now() : 0,
     queryFn: async () => {
       try {
         const remote = await getPublishedHomePageConfig();
@@ -39,41 +41,34 @@ export function useHomePageConfig() {
       }
       return getLocalHomePageConfig();
     },
-    staleTime: 1000 * 60 * 5, // 5 minutos de cache fresco
+    staleTime: 1000 * 30, // 30 segundos
+    refetchOnMount: true,
   });
 
   const saveMutation = useMutation({
     mutationFn: async (newConfig: HomePageConfig) => {
-      // 1. Salva imediatamente no localStorage para resposta instantânea
+      // 1. Salva imediatamente no localStorage para resposta instantânea na aba atual
       saveLocalHomePageConfig(newConfig);
 
-      // 2. Persiste no servidor/Supabase
-      try {
-        const res = await savePublishedHomePageConfig({ data: newConfig });
-        return res?.config || newConfig;
-      } catch (err: any) {
-        // Se falhar no servidor, mantém no local
-        console.warn("[useHomePageConfig] Falha no servidor, mantido localmente:", err);
-        return newConfig;
-      }
+      // 2. Persiste permanentemente no servidor/Supabase para todos os navegadores e dispositivos
+      const res = await savePublishedHomePageConfig({ data: newConfig });
+      const finalConfig = res?.config || newConfig;
+      saveLocalHomePageConfig(finalConfig);
+      return finalConfig;
     },
     onSuccess: (updated) => {
       qc.setQueryData(HOMEPAGE_CONFIG_QUERY_KEY, updated);
-      toast.success("Página inicial salva e publicada com sucesso!");
+      toast.success("Página inicial salva e publicada com sucesso para todos os dispositivos!");
     },
     onError: (err: any) => {
-      toast.error(err?.message || "Erro ao salvar página inicial.");
+      toast.error(err?.message || "Erro ao salvar página inicial no banco de dados.");
     },
   });
 
   const resetMutation = useMutation({
     mutationFn: async () => {
       resetLocalHomePageConfig();
-      try {
-        await resetPublishedHomePageConfig();
-      } catch {
-        // ignora
-      }
+      await resetPublishedHomePageConfig();
       return DEFAULT_HOMEPAGE_CONFIG;
     },
     onSuccess: (defaults) => {
