@@ -1,10 +1,10 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import * as React from "react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import {
   Activity, ArrowRight, BarChart3, Brain, Check, ChevronDown,
-  ClipboardCheck, FileText, GraduationCap, LineChart, ShieldCheck,
+  ClipboardCheck, Edit3, FileText, GraduationCap, LineChart, ShieldCheck,
   Sparkles, Users, Zap, Building2, Dumbbell, HeartPulse, Timer, Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useHomePageConfig } from "@/hooks/use-homepage-config";
+import { useIsPlatformAdmin } from "@/hooks/use-admin";
 import { DEFAULT_HOMEPAGE_CONFIG, type HomePageConfig } from "@/lib/homepage-cms";
 import { getPublishedHomePageConfig } from "@/lib/homepage-cms.functions";
 
@@ -93,29 +94,43 @@ export const Route = createFileRoute("/")({
       return DEFAULT_HOMEPAGE_CONFIG;
     }
   },
-  beforeLoad: async () => {
-    if (typeof window === "undefined") return;
-    const { data } = await supabase.auth.getSession();
-    const userId = data.session?.user.id;
-    if (!userId) return;
-    const { data: roles } = await supabase
-      .from("admin_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .limit(1);
-    throw redirect({ to: roles && roles.length > 0 ? "/admin" : "/dashboard" });
-  },
   component: Landing,
 });
 
 function Landing() {
   const loaderConfig = Route.useLoaderData();
   const { config } = useHomePageConfig(loaderConfig);
+  const { isSuperAdmin } = useIsPlatformAdmin();
   const currentFaqItems = config.faq?.items?.length ? config.faq.items : DEFAULT_HOMEPAGE_CONFIG.faq.items;
   const structuredData = getStructuredData(currentFaqItems);
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
+      {/* Barra de Acesso Rápido para Super Admin */}
+      {isSuperAdmin && (
+        <div className="bg-slate-900 border-b border-slate-800 text-slate-100 px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2 z-50">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-semibold text-emerald-400">Modo Super Admin</span>
+            <span className="text-slate-300 hidden md:inline">
+              — você pode editar seções, textos e o botão de WhatsApp diretamente no editor do CMS.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link to="/admin/homepage">
+              <Button size="sm" className="h-6 text-[11px] gap-1 px-2.5 font-medium bg-primary text-primary-foreground hover:opacity-90">
+                <Edit3 className="h-3 w-3" /> Editar Página Inicial
+              </Button>
+            </Link>
+            <Link to="/admin/dashboard">
+              <Button size="sm" variant="outline" className="h-6 text-[11px] px-2 text-slate-200 border-slate-700 hover:bg-slate-800">
+                Painel Admin
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* JSON-LD Schema sincronizado com CMS */}
       {structuredData.map((d, idx) => (
         <script

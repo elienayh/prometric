@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { SUPER_ADMIN_EMAILS } from "@/hooks/use-admin";
 import {
   DEFAULT_HOMEPAGE_CONFIG,
   HomePageConfig,
@@ -39,7 +41,7 @@ export const getPublishedHomePageConfig = createServerFn({ method: "GET" })
  * Função restrita a Super Admin para salvar e publicar alterações na página inicial.
  */
 export const savePublishedHomePageConfig = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((data: unknown) => {
     if (!data || typeof data !== "object") {
       throw new Error("Dados de configuração inválidos.");
@@ -49,7 +51,7 @@ export const savePublishedHomePageConfig = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { userId } = context;
 
-    // 1. Validar se o usuário é Super Admin
+    // 1. Validar se o usuário é Super Admin (por tabela ou email oficial de proprietário)
     let isSuper = false;
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -62,9 +64,19 @@ export const savePublishedHomePageConfig = createServerFn({ method: "POST" })
 
       if (roleRow) {
         isSuper = true;
+      } else {
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+        const email = userData?.user?.email?.toLowerCase();
+        if (email && SUPER_ADMIN_EMAILS.includes(email)) {
+          isSuper = true;
+          await supabaseAdmin.from("admin_roles").upsert(
+            { user_id: userId, role: "super_admin" as never },
+            { onConflict: "user_id,role" }
+          );
+        }
       }
-    } catch {
-      // continua
+    } catch (e) {
+      console.warn("[savePublishedHomePageConfig] Verificação de super_admin:", e);
     }
 
     if (!isSuper) {
@@ -141,12 +153,13 @@ export const savePublishedHomePageConfig = createServerFn({ method: "POST" })
  * Restaura as configurações originais padrão da ProMetric
  */
 export const resetPublishedHomePageConfig = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { userId } = context;
 
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      let isSuper = false;
       const { data: roleRow } = await supabaseAdmin
         .from("admin_roles")
         .select("role")
@@ -154,7 +167,17 @@ export const resetPublishedHomePageConfig = createServerFn({ method: "POST" })
         .eq("role", "super_admin")
         .maybeSingle();
 
-      if (!roleRow) {
+      if (roleRow) {
+        isSuper = true;
+      } else {
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
+        const email = userData?.user?.email?.toLowerCase();
+        if (email && SUPER_ADMIN_EMAILS.includes(email)) {
+          isSuper = true;
+        }
+      }
+
+      if (!isSuper) {
         throw new Error("Apenas Super Administradores podem restaurar a página inicial.");
       }
 

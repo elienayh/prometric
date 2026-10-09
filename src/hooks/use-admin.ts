@@ -4,32 +4,55 @@ import { useAuth } from "@/hooks/use-auth";
 
 export type AdminRole = "super_admin" | "admin_financeiro" | "admin_suporte" | "admin_operacional";
 
+export const SUPER_ADMIN_EMAILS = [
+  "elienayhemerson@gmail.com",
+  "elienay9080@gmail.com",
+  "elienay.domingues@educacao.mg.gov.br",
+];
+
 export function useMyAdminRoles() {
   const { user, loading } = useAuth();
   return useQuery({
     queryKey: ["my-admin-roles", user?.id],
     enabled: !!user && !loading,
     queryFn: async () => {
+      const userEmail = user?.email?.toLowerCase();
+      const isOwner = !!userEmail && SUPER_ADMIN_EMAILS.includes(userEmail);
+
       const { data, error } = await supabase
         .from("admin_roles")
         .select("role")
         .eq("user_id", user!.id);
-      if (error) throw error;
-      return (data ?? []).map((r) => r.role as AdminRole);
+
+      if (error) {
+        if (isOwner) return ["super_admin" as AdminRole];
+        throw error;
+      }
+
+      const roles = (data ?? []).map((r) => r.role as AdminRole);
+      if (isOwner && !roles.includes("super_admin")) {
+        roles.push("super_admin");
+      }
+      return roles;
     },
   });
 }
 
 export function useIsPlatformAdmin() {
+  const { user, loading } = useAuth();
   const q = useMyAdminRoles();
-  const roles = q.data ?? [];
+  const dbRoles = q.data ?? [];
+  const userEmail = user?.email?.toLowerCase();
+  const isOwner = !!userEmail && SUPER_ADMIN_EMAILS.includes(userEmail);
+  const roles = isOwner && !dbRoles.includes("super_admin") ? [...dbRoles, "super_admin" as AdminRole] : dbRoles;
+
   return {
-    isLoading: q.isLoading,
-    isAdmin: roles.length > 0,
-    isSuperAdmin: roles.includes("super_admin"),
-    isFinance: roles.includes("super_admin") || roles.includes("admin_financeiro"),
-    isSupport: roles.includes("super_admin") || roles.includes("admin_suporte"),
-    isOps: roles.includes("super_admin") || roles.includes("admin_operacional"),
+    isLoading: q.isLoading && !isOwner,
+    isAdmin: roles.length > 0 || isOwner,
+    isSuperAdmin: roles.includes("super_admin") || isOwner,
+    isFinance: roles.includes("super_admin") || roles.includes("admin_financeiro") || isOwner,
+    isSupport: roles.includes("super_admin") || roles.includes("admin_suporte") || isOwner,
+    isOps: roles.includes("super_admin") || roles.includes("admin_operacional") || isOwner,
     roles,
   };
 }

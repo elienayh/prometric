@@ -37,8 +37,27 @@ export function useHomePageConfig(initialServerConfig?: HomePageConfig) {
           return merged;
         }
       } catch (err) {
-        console.warn("[useHomePageConfig] Erro ao buscar configuração remota:", err);
+        console.warn("[useHomePageConfig] Erro ao buscar configuração remota via serverFn:", err);
       }
+
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        const { data } = await supabase
+          .from("system_metrics" as never)
+          .select("payload")
+          .eq("metric_date" as never, "1970-01-01")
+          .order("created_at" as never, { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if ((data as any)?.payload) {
+          const merged = mergeWithDefaultConfig((data as any).payload);
+          saveLocalHomePageConfig(merged);
+          return merged;
+        }
+      } catch (err) {
+        console.warn("[useHomePageConfig] Erro no fallback direto Supabase:", err);
+      }
+
       return getLocalHomePageConfig();
     },
     staleTime: 1000 * 30, // 30 segundos
@@ -51,8 +70,41 @@ export function useHomePageConfig(initialServerConfig?: HomePageConfig) {
       saveLocalHomePageConfig(newConfig);
 
       // 2. Persiste permanentemente no servidor/Supabase para todos os navegadores e dispositivos
-      const res = await savePublishedHomePageConfig({ data: newConfig });
-      const finalConfig = res?.config || newConfig;
+      let finalConfig = newConfig;
+      try {
+        const res = await savePublishedHomePageConfig({ data: newConfig });
+        finalConfig = res?.config || newConfig;
+      } catch (srvErr: any) {
+        console.warn("[saveMutation] serverFn save falhou, tentando fallback direto Supabase:", srvErr);
+        // Fallback: se o usuário estiver autenticado como admin, salva diretamente no Supabase
+        const { supabase } = await import("@/integrations/supabase/client");
+        const { data: existing } = await supabase
+          .from("system_metrics" as never)
+          .select("id")
+          .eq("metric_date" as never, "1970-01-01")
+          .limit(1)
+          .maybeSingle();
+
+        if ((existing as any)?.id) {
+          const { error: updErr } = await supabase
+            .from("system_metrics" as never)
+            .update({
+              payload: newConfig,
+              created_at: new Date().toISOString(),
+            } as never)
+            .eq("id" as never, (existing as any).id);
+          if (updErr) throw new Error(srvErr?.message || updErr.message);
+        } else {
+          const { error: insErr } = await supabase
+            .from("system_metrics" as never)
+            .insert({
+              metric_date: "1970-01-01",
+              payload: newConfig,
+            } as never);
+          if (insErr) throw new Error(srvErr?.message || insErr.message);
+        }
+      }
+
       saveLocalHomePageConfig(finalConfig);
       return finalConfig;
     },
