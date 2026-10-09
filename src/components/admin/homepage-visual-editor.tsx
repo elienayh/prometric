@@ -7,6 +7,7 @@ import {
   mergeWithDefaultConfig,
 } from "@/lib/homepage-cms";
 import { useHomePageConfig } from "@/hooks/use-homepage-config";
+import { FloatingWhatsAppChat } from "@/components/layout/floating-whatsapp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -2133,6 +2134,9 @@ function LiveLandingPreview({ config }: { config: HomePageConfig }) {
           </div>
         </footer>
       )}
+
+      {/* Botão e Chat Flutuante */}
+      <FloatingWhatsAppChat whatsapp={config.whatsapp} />
     </div>
   );
 }
