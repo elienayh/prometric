@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { formatDateBR } from "@/lib/age";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ClipboardList, Download, FileDown, GraduationCap, Plus, Printer, Users, Zap } from "lucide-react";
+import { ArrowLeft, ClipboardList, Download, FileDown, FileSpreadsheet, GraduationCap, Plus, Printer, Users, Zap } from "lucide-react";
 import { printSheetsBatch } from "@/lib/sheet/print-batch";
 import { ActionBar, type ActionItem } from "@/components/layout/action-bar";
 import { supabase } from "@/integrations/supabase/client";
+import { ExportClassReportsDialog, type StudentWithEvalStatus } from "@/components/classes/export-class-reports-dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrentTenant } from "@/hooks/use-tenant";
@@ -43,6 +45,40 @@ type StatsPayload = {
 function ClassDashboard() {
   const { id } = Route.useParams();
   const { tenant } = useCurrentTenant();
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
+  const studentsListQuery = useQuery({
+    queryKey: ["class-students-with-evals", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("students")
+        .select(
+          `
+          id,
+          full_name,
+          sex,
+          birth_date,
+          is_active,
+          email,
+          guardian_name,
+          guardian_email,
+          guardian_phone,
+          portal_enabled,
+          portal_slug,
+          portal_token,
+          evaluations(
+            id,
+            evaluated_at,
+            classifications
+          )
+        `,
+        )
+        .eq("class_id", id)
+        .order("full_name");
+      if (error) throw error;
+      return (data ?? []) as unknown as StudentWithEvalStatus[];
+    },
+  });
 
   const q = useQuery({
     queryKey: ["class-stats", id],
@@ -97,10 +133,11 @@ function ClassDashboard() {
 
   const actions: ActionItem[] = [
     { label: "Nova Avaliação em Lote", icon: Zap, primary: true, to: "/quick-eval", search: { class: id } },
+    { label: "Exportar Notas (PDF / E-mail)", icon: FileSpreadsheet, primary: true, onClick: () => setExportDialogOpen(true) },
     { label: "Adicionar Alunos", icon: Plus, to: "/students" },
     { label: "Visualizar Alunos", icon: Users, to: "/classes/$id", params: { id } },
     { label: "Imprimir Fichas da Turma", icon: Printer, onClick: handlePrintSheets },
-    { label: "Relatório PDF", icon: FileDown, onClick: handlePDF },
+    { label: "Relatório PDF da Turma", icon: FileDown, onClick: handlePDF },
     { label: "Exportar CSV", icon: Download, onClick: exportCSV },
     { label: "Avaliações da Turma", icon: ClipboardList, to: "/evaluations" },
   ];
@@ -259,6 +296,16 @@ function ClassDashboard() {
         </TabsContent>
       </Tabs>
       )}
+      <ExportClassReportsDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        classNameTitle={header.name}
+        classGrade={header.grade}
+        schoolName={header.school_name}
+        tenantId={tenant?.id || ""}
+        tenantName={tenant?.display_name || tenant?.name || "ProMetric"}
+        students={studentsListQuery.data || []}
+      />
     </div>
   );
 }

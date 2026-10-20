@@ -1,12 +1,18 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, BarChart3, GraduationCap, UserPlus, Users, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, FileSpreadsheet, GraduationCap, UserPlus, Users, Zap } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { EmptyState } from "@/components/layout/page-header";
 import { ageInYears } from "@/lib/age";
+import { useCurrentTenant } from "@/hooks/use-tenant";
+import {
+  ExportClassReportsDialog,
+  type StudentWithEvalStatus,
+} from "@/components/classes/export-class-reports-dialog";
 
 export const Route = createFileRoute("/_authenticated/classes/$id/")({
   head: () => ({ meta: [{ title: "Alunos da Turma — ProMetric" }] }),
@@ -14,11 +20,11 @@ export const Route = createFileRoute("/_authenticated/classes/$id/")({
 });
 
 type ClassInfo = {
-  id: string; name: string; grade: string | null; school_year: number | null;
+  id: string;
+  name: string;
+  grade: string | null;
+  school_year: number | null;
   school: { name: string } | null;
-};
-type StudentRow = {
-  id: string; full_name: string; sex: "male" | "female"; birth_date: string; is_active: boolean;
 };
 
 function ageFrom(birth: string) {
@@ -27,6 +33,8 @@ function ageFrom(birth: string) {
 
 function ClassStudentsPage() {
   const { id } = Route.useParams();
+  const { tenant } = useCurrentTenant();
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   const info = useQuery({
     queryKey: ["class-info", id],
@@ -42,15 +50,35 @@ function ClassStudentsPage() {
   });
 
   const students = useQuery({
-    queryKey: ["class-students", id],
+    queryKey: ["class-students-with-evals", id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("students")
-        .select("id,full_name,sex,birth_date,is_active")
+        .select(
+          `
+          id,
+          full_name,
+          sex,
+          birth_date,
+          is_active,
+          email,
+          guardian_name,
+          guardian_email,
+          guardian_phone,
+          portal_enabled,
+          portal_slug,
+          portal_token,
+          evaluations(
+            id,
+            evaluated_at,
+            classifications
+          )
+        `,
+        )
         .eq("class_id", id)
         .order("full_name");
       if (error) throw error;
-      return data as StudentRow[];
+      return (data ?? []) as unknown as StudentWithEvalStatus[];
     },
   });
 
@@ -76,6 +104,17 @@ function ClassStudentsPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botão de Exportar Notas da Turma (PDFs em lote / Envio por E-mail) */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExportDialogOpen(true)}
+            disabled={!students.data || students.data.length === 0}
+            className="border-primary/40 text-primary hover:bg-primary/10 hover:text-primary font-semibold shadow-xs cursor-pointer"
+          >
+            <FileSpreadsheet className="mr-1.5 h-4 w-4" /> Exportar notas
+          </Button>
+
           <Button variant="outline" size="sm" asChild>
             <Link to="/classes/$id/dashboard" params={{ id }}>
               <BarChart3 className="mr-1.5 h-4 w-4" /> Resumo da turma
@@ -127,6 +166,20 @@ function ClassStudentsPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Modal de Exportação de Notas e Relatórios da Turma */}
+      {c && (
+        <ExportClassReportsDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          classNameTitle={c.name}
+          classGrade={c.grade}
+          schoolName={c.school?.name}
+          tenantId={tenant?.id || ""}
+          tenantName={tenant?.display_name || tenant?.name || "ProMetric"}
+          students={students.data || []}
+        />
       )}
     </div>
   );

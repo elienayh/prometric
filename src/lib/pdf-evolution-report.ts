@@ -168,11 +168,12 @@ function aggregateZones(rows: { classifications: Classifications | null }[]): Cl
   return out;
 }
 
-export async function downloadStudentEvolutionPDF(
+export async function generateStudentEvolutionDoc(
   studentId: string,
   tenantId: string,
   fallbackTenantName = "ProMetric",
-): Promise<void> {
+  existingDoc?: jsPDF,
+): Promise<{ doc: jsPDF; studentName: string; filename: string; blob: Blob }> {
   // ── Fetch in parallel ────────────────────────────────────────────────
   const [
     { data: student },
@@ -341,7 +342,13 @@ export async function downloadStudentEvolutionPDF(
   }
 
   // ── Render PDF (A4 retrato, 1 página) ────────────────────────────────
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  let doc: jsPDF;
+  if (existingDoc) {
+    existingDoc.addPage("a4", "portrait");
+    doc = existingDoc;
+  } else {
+    doc = new jsPDF({ unit: "mm", format: "a4" });
+  }
   const W = doc.internal.pageSize.getWidth(); // 210
   const H = doc.internal.pageSize.getHeight(); // 297
   const M = 10;
@@ -953,9 +960,25 @@ export async function downloadStudentEvolutionPDF(
     W - M, H - 4, { align: "right" },
   );
 
-  // ── Save ──────────────────────────────────────────────────────────────
+  // ── Result ────────────────────────────────────────────────────────────
   const safeName = s.full_name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-");
-  doc.save(`relatorio-evolutivo-${safeName}.pdf`);
+  const filename = `relatorio-evolutivo-${safeName}.pdf`;
+  const blob = doc.output("blob");
+
+  return { doc, studentName: s.full_name, filename, blob };
+}
+
+export async function downloadStudentEvolutionPDF(
+  studentId: string,
+  tenantId: string,
+  fallbackTenantName = "ProMetric",
+): Promise<void> {
+  const { doc, filename } = await generateStudentEvolutionDoc(
+    studentId,
+    tenantId,
+    fallbackTenantName,
+  );
+  doc.save(filename);
 }
 
 // Compat: signature aligned to legacy callsites (tenantName, ev, studentId, tenantId)
