@@ -84,10 +84,35 @@ export function ExportClassReportsDialog({
     return students.map((s) => {
       const evals = s.evaluations ?? [];
       const hasEvals = evals.length > 0;
-      const lastEval = hasEvals ? evals[evals.length - 1] : null;
-      const indexResult = lastEval?.classifications
-        ? prometricIndex(lastEval.classifications)
-        : null;
+      
+      // Consolida testes da bateria recente (dentro de uma janela de 45 dias)
+      let consolidatedClassifications: Classifications | null = null;
+      let lastEval = hasEvals ? evals[evals.length - 1] : null;
+
+      if (hasEvals) {
+        const sorted = [...evals].sort((a, b) => b.evaluated_at.localeCompare(a.evaluated_at));
+        const latestDate = sorted[0].evaluated_at;
+        const recentEvals = sorted.filter((e) => {
+          const diff = Math.abs(new Date(latestDate).getTime() - new Date(e.evaluated_at).getTime()) / (1000 * 3600 * 24);
+          return diff <= 45;
+        });
+
+        // Junta as classificações dos testes realizados em aulas diferentes dessa bateria
+        const merged: Record<string, unknown> = {};
+        for (const ev of [...recentEvals].reverse()) {
+          if (ev.classifications) {
+            Object.assign(merged, ev.classifications);
+          }
+        }
+        consolidatedClassifications = Object.keys(merged).length > 0 ? (merged as Classifications) : null;
+        lastEval = sorted[0];
+      }
+
+      const indexResult = consolidatedClassifications
+        ? prometricIndex(consolidatedClassifications)
+        : lastEval?.classifications
+          ? prometricIndex(lastEval.classifications)
+          : null;
 
       const isComplete = indexResult ? !indexResult.partial : false;
       const score = indexResult ? indexResult.score : null;
