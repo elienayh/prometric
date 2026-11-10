@@ -725,9 +725,8 @@ function StationMode({
               <div className="flex items-center gap-2 shrink-0">
                 {field === "run_6min_m" ? (
                   <Run6MinInput
-                    value={values[sid] ? Number(values[sid]) : null}
-                    onChange={(n) => {
-                      const str = n != null ? String(n) : "";
+                    value={values[sid] ?? ""}
+                    onChange={(str) => {
                       setValues((p) => ({ ...p, [sid]: str }));
                       persist(s, str);
                     }}
@@ -1157,8 +1156,8 @@ function StudentEvalForm({
               <div className="space-y-1 sm:col-span-2">
                 <Label className="text-xs">Corrida 6 minutos (m)</Label>
                 <Run6MinInput
-                  value={values.run_6min_m ? Number(values.run_6min_m) : null}
-                  onChange={(n) => setValues((p) => ({ ...p, run_6min_m: n != null ? String(n) : "" }))}
+                  value={values.run_6min_m ?? ""}
+                  onChange={(str) => setValues((p) => ({ ...p, run_6min_m: str }))}
                 />
               </div>
             </div>
@@ -1313,36 +1312,42 @@ function SpreadsheetMode({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-border shadow-soft">
-        <table className="w-full min-w-[900px] border-collapse text-xs">
-          <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="max-h-[calc(100vh-230px)] min-h-[380px] overflow-auto rounded-2xl border border-border shadow-soft">
+        <table className="w-full min-w-[900px] border-separate border-spacing-0 text-xs">
+          <thead className="text-[10px] uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="sticky left-0 z-10 border-b border-border bg-muted/80 px-3 py-2 text-left">Aluno</th>
-              <th className="border-b border-border px-2 py-2 text-center">Status</th>
+              <th className="sticky left-0 top-0 z-30 border-b border-r border-border bg-muted/95 px-3 py-2.5 text-left backdrop-blur-xs">
+                Aluno
+              </th>
+              <th className="sticky top-0 z-20 border-b border-border bg-muted/95 px-2 py-2.5 text-center backdrop-blur-xs">
+                Status
+              </th>
               {EVALUATION_FIELDS.map((f) => (
-                <th key={f.key} className="border-b border-border px-1 py-2 text-center font-medium">
+                <th key={f.key} className="sticky top-0 z-20 border-b border-border bg-muted/95 px-1 py-2.5 text-center font-medium backdrop-blur-xs">
                   {f.short}
                   <div className="text-[9px] font-normal opacity-70">
                     {f.key === "run_6min_m" ? "voltas + adic." : f.unit}
                   </div>
                 </th>
               ))}
-              <th className="border-b border-border px-2 py-2 text-center">✓</th>
+              <th className="sticky top-0 z-20 border-b border-border bg-muted/95 px-2 py-2.5 text-center backdrop-blur-xs">
+                ✓
+              </th>
             </tr>
           </thead>
           <tbody className="bg-card">
             {filteredList.map((s) => {
               const prog = battery.progressByStudent[s.id];
               return (
-                <tr key={s.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="sticky left-0 z-10 bg-card px-3 py-2 text-sm font-medium whitespace-nowrap">
+                <tr key={s.id} className="hover:bg-muted/20 transition-colors">
+                  <td className="sticky left-0 z-10 border-b border-r border-border/40 bg-card px-3 py-2 text-sm font-medium whitespace-nowrap shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
                     {s.full_name}
                   </td>
-                  <td className="px-2 py-1 text-center whitespace-nowrap">
+                  <td className="border-b border-border/40 px-2 py-1 text-center whitespace-nowrap">
                     <DiscreteProgressTag progress={prog} />
                   </td>
                   {EVALUATION_FIELDS.map((f) => (
-                    <td key={f.key} className="px-0.5 py-0.5">
+                    <td key={f.key} className="border-b border-border/40 px-0.5 py-0.5">
                       {f.key === "run_6min_m" ? (
                         <Run6MinCell
                           value={cells[s.id]?.[f.key] ?? ""}
@@ -1371,7 +1376,7 @@ function SpreadsheetMode({
                       )}
                     </td>
                   ))}
-                  <td className="px-2 text-center">
+                  <td className="border-b border-border/40 px-2 text-center">
                     {saving[s.id] === "pending" ? (
                       <Loader2 className="mx-auto h-3 w-3 animate-spin text-warning" />
                     ) : saving[s.id] === "done" ? (

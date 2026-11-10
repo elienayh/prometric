@@ -167,9 +167,9 @@ function SchoolDashboard() {
       rankings: [
         { title: "Ranking de Turmas", rows: classRank.slice(0, 15).map((r) => ({ full_name: r.name, value: r.score, unit: `/100 (${r.students} alunos)` })) },
         { title: "Ranking de Grupos", rows: groupRank.slice(0, 15).map((r) => ({ full_name: r.name, value: r.score, unit: `/100 (${r.students} integrantes)` })) },
-        { title: "Top 10 — Índice ProMetric", rows: agg.topStudents.slice(0, 10).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
-        { title: "Top 10 — Maior Evolução", rows: agg.topGains.map((s) => ({ full_name: s.full_name, value: `${(s.evolution ?? 0) >= 0 ? "+" : ""}${s.evolution}`, unit: "pts" })) },
-        { title: "Top 10 — Resistência (6min)", rows: topByIndicator(students_latest, "run_6min_m", true).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "m" })) },
+        { title: "Destaques (Top 5) — Índice ProMetric", rows: agg.topStudents.slice(0, 5).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
+        { title: "Destaques (Top 5) — Maior Evolução", rows: agg.topGains.slice(0, 5).map((s) => ({ full_name: s.full_name, value: `${(s.evolution ?? 0) >= 0 ? "+" : ""}${s.evolution}`, unit: "pts" })) },
+        { title: "Destaques (Top 5) — Resistência (6min)", rows: topByIndicator(students_latest, "run_6min_m", true).slice(0, 5).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "m" })) },
       ],
     });
   };

@@ -107,12 +107,15 @@ function GroupDashboard() {
         logoDataUrl,
         displayName: brand.displayName,
       },
-      rankings: [
-        { title: "Top 10 — Índice ProMetric", rows: agg.topStudents.slice(0, 10).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
-        { title: "Top 10 — Velocidade 20m", rows: topByIndicator(students_latest, "sprint_20m_s", false).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(2), unit: "s" })) },
-        { title: "Top 10 — Potência (Salto)", rows: topByIndicator(students_latest, "horizontal_jump_cm", true).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "cm" })) },
-        { title: "Top 10 — Resistência (6min)", rows: topByIndicator(students_latest, "run_6min_m", true).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "m" })) },
-      ],
+      rankings: (() => {
+        const topLimit = (agg.evaluatedCount || 0) < 6 ? 3 : 5;
+        return [
+          { title: `Destaques (Top ${topLimit}) — Índice ProMetric`, rows: agg.topStudents.slice(0, topLimit).map((s) => ({ full_name: s.full_name, value: s.score, unit: "/100" })) },
+          { title: `Destaques (Top ${topLimit}) — Velocidade 20m`, rows: topByIndicator(students_latest, "sprint_20m_s", false).slice(0, topLimit).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(2), unit: "s" })) },
+          { title: `Destaques (Top ${topLimit}) — Potência (Salto)`, rows: topByIndicator(students_latest, "horizontal_jump_cm", true).slice(0, topLimit).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "cm" })) },
+          { title: `Destaques (Top ${topLimit}) — Resistência (6min)`, rows: topByIndicator(students_latest, "run_6min_m", true).slice(0, topLimit).map((r) => ({ full_name: r.full_name, value: r.value.toFixed(0), unit: "m" })) },
+        ];
+      })(),
     });
   };
 
